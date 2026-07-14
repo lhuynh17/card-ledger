@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- ============================================================
+     SLAB LEDGER — personal graded-card inventory
+     One single file: HTML + CSS + JavaScript.
+     No server, no database, no account. Everything is saved
+     privately in YOUR browser (localStorage) on YOUR phone.
+     ============================================================ -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Slab Ledger — Card Inventory</title>
+
+<!-- Fonts: a condensed "trading-card stat" display face, and a
+     monospace face so certificate numbers are easy to read/verify -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Tesseract.js: a trusted open-source OCR library loaded from a
+     public CDN. The image NEVER leaves your phone — all text
+     recognition happens locally inside your browser. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+/* ============ 1. DESIGN TOKENS (the app's color/type system) ============ */
+:root{
+  --bg:        #0F1626;   /* deep "display case" navy background   */
+  --surface:   #1B2436;   /* card panels                            */
+  --surface-2: #232E44;   /* inputs, table rows                     */
+  --line:      #2E3A54;   /* hairline borders                       */
+  --text:      #EDF1F8;   /* primary text                           */
+  --muted:     #93A0B8;   /* secondary text                         */
+  --label-red: #D6404A;   /* PSA-slab-label red (signature accent)  */
+  --grade-gold:#E9B949;   /* "gem mint" gold, used for grades       */
+  --ok:        #4CC38A;   /* success green                          */
+  --radius: 14px;
+  --font-display: "Barlow Condensed", sans-serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", monospace;
+}
+
+/* ============ 2. BASE LAYOUT (mobile-first) ============ */
+*{ box-sizing:border-box; margin:0; padding:0; }
+html{ -webkit-text-size-adjust:100%; }
+body{
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;               /* 16px stops iOS from zooming inputs */
+  line-height: 1.5;
+  padding: max(14px, env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  max-width: 560px;              /* stays phone-shaped even on desktop */
+  margin-inline: auto;
+}
+
+/* App header, styled like the top strip of a graded slab label */
+header{
+  background: var(--label-red);
+  border-radius: var(--radius) var(--radius) 4px 4px;
+  padding: 12px 16px 10px;
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin-bottom: 14px;
+}
+header h1{
+  font-family: var(--font-display);
+  font-size: 28px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+}
+header .count-chip{
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 600;
+  background: rgba(0,0,0,.25);
+  padding: 3px 10px; border-radius: 99px;
+}
+
+/* Panels ("cards" of the UI) */
+section{
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+section > h2{
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+/* ============ 3. FORM CONTROLS ============ */
+label{
+  display:block;
+  font-size: 13px; font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 5px;
+}
+input[type="text"]{
+  width:100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 16px;
+  padding: 12px;
+}
+input[type="text"]:focus{ outline: 2px solid var(--grade-gold); outline-offset: 1px; }
+#certNumber{ font-family: var(--font-mono); letter-spacing:.06em; }
+
+button{
+  font-family: var(--font-body);
+  font-size: 15px; font-weight: 600;
+  border: none; border-radius: 10px;
+  padding: 13px 14px;
+  width: 100%;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: transform .06s ease;
+}
+button:active{ transform: scale(.98); }
+button:focus-visible{ outline: 2px solid var(--grade-gold); outline-offset: 2px; }
+.btn-camera { background: var(--surface-2); color: var(--text); border:1px dashed var(--muted); }
+.btn-fetch  { background: #2C3B5C; color: var(--text); }
+.btn-add    { background: var(--grade-gold); color: #1A1405; }
+.btn-export { background: var(--ok); color: #06281A; }
+.btn-clear  { background: transparent; color: var(--label-red); border:1px solid var(--label-red); }
+button:disabled{ opacity:.5; cursor:wait; }
+
+/* Hidden native file input — the styled button triggers it */
+#photoInput{ display:none; }
+
+/* Small status line under the camera button (OCR progress etc.) */
+.status{
+  font-size: 13px; color: var(--muted);
+  margin-top: 8px; min-height: 1.2em;
+}
+.status.ok{ color: var(--ok); }
+.status.err{ color: var(--label-red); }
+
+/* ============ 4. INVENTORY LIST (signature element) ============
+   Each saved card renders as a miniature slab label:
+   red strip on top, mono cert number, gold grade badge. */
+#inventoryList{ list-style:none; display:grid; gap:10px; }
+.slab{
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.slab-strip{
+  background: var(--label-red);
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 6px 12px;
+}
+.slab-strip .cert{
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 600;
+}
+.slab-strip .grade{
+  font-family: var(--font-display);
+  font-size: 16px; font-weight: 700; letter-spacing:.04em;
+  color: var(--grade-gold);
+  text-transform: uppercase;
+}
+.slab-body{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:10px; padding: 10px 12px;
+}
+.slab-body .name{ font-weight: 600; font-size: 15px; overflow-wrap:anywhere; }
+.slab-body .date{ font-size: 12px; color: var(--muted); white-space:nowrap; }
+.slab-body .del{
+  width:auto; margin:0; padding: 6px 10px;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 8px;
+  font-size: 12px;
+}
+.empty{
+  text-align:center; color: var(--muted);
+  font-size: 14px; padding: 18px 8px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Slab Ledger</h1>
+  <span class="count-chip" id="countChip">0 cards</span>
+</header>
+
+<!-- ================= CARD COMPONENT 1: ADD NEW ITEM ================= -->
+<section aria-labelledby="addTitle">
+  <h2 id="addTitle">Add new item</h2>
+
+  <!-- Native camera. capture="environment" opens the rear camera on
+       phones. The chosen photo is processed locally by Tesseract. -->
+  <input type="file" id="photoInput" accept="image/*" capture="environment">
+  <button type="button" class="btn-camera" id="scanBtn">📷 Scan slab label (camera)</button>
+  <p class="status" id="ocrStatus" role="status"></p>
+
+  <label for="certNumber">Cert number</label>
+  <input type="text" id="certNumber" inputmode="numeric" autocomplete="off"
+         placeholder="8–10 digit certificate number">
+
+  <button type="button" class="btn-fetch" id="fetchBtn">Fetch details from cert number</button>
+  <p class="status" id="fetchStatus" role="status"></p>
+
+  <label for="cardName">Card name</label>
+  <input type="text" id="cardName" autocomplete="off" placeholder="e.g. 1999 Pokémon Charizard #4">
+
+  <label for="cardGrade">Grade</label>
+  <input type="text" id="cardGrade" autocomplete="off" placeholder="e.g. GEM MT 10">
+
+  <button type="button" class="btn-add" id="addBtn">＋ Add to inventory</button>
+</section>
+
+<!-- ================= CARD COMPONENT 2: LIVE INVENTORY ================= -->
+<section aria-labelledby="invTitle">
+  <h2 id="invTitle">Inventory</h2>
+  <ul id="inventoryList"></ul>
+
+  <button type="button" class="btn-export" id="exportBtn">⬇ Export to spreadsheet (CSV)</button>
+  <button type="button" class="btn-clear" id="clearBtn">Clear all data</button>
+</section>
+
+<script>
+/* =====================================================================
+   SLAB LEDGER — JavaScript
+   Sections:
+     A. Local storage (save/load)
+     B. Rendering the inventory list
+     C. Adding & deleting cards
+     D. Camera photo → local OCR → cert number
+     E. "Fetch details" web lookup with manual-entry fallback
+     F. CSV export
+     G. Clear data
+   ===================================================================== */
+
+// ---- A. LOCAL STORAGE -------------------------------------------------
+// All data lives under this single key in your browser. Nothing is
+// uploaded anywhere. Clearing your browser data will erase it, so
+// export a CSV backup now and then.
+const STORAGE_KEY = "psa_inventory";
+
+function loadInventory() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch (e) {
+    return []; // if the saved data is ever corrupted, start fresh
+  }
+}
+
+function saveInventory(items) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+
+// The in-memory copy of your collection (an array of objects)
+let inventory = loadInventory();
+
+// ---- Handy shortcuts for grabbing elements ----------------------------
+const $ = (id) => document.getElementById(id);
+const listEl      = $("inventoryList");
+const countChip   = $("countChip");
+const ocrStatus   = $("ocrStatus");
+const fetchStatus = $("fetchStatus");
+
+// ---- B. RENDERING ------------------------------------------------------
+// Rebuilds the on-screen list from the inventory array.
+// Note: we always insert user data with textContent (never innerHTML),
+// which keeps the page safe from script injection.
+function render() {
+  listEl.innerHTML = "";
+  countChip.textContent = inventory.length + (inventory.length === 1 ? " card" : " cards");
+
+  if (inventory.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "No cards logged yet. Scan a slab above to get started.";
+    listEl.appendChild(li);
+    return;
+  }
+
+  inventory.forEach((card, index) => {
+    const li = document.createElement("li");
+    li.className = "slab";
+
+    // Red top strip: cert number + grade
+    const strip = document.createElement("div");
+    strip.className = "slab-strip";
+    const cert = document.createElement("span");
+    cert.className = "cert";
+    cert.textContent = "#" + card.cert;
+    const grade = document.createElement("span");
+    grade.className = "grade";
+    grade.textContent = card.grade || "—";
+    strip.append(cert, grade);
+
+    // Body: card name, date added, delete button
+    const body = document.createElement("div");
+    body.className = "slab-body";
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = card.name || "(unnamed card)";
+    const date = document.createElement("span");
+    date.className = "date";
+    date.textContent = card.added;
+    const del = document.createElement("button");
+    del.className = "del";
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (confirm("Delete this card from your inventory?")) {
+        inventory.splice(index, 1);
+        saveInventory(inventory);
+        render();
+      }
+    });
+    body.append(name, date, del);
+
+    li.append(strip, body);
+    listEl.appendChild(li);
+  });
+}
+
+// ---- C. ADDING A CARD --------------------------------------------------
+$("addBtn").addEventListener("click", () => {
+  const cert  = $("certNumber").value.trim();
+  const name  = $("cardName").value.trim();
+  const grade = $("cardGrade").value.trim();
+
+  if (!cert) {
+    alert("Please enter (or scan) a cert number first.");
+    return;
+  }
+
+  inventory.unshift({                       // newest card shown first
+    cert,
+    name,
+    grade,
+    added: new Date().toLocaleDateString()
+  });
+  saveInventory(inventory);
+  render();
+
+  // Reset the form for the next card
+  $("certNumber").value = "";
+  $("cardName").value = "";
+  $("cardGrade").value = "";
+  ocrStatus.textContent = "";
+  fetchStatus.textContent = "";
+});
+
+// ---- D. CAMERA → LOCAL OCR ----------------------------------------------
+// The styled button simply clicks the hidden native file input.
+$("scanBtn").addEventListener("click", () => $("photoInput").click());
+
+$("photoInput").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const scanBtn = $("scanBtn");
+  scanBtn.disabled = true;
+  ocrStatus.className = "status";
+  ocrStatus.textContent = "Reading photo locally… (this can take ~10 seconds)";
+
+  try {
+    // Tesseract.recognize runs entirely in your browser.
+    const result = await Tesseract.recognize(file, "eng", {
+      logger: (m) => {
+        // Show live progress while the OCR engine works
+        if (m.status === "recognizing text") {
+          ocrStatus.textContent = "Reading photo… " + Math.round(m.progress * 100) + "%";
+        }
+      }
+    });
+
+    // Look for an 8-to-10 digit run of numbers (a PSA cert number).
+    // We strip spaces first because OCR sometimes splits digits.
+    const text = result.data.text;
+    const match = text.match(/\b\d{8,10}\b/) ||
+                  text.replace(/[ \t]/g, "").match(/\d{8,10}/);
+
+    if (match) {
+      $("certNumber").value = match[0];
+      ocrStatus.className = "status ok";
+      ocrStatus.textContent = "Found cert #" + match[0] + " — double-check it against the label.";
+    } else {
+      ocrStatus.className = "status err";
+      ocrStatus.textContent = "Couldn't spot a cert number. Try a closer, well-lit photo of the label, or type it manually.";
+    }
+  } catch (err) {
+    ocrStatus.className = "status err";
+    ocrStatus.textContent = "OCR failed to run. Please type the cert number manually.";
+  } finally {
+    scanBtn.disabled = false;
+    event.target.value = ""; // allow re-scanning the same photo
+  }
+});
+
+// ---- E. FETCH DETAILS (with strict manual fallback) ----------------------
+// Tries to read the public cert page. Browsers block cross-site reads
+// (CORS), so at low personal volume we route through the public
+// AllOrigins gateway. Scraped pages are fragile: if ANYTHING goes
+// wrong, we fall back to two quick prompt() boxes so you can type the
+// name and grade yourself and keep moving.
+$("fetchBtn").addEventListener("click", async () => {
+  const cert = $("certNumber").value.trim();
+  if (!/^\d{8,10}$/.test(cert)) {
+    alert("Enter a valid 8–10 digit cert number first.");
+    return;
+  }
+
+  const fetchBtn = $("fetchBtn");
+  fetchBtn.disabled = true;
+  fetchStatus.className = "status";
+  fetchStatus.textContent = "Looking up cert " + cert + "…";
+
+  let name = "", grade = "";
+
+  try {
+    const target = "https://www.psacard.com/cert/" + cert;
+    const proxied = "https://api.allorigins.win/raw?url=" + encodeURIComponent(target);
+
+    // 15-second timeout so a slow proxy can't freeze the app
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(proxied, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!response.ok) throw new Error("Proxy returned " + response.status);
+
+    const html = await response.text();
+
+    // DOMParser turns the fetched HTML into a document we can read
+    // safely — it is never inserted into our page, so no foreign
+    // scripts or styles can run.
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    // The cert page presents details as label/value table rows.
+    // We scan every row and match labels by keyword, so small site
+    // redesigns don't necessarily break us.
+    const fields = {};
+    doc.querySelectorAll("tr").forEach((row) => {
+      const cells = row.querySelectorAll("th, td");
+      if (cells.length >= 2) {
+        const key = cells[0].textContent.trim().toLowerCase();
+        const val = cells[1].textContent.trim();
+        if (key && val) fields[key] = val;
+      }
+    });
+
+    const pick = (...keywords) => {
+      for (const key in fields) {
+        if (keywords.some((k) => key.includes(k))) return fields[key];
+      }
+      return "";
+    };
+
+    grade = pick("item grade", "grade");
+    const player  = pick("player", "subject");
+    const year    = pick("year");
+    const brand   = pick("brand", "set");
+    const cardNum = pick("card number");
+
+    // Assemble a readable name like "1999 Pokémon Game Charizard #4"
+    name = [year, brand, player, cardNum ? "#" + cardNum : ""]
+      .filter(Boolean).join(" ").trim();
+
+    if (!name && !grade) throw new Error("Could not read card details from the page");
+
+    $("cardName").value  = name;
+    $("cardGrade").value = grade;
+    fetchStatus.className = "status ok";
+    fetchStatus.textContent = "Details filled in — review before adding.";
+
+  } catch (err) {
+    // STRICT FALLBACK: keep the workflow moving with manual entry.
+    fetchStatus.className = "status err";
+    fetchStatus.textContent = "Lookup unavailable — entered manually.";
+    const manualName  = prompt("Automatic lookup failed.\nType the card name:", $("cardName").value);
+    if (manualName !== null) $("cardName").value = manualName.trim();
+    const manualGrade = prompt("Type the grade (e.g. GEM MT 10):", $("cardGrade").value);
+    if (manualGrade !== null) $("cardGrade").value = manualGrade.trim();
+  } finally {
+    fetchBtn.disabled = false;
+  }
+});
+
+// ---- F. EXPORT TO CSV ----------------------------------------------------
+// Wraps every value in quotes and doubles any quotes inside it — the
+// standard CSV escaping rule — so commas or quotes in card names can
+// never break your spreadsheet columns.
+function csvCell(value) {
+  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
+}
+
+$("exportBtn").addEventListener("click", () => {
+  if (inventory.length === 0) {
+    alert("Nothing to export yet — add a card first.");
+    return;
+  }
+
+  const header = ["Cert Number", "Card Name", "Grade", "Date Added"];
+  const rows = inventory.map((c) =>
+    [c.cert, c.name, c.grade, c.added].map(csvCell).join(",")
+  );
+  const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
+
+  // Build the file in memory and trigger an instant download.
+  // (The \uFEFF prefix helps Excel open it with correct characters.)
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "card-inventory-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// ---- G. CLEAR DATA ---------------------------------------------------------
+$("clearBtn").addEventListener("click", () => {
+  if (inventory.length === 0) return;
+  const sure = confirm(
+    "This permanently deletes all " + inventory.length +
+    " logged cards from this device.\n\nTip: export a CSV first!\n\nClear everything?"
+  );
+  if (sure) {
+    inventory = [];
+    saveInventory(inventory);
+    render();
+  }
+});
+
+// ---- Initial paint on page load -------------------------------------------
+render();
+</script>
+</body>
+</html>
