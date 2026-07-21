@@ -2,20 +2,25 @@
 <html lang="en">
 <head>
 <!-- ============================================================
-     SLAB LEDGER v3 — personal graded-card inventory
+     SLAB LEDGER v4 — personal graded-card inventory
      One single file: HTML + CSS + JavaScript.
-     Everything runs locally on your phone. Nothing is uploaded.
+     Everything runs locally on your phone. Nothing is uploaded,
+     and this app does NOT fetch or parse any external website.
 
-     Two ways to capture a card (all local):
-       A) SCAN QR (live camera) — best for PSA slabs made 2020+,
-          which have a QR code on the label. A live camera view
-          reads it the instant it comes into focus, then fills the
-          cert number automatically. This is the fast, reliable path.
-       B) READ PHOTO (OCR) — take a still photo of the label and
-          the app reads the printed text (grade, card name, and the
-          cert number on older pre-2020 slabs that have no QR).
-       Anything not read automatically, you just type. Every field
-       stays editable before you tap Add.
+     Workflow for logging a card:
+       1) SCAN QR (live camera) — PSA slabs made 2020+ have a QR on
+          the label. The live camera reads it instantly and fills
+          the cert number for you.
+       2) OPEN CERT PAGE — tap to open PSA's own public cert page in
+          a new browser tab. YOU read the card name and grade off
+          the page with your own eyes and type them into the two
+          fields. (This is just you doing a normal manual lookup —
+          the app never reads that page for you.)
+       3) READ PHOTO (OCR) — optional. For older pre-2020 slabs with
+          no QR, or if you'd rather not open a tab, take a still
+          photo and the app attempts to read the label text locally.
+          OCR is best-effort and often imperfect, so every field
+          stays editable before you tap Add.
      ============================================================ -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -114,6 +119,17 @@ input[type="text"]{
 input[type="text"]:focus{ outline: 2px solid var(--grade-gold); outline-offset: 1px; }
 #certNumber{ font-family: var(--font-mono); letter-spacing:.06em; }
 
+/* A row that puts a text field and its Paste button side by side */
+.field-row{ display:flex; gap:8px; align-items:stretch; }
+.field-row input[type="text"]{ flex:1 1 auto; }
+.btn-paste{
+  flex:0 0 auto; width:auto; margin:0;
+  background: var(--surface-2); color: var(--text);
+  border:1px solid var(--line); border-radius:10px;
+  padding: 0 14px; font-size: 14px;
+  white-space: nowrap;
+}
+
 button{
   font-family: var(--font-body);
   font-size: 15px; font-weight: 600;
@@ -127,6 +143,7 @@ button{
 button:active{ transform: scale(.98); }
 button:focus-visible{ outline: 2px solid var(--grade-gold); outline-offset: 2px; }
 .btn-scan   { background: var(--grade-gold); color: #1A1405; }
+.btn-lookup { background: #2C3B5C; color: var(--text); }
 .btn-photo  { background: var(--surface-2); color: var(--text); border:1px dashed var(--muted); }
 .btn-add    { background: var(--grade-gold); color: #1A1405; }
 .btn-export { background: var(--ok); color: #06281A; }
@@ -230,11 +247,16 @@ button:disabled{ opacity:.5; cursor:wait; }
     <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
   </div>
 
-  <!-- SECONDARY PATH: still-photo OCR (grade/name, and older slabs) -->
-  <input type="file" id="photoInput" accept="image/*" capture="environment">
-  <button type="button" class="btn-photo" id="photoBtn">📷 Read label from photo (grade &amp; name)</button>
+  <!-- MANUAL LOOKUP HELPER: opens PSA's own public cert page in a new
+       tab so the user can read the name & grade and type them in.
+       The app does not read the page — the person does. -->
+  <button type="button" class="btn-lookup" id="lookupBtn">🔎 Open cert page (look up name &amp; grade)</button>
 
-  <p class="hint">Aim tip: hold the slab about a hand's width away — close, but far enough that the label is sharp, not blurry. Avoid glare off the plastic by tilting slightly away from overhead light.</p>
+  <!-- OPTIONAL: still-photo OCR, mainly for older slabs with no QR -->
+  <input type="file" id="photoInput" accept="image/*" capture="environment">
+  <button type="button" class="btn-photo" id="photoBtn">📷 Read from photo (optional / older slabs)</button>
+
+  <p class="hint">Fastest reliable flow: scan the QR → tap “Open cert page” → on PSA’s page long-press the card name and choose Copy → come back and tap “📋 Paste” next to the field. Repeat for the grade. (Photo/OCR is a rough fallback for slabs with no QR.)</p>
   <p class="status" id="scanStatus" role="status"></p>
 
   <label for="certNumber">Cert number</label>
@@ -242,10 +264,16 @@ button:disabled{ opacity:.5; cursor:wait; }
          placeholder="8–10 digit certificate number">
 
   <label for="cardName">Card name</label>
-  <input type="text" id="cardName" autocomplete="off" placeholder="e.g. 1999 Pokémon Game Charizard #4">
+  <div class="field-row">
+    <input type="text" id="cardName" autocomplete="off" placeholder="e.g. 1999 Pokémon Game Charizard #4">
+    <button type="button" class="btn-paste" id="pasteNameBtn" title="Paste copied text into this field">📋 Paste</button>
+  </div>
 
   <label for="cardGrade">Grade</label>
-  <input type="text" id="cardGrade" autocomplete="off" placeholder="e.g. GEM MT 10">
+  <div class="field-row">
+    <input type="text" id="cardGrade" autocomplete="off" placeholder="e.g. GEM MT 10">
+    <button type="button" class="btn-paste" id="pasteGradeBtn" title="Paste copied text into this field">📋 Paste</button>
+  </div>
 
   <button type="button" class="btn-add" id="addBtn">＋ Add to inventory</button>
 </section>
@@ -353,8 +381,10 @@ $("addBtn").addEventListener("click", () => {
 // more reliable than a single still photo: the phone autofocuses and
 // ZXing re-checks many frames per second until it locks on. The moment
 // it reads the code, we grab the cert number and stop the camera.
-let codeReader = null;     // the ZXing reader instance
-let scanning   = false;
+let codeReader   = null;   // the ZXing reader instance
+let scanning     = false;
+let lastCertUrl  = "";     // exact URL from a scanned PSA QR, if any
+let lastCertNumber = "";   // last cert number read from a QR
 
 async function startLiveScan() {
   if (scanning) return;
@@ -373,12 +403,19 @@ async function startLiveScan() {
     // The callback fires repeatedly. `result` is set once a code is read.
     await codeReader.decodeFromConstraints(constraints, "video", (result, err) => {
       if (result) {
-        const digits = (result.getText() || "").match(/\d{8,10}/);
+        const raw = result.getText() || "";
+        const digits = raw.match(/\d{8,10}/);
+        // If the QR was a PSA cert link, remember it so "Open cert page"
+        // opens exactly that URL. (We only OPEN it — never read it.)
+        if (/^https?:\/\/(www\.)?psacard\.com\/cert\//i.test(raw)) {
+          lastCertUrl = raw;
+        }
         if (digits) {
           $("certNumber").value = digits[0];
+          lastCertNumber = digits[0];
           scanStatus.className = "status ok";
           scanStatus.textContent = "QR read — cert #" + digits[0] +
-            ". Now tap “Read label from photo” to grab the name & grade, or type them.";
+            ". Now tap “Open cert page” to read the name & grade, then type them in.";
         } else {
           scanStatus.className = "status ok";
           scanStatus.textContent = "Code read, but no cert number inside it. Type the cert below.";
@@ -407,6 +444,56 @@ $("cancelScanBtn").addEventListener("click", () => {
   stopLiveScan();
   if (!$("certNumber").value) { scanStatus.className = "status"; scanStatus.textContent = "Camera stopped."; }
 });
+
+// ---- Open cert page (manual lookup helper) -------------------------------
+// Opens PSA's own public cert page in a NEW TAB so YOU can read the card
+// name and grade and type them in. The app does not fetch or read that
+// page — this is just a normal browser visit to a public page, the same
+// as if you typed the address yourself.
+$("lookupBtn").addEventListener("click", () => {
+  const cert = $("certNumber").value.trim();
+  if (!/^\d{8,10}$/.test(cert)) {
+    alert("Scan a QR or type an 8–10 digit cert number first, then tap this to open its page.");
+    return;
+  }
+  // Prefer the exact URL the QR gave us; otherwise build the standard one.
+  const url = (lastCertUrl && lastCertNumber === cert)
+    ? lastCertUrl
+    : "https://www.psacard.com/cert/" + cert;
+
+  window.open(url, "_blank", "noopener");
+  scanStatus.className = "status";
+  scanStatus.textContent = "Opened PSA's cert page in a new tab — read the name & grade there, then type them below.";
+});
+
+// ---- Paste-into-field buttons --------------------------------------------
+// After you copy text on PSA's page (long-press → Copy), these read your
+// clipboard and drop it into the field — the clipboard is the only channel
+// the browser lets one site hand data to another. If the browser blocks
+// clipboard reading (older phone, or permission denied), we tell you to
+// long-press the field and paste the normal way instead.
+async function pasteInto(fieldId) {
+  const field = $(fieldId);
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && text.trim()) {
+      field.value = text.trim();
+      field.focus();
+      scanStatus.className = "status ok";
+      scanStatus.textContent = "Pasted. Check it looks right, then add the card.";
+    } else {
+      scanStatus.className = "status";
+      scanStatus.textContent = "Clipboard was empty — copy the text on PSA's page first.";
+    }
+  } catch (e) {
+    // Permission denied or unsupported — fall back to manual paste.
+    field.focus();
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Your browser blocked auto-paste. Long-press the field and choose Paste instead.";
+  }
+}
+$("pasteNameBtn").addEventListener("click", () => pasteInto("cardName"));
+$("pasteGradeBtn").addEventListener("click", () => pasteInto("cardGrade"));
 
 // ---- E. STILL-PHOTO OCR (grade/name + older slabs) ----------------------
 // For the card name and grade (which aren't in the QR), and for pre-2020
