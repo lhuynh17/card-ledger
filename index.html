@@ -33,6 +33,8 @@
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <!-- Tesseract.js: trusted open-source OCR engine (runs locally) -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- ExcelJS: builds real .xlsx files (with embedded photos) in the browser -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 
 <style>
 /* ============ 1. DESIGN TOKENS ============ */
@@ -152,6 +154,20 @@ button:focus-visible{ outline: 2px solid var(--grade-gold); outline-offset: 2px;
 button:disabled{ opacity:.5; cursor:wait; }
 
 #photoInput{ display:none; }
+#slabPhotoInput{ display:none; }
+
+/* Preview of the slab photo for the card you're about to add */
+#photoPreviewWrap{ display:none; margin-top:10px; align-items:center; gap:10px; }
+#photoPreviewWrap.active{ display:flex; }
+#photoPreview{
+  width:64px; height:64px; object-fit:cover;
+  border-radius:8px; border:1px solid var(--line);
+}
+#clearPhotoBtn{
+  width:auto; margin:0; padding:6px 10px; font-size:12px;
+  background:transparent; color:var(--muted);
+  border:1px solid var(--line); border-radius:8px;
+}
 
 /* Live camera view — hidden until "Scan QR" is tapped */
 #scannerWrap{ display:none; margin-top: 12px; }
@@ -210,8 +226,13 @@ button:disabled{ opacity:.5; cursor:wait; }
   display:flex; justify-content:space-between; align-items:center;
   gap:10px; padding: 10px 12px;
 }
+.slab-thumb{
+  width:44px; height:44px; object-fit:cover; flex:0 0 auto;
+  border-radius:6px; border:1px solid var(--line);
+}
+.slab-main{ flex:1 1 auto; min-width:0; }
 .slab-body .name{ font-weight: 600; font-size: 15px; overflow-wrap:anywhere; }
-.slab-body .date{ font-size: 12px; color: var(--muted); white-space:nowrap; }
+.slab-body .meta{ font-size: 12px; color: var(--muted); margin-top:2px; }
 .slab-body .del{
   width:auto; margin:0; padding: 6px 10px;
   background: transparent; color: var(--muted);
@@ -275,6 +296,20 @@ button:disabled{ opacity:.5; cursor:wait; }
     <button type="button" class="btn-paste" id="pasteGradeBtn" title="Paste copied text into this field">📋 Paste</button>
   </div>
 
+  <label for="cardPop">Pop (population)</label>
+  <div class="field-row">
+    <input type="text" id="cardPop" inputmode="numeric" autocomplete="off" placeholder="e.g. 1523">
+    <button type="button" class="btn-paste" id="pastePopBtn" title="Paste copied text into this field">📋 Paste</button>
+  </div>
+
+  <label>Slab photo</label>
+  <input type="file" id="slabPhotoInput" accept="image/*" capture="environment">
+  <button type="button" class="btn-photo" id="slabPhotoBtn">📸 Take slab photo</button>
+  <div id="photoPreviewWrap">
+    <img id="photoPreview" alt="Slab photo preview">
+    <button type="button" id="clearPhotoBtn">Remove photo</button>
+  </div>
+
   <button type="button" class="btn-add" id="addBtn">＋ Add to inventory</button>
 </section>
 
@@ -283,31 +318,104 @@ button:disabled{ opacity:.5; cursor:wait; }
   <h2 id="invTitle">Inventory</h2>
   <ul id="inventoryList"></ul>
 
-  <button type="button" class="btn-export" id="exportBtn">⬇ Export to spreadsheet (CSV)</button>
+  <button type="button" class="btn-export" id="exportBtn">⬇ Export data (CSV)</button>
+  <button type="button" class="btn-export" id="exportXlsxBtn">🖼 Export with photos (Excel)</button>
   <button type="button" class="btn-clear" id="clearBtn">Clear all data</button>
 </section>
 
 <script>
 /* =====================================================================
-   SLAB LEDGER v3 — JavaScript
-     A. Local storage (save/load)
+   SLAB LEDGER v7 — JavaScript
+     A. Storage: IndexedDB (large capacity) + one-time migration
+        from the old localStorage data so nothing is lost
      B. Rendering the inventory list
      C. Adding & deleting cards
-     D. LIVE QR scanner (ZXing, camera video feed)  <-- new primary path
+     D. LIVE QR scanner (ZXing, camera video feed)
      E. Still-photo OCR (Tesseract) for grade/name & older slabs
      F. Label-text parsing
-     G. CSV export
+     G. CSV & Excel(+photos) export
      H. Clear data
    ===================================================================== */
 
-// ---- A. LOCAL STORAGE -------------------------------------------------
-const STORAGE_KEY = "psa_inventory";
-function loadInventory() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-  catch (e) { return []; }
+// ---- A. STORAGE: INDEXEDDB -------------------------------------------------
+// Cards live in IndexedDB, which allows far more room than localStorage
+// (hundreds of MB+ instead of ~5 MB) — important once you store photos.
+// We keep an in-memory copy in `inventory` for fast rendering/exporting,
+// and mirror every change into IndexedDB so it persists between sessions.
+const OLD_STORAGE_KEY = "psa_inventory";   // legacy localStorage key
+const DB_NAME  = "slabLedger";
+const DB_STORE = "cards";
+let db = null;
+let inventory = [];   // in-memory working copy, newest first; each has .id
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(DB_STORE)) {
+        // autoIncrement gives each card a unique, ever-increasing id;
+        // higher id = added later, which we use to sort newest-first.
+        d.createObjectStore(DB_STORE, { keyPath: "id", autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
 }
-function saveInventory(items) { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
-let inventory = loadInventory();
+
+function dbAdd(card) {  // resolves to the new auto-assigned id
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    const req = tx.objectStore(DB_STORE).add(card);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+function dbDelete(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+function dbClear() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+// One-time move of any cards saved by older versions (localStorage) into
+// IndexedDB. Runs only when IndexedDB is still empty, then clears the old
+// key so it never runs twice.
+async function migrateFromLocalStorage() {
+  let old = null;
+  try { old = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY)); } catch (e) {}
+  if (Array.isArray(old) && old.length) {
+    // old array is newest-first; insert oldest-first so ids stay chronological
+    for (let i = old.length - 1; i >= 0; i--) {
+      const c = { ...old[i] };
+      delete c.id;              // let IndexedDB assign a fresh id
+      await dbAdd(c);
+    }
+  }
+  localStorage.removeItem(OLD_STORAGE_KEY);
+}
 
 const $ = (id) => document.getElementById(id);
 const listEl     = $("inventoryList");
@@ -342,18 +450,37 @@ function render() {
 
     const body = document.createElement("div");
     body.className = "slab-body";
-    const name = document.createElement("span");
+
+    // Optional slab photo thumbnail
+    if (card.photo) {
+      const thumb = document.createElement("img");
+      thumb.className = "slab-thumb";
+      thumb.src = card.photo;
+      thumb.alt = "Slab photo";
+      body.appendChild(thumb);
+    }
+
+    const main = document.createElement("div");
+    main.className = "slab-main";
+    const name = document.createElement("div");
     name.className = "name"; name.textContent = card.name || "(unnamed card)";
-    const date = document.createElement("span");
-    date.className = "date"; date.textContent = card.added;
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    // Show pop (if present) and the date added on one line
+    meta.textContent = (card.pop ? "Pop " + card.pop + " · " : "") + card.added;
+    main.append(name, meta);
+
     const del = document.createElement("button");
     del.className = "del"; del.type = "button"; del.textContent = "Delete";
-    del.addEventListener("click", () => {
+    del.addEventListener("click", async () => {
       if (confirm("Delete this card from your inventory?")) {
-        inventory.splice(index, 1); saveInventory(inventory); render();
+        try { await dbDelete(card.id); } catch (e) {}
+        inventory = inventory.filter((c) => c.id !== card.id);
+        render();
       }
     });
-    body.append(name, date, del);
+
+    body.append(main, del);
 
     li.append(strip, body);
     listEl.appendChild(li);
@@ -361,18 +488,35 @@ function render() {
 }
 
 // ---- C. ADDING A CARD --------------------------------------------------
-$("addBtn").addEventListener("click", () => {
+let pendingPhoto = "";   // downscaled slab photo (data URL) for the next card
+
+$("addBtn").addEventListener("click", async () => {
   const cert  = $("certNumber").value.trim();
   const name  = $("cardName").value.trim();
   const grade = $("cardGrade").value.trim();
+  const pop   = $("cardPop").value.trim();
 
   if (!cert) { alert("Please enter (or scan) a cert number first."); return; }
 
-  inventory.unshift({ cert, name, grade, added: new Date().toLocaleDateString() });
-  saveInventory(inventory);
+  const card = { cert, name, grade, pop, photo: pendingPhoto,
+                 added: new Date().toLocaleDateString() };
+
+  try {
+    // Save to IndexedDB first; it returns the new id, which we keep in memory.
+    card.id = await dbAdd(card);
+    inventory.unshift(card);
+  } catch (e) {
+    // Very unlikely with IndexedDB's large quota, but handle it honestly.
+    alert("Couldn't save this card — device storage may be full.\n\n" +
+          "Export your data, then use “Clear all data,” or add without a photo.");
+    return;
+  }
   render();
 
-  $("certNumber").value = ""; $("cardName").value = ""; $("cardGrade").value = "";
+  // Reset the form for the next card
+  $("certNumber").value = ""; $("cardName").value = "";
+  $("cardGrade").value = "";  $("cardPop").value = "";
+  clearPendingPhoto();
   scanStatus.textContent = ""; scanStatus.className = "status";
 });
 
@@ -494,6 +638,55 @@ async function pasteInto(fieldId) {
 }
 $("pasteNameBtn").addEventListener("click", () => pasteInto("cardName"));
 $("pasteGradeBtn").addEventListener("click", () => pasteInto("cardGrade"));
+$("pastePopBtn").addEventListener("click", () => pasteInto("cardPop"));
+
+// ---- SLAB PHOTO CAPTURE (stored with the card) ---------------------------
+// Takes the photo you shoot, shrinks it to a small thumbnail in the browser
+// (so it fits in local storage), and holds it for the card you're adding.
+$("slabPhotoBtn").addEventListener("click", () => $("slabPhotoInput").click());
+
+$("slabPhotoInput").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    pendingPhoto = await shrinkImage(file, 800, 0.7); // max 800px, JPEG q0.7
+    $("photoPreview").src = pendingPhoto;
+    $("photoPreviewWrap").classList.add("active");
+  } catch (e) {
+    alert("Couldn't process that photo. Try again.");
+  } finally {
+    event.target.value = "";
+  }
+});
+
+$("clearPhotoBtn").addEventListener("click", clearPendingPhoto);
+
+function clearPendingPhoto() {
+  pendingPhoto = "";
+  $("photoPreview").removeAttribute("src");
+  $("photoPreviewWrap").classList.remove("active");
+}
+
+// Draw the photo onto a canvas at a smaller size and re-encode as JPEG.
+// This is what keeps stored photos tiny enough for local storage.
+function shrinkImage(file, maxEdge, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("bad image")); };
+    img.src = url;
+  });
+}
 
 // ---- E. STILL-PHOTO OCR (grade/name + older slabs) ----------------------
 // For the card name and grade (which aren't in the QR), and for pre-2020
@@ -585,33 +778,112 @@ function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') +
 $("exportBtn").addEventListener("click", () => {
   if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
-  const header = ["Cert Number", "Card Name", "Grade", "Date Added"];
-  const rows = inventory.map((c) => [c.cert, c.name, c.grade, c.added].map(csvCell).join(","));
+  const header = ["Cert Number", "Card Name", "Grade", "Pop", "Date Added", "Has Photo"];
+  const rows = inventory.map((c) =>
+    [c.cert, c.name, c.grade, c.pop, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
   const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "card-inventory-" + new Date().toISOString().slice(0, 10) + ".csv";
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, "card-inventory-" + new Date().toISOString().slice(0, 10) + ".csv");
 });
 
+// ---- Export to Excel WITH embedded photos --------------------------------
+// Builds a real .xlsx file in the browser using ExcelJS and drops each
+// card's thumbnail into a Photo column next to its data.
+$("exportXlsxBtn").addEventListener("click", async () => {
+  if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
+  if (typeof ExcelJS === "undefined") {
+    alert("The Excel builder didn't load (check your internet connection, then reload).");
+    return;
+  }
+
+  const btn = $("exportXlsxBtn");
+  btn.disabled = true;
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Inventory");
+
+    // Column layout (Photo is the last column, index 5)
+    ws.columns = [
+      { header: "Cert Number", key: "cert",  width: 16 },
+      { header: "Card Name",   key: "name",  width: 34 },
+      { header: "Grade",       key: "grade", width: 12 },
+      { header: "Pop",         key: "pop",   width: 10 },
+      { header: "Date Added",  key: "added", width: 14 },
+      { header: "Photo",       key: "photo", width: 20 },
+    ];
+    ws.getRow(1).font = { bold: true };
+
+    inventory.forEach((c, i) => {
+      ws.addRow({ cert: c.cert, name: c.name, grade: c.grade, pop: c.pop, added: c.added });
+      const rowNumber = i + 2; // row 1 is the header
+
+      if (c.photo) {
+        // Data URL looks like "data:image/jpeg;base64,XXXX" — take the XXXX
+        const base64 = c.photo.split(",")[1];
+        const imageId = wb.addImage({ base64, extension: "jpeg" });
+        ws.getRow(rowNumber).height = 82;               // make room to see it
+        ws.addImage(imageId, {
+          tl: { col: 5, row: rowNumber - 1 },           // top-left of Photo cell
+          ext: { width: 110, height: 100 },
+        });
+      }
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    triggerDownload(blob, "card-inventory-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+  } catch (e) {
+    alert("Sorry, building the Excel file failed. Your CSV export still works.");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Shared helper: trigger a file download from a Blob
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---- H. CLEAR DATA ---------------------------------------------------------
-$("clearBtn").addEventListener("click", () => {
+$("clearBtn").addEventListener("click", async () => {
   if (inventory.length === 0) return;
   const sure = confirm(
     "This permanently deletes all " + inventory.length +
-    " logged cards from this device.\n\nTip: export a CSV first!\n\nClear everything?");
-  if (sure) { inventory = []; saveInventory(inventory); render(); }
+    " logged cards from this device.\n\nTip: export a CSV or Excel file first!\n\nClear everything?");
+  if (sure) { try { await dbClear(); } catch (e) {} inventory = []; render(); }
 });
 
 // ---- Release the camera if the user leaves the page ------------------------
 window.addEventListener("pagehide", stopLiveScan);
 
-// ---- Initial paint ---------------------------------------------------------
-render();
+// ---- Startup: open DB, migrate old data, load, render ----------------------
+async function init() {
+  try {
+    db = await openDB();
+    const existing = await dbGetAll();
+    if (existing.length === 0) {
+      await migrateFromLocalStorage();     // bring over any old localStorage cards
+    }
+    const cards = await dbGetAll();
+    inventory = cards.sort((a, b) => b.id - a.id);   // newest first
+  } catch (e) {
+    // If IndexedDB can't open (very old browser / private-mode quirk), the
+    // app still runs for this session; data just won't persist.
+    inventory = [];
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Note: storage couldn't start, so cards won't be saved between visits.";
+  }
+  render();
+}
+init();
 </script>
 </body>
 </html>
