@@ -2,18 +2,20 @@
 <html lang="en">
 <head>
 <!-- ============================================================
-     SLAB LEDGER v2 — personal graded-card inventory
+     SLAB LEDGER v3 — personal graded-card inventory
      One single file: HTML + CSS + JavaScript.
-     Fully offline-friendly after loading: photos are processed
-     locally on your phone. Nothing is ever uploaded anywhere.
+     Everything runs locally on your phone. Nothing is uploaded.
 
-     How scanning works (all local, in this order):
-       1) Look for a QR code / barcode on the label photo
-          (newer PSA labels have a QR that contains the cert
-          number) — this is the most reliable route.
-       2) Run OCR (Tesseract) on the same photo to read the
-          printed text: cert number, grade, and card name lines.
-       3) Anything it can't read, you can type or edit by hand.
+     Two ways to capture a card (all local):
+       A) SCAN QR (live camera) — best for PSA slabs made 2020+,
+          which have a QR code on the label. A live camera view
+          reads it the instant it comes into focus, then fills the
+          cert number automatically. This is the fast, reliable path.
+       B) READ PHOTO (OCR) — take a still photo of the label and
+          the app reads the printed text (grade, card name, and the
+          cert number on older pre-2020 slabs that have no QR).
+       Anything not read automatically, you just type. Every field
+       stays editable before you tap Add.
      ============================================================ -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -124,13 +126,37 @@ button{
 }
 button:active{ transform: scale(.98); }
 button:focus-visible{ outline: 2px solid var(--grade-gold); outline-offset: 2px; }
-.btn-camera { background: var(--surface-2); color: var(--text); border:1px dashed var(--muted); }
+.btn-scan   { background: var(--grade-gold); color: #1A1405; }
+.btn-photo  { background: var(--surface-2); color: var(--text); border:1px dashed var(--muted); }
 .btn-add    { background: var(--grade-gold); color: #1A1405; }
 .btn-export { background: var(--ok); color: #06281A; }
 .btn-clear  { background: transparent; color: var(--label-red); border:1px solid var(--label-red); }
+.btn-cancel { background: transparent; color: var(--muted); border:1px solid var(--line); }
 button:disabled{ opacity:.5; cursor:wait; }
 
 #photoInput{ display:none; }
+
+/* Live camera view — hidden until "Scan QR" is tapped */
+#scannerWrap{ display:none; margin-top: 12px; }
+#scannerWrap.active{ display:block; }
+#video{
+  width:100%;
+  aspect-ratio: 4 / 3;
+  background:#000;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.scan-frame{
+  position: relative;
+}
+/* A simple reticle overlay to help the user aim at the QR */
+.scan-frame::after{
+  content:"";
+  position:absolute; inset: 18% 24%;
+  border: 2px solid var(--grade-gold);
+  border-radius: 8px;
+  pointer-events:none;
+}
 
 .status{
   font-size: 13px; color: var(--muted);
@@ -157,15 +183,11 @@ button:disabled{ opacity:.5; cursor:wait; }
   display:flex; justify-content:space-between; align-items:center;
   padding: 6px 12px;
 }
-.slab-strip .cert{
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: 600;
-}
+.slab-strip .cert{ font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
 .slab-strip .grade{
   font-family: var(--font-display);
   font-size: 16px; font-weight: 700; letter-spacing:.04em;
-  color: var(--grade-gold);
-  text-transform: uppercase;
+  color: var(--grade-gold); text-transform: uppercase;
 }
 .slab-body{
   display:flex; justify-content:space-between; align-items:center;
@@ -176,17 +198,14 @@ button:disabled{ opacity:.5; cursor:wait; }
 .slab-body .del{
   width:auto; margin:0; padding: 6px 10px;
   background: transparent; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 8px;
-  font-size: 12px;
+  border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
 }
 .empty{
   text-align:center; color: var(--muted);
   font-size: 14px; padding: 18px 8px;
 }
 
-@media (prefers-reduced-motion: reduce){
-  *{ transition:none !important; }
-}
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
 <body>
@@ -200,9 +219,22 @@ button:disabled{ opacity:.5; cursor:wait; }
 <section aria-labelledby="addTitle">
   <h2 id="addTitle">Add new item</h2>
 
+  <!-- PRIMARY PATH: live QR scanner (best for 2020+ slabs) -->
+  <button type="button" class="btn-scan" id="scanBtn">🎯 Scan QR (live camera)</button>
+
+  <!-- The live camera view appears here when scanning is active -->
+  <div id="scannerWrap">
+    <div class="scan-frame">
+      <video id="video" muted playsinline></video>
+    </div>
+    <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
+  </div>
+
+  <!-- SECONDARY PATH: still-photo OCR (grade/name, and older slabs) -->
   <input type="file" id="photoInput" accept="image/*" capture="environment">
-  <button type="button" class="btn-camera" id="scanBtn">📷 Scan slab label</button>
-  <p class="hint">Fill the frame with just the label. If your slab has a QR code, make sure it's in the shot — it's the most reliable way to read the cert.</p>
+  <button type="button" class="btn-photo" id="photoBtn">📷 Read label from photo (grade &amp; name)</button>
+
+  <p class="hint">Aim tip: hold the slab about a hand's width away — close, but far enough that the label is sharp, not blurry. Avoid glare off the plastic by tilting slightly away from overhead light.</p>
   <p class="status" id="scanStatus" role="status"></p>
 
   <label for="certNumber">Cert number</label>
@@ -229,32 +261,24 @@ button:disabled{ opacity:.5; cursor:wait; }
 
 <script>
 /* =====================================================================
-   SLAB LEDGER v2 — JavaScript
-   Sections:
+   SLAB LEDGER v3 — JavaScript
      A. Local storage (save/load)
      B. Rendering the inventory list
      C. Adding & deleting cards
-     D. Photo scan pipeline: QR/barcode first, then OCR
-     E. Label-text parsing (cert / grade / name guesses)
-     F. CSV export
-     G. Clear data
+     D. LIVE QR scanner (ZXing, camera video feed)  <-- new primary path
+     E. Still-photo OCR (Tesseract) for grade/name & older slabs
+     F. Label-text parsing
+     G. CSV export
+     H. Clear data
    ===================================================================== */
 
 // ---- A. LOCAL STORAGE -------------------------------------------------
 const STORAGE_KEY = "psa_inventory";
-
 function loadInventory() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch (e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch (e) { return []; }
 }
-
-function saveInventory(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
-
+function saveInventory(items) { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
 let inventory = loadInventory();
 
 const $ = (id) => document.getElementById(id);
@@ -263,8 +287,7 @@ const countChip  = $("countChip");
 const scanStatus = $("scanStatus");
 
 // ---- B. RENDERING ------------------------------------------------------
-// User data is always inserted with textContent (never innerHTML),
-// which keeps the page safe from script injection.
+// User data is always inserted with textContent (never innerHTML).
 function render() {
   listEl.innerHTML = "";
   countChip.textContent = inventory.length + (inventory.length === 1 ? " card" : " cards");
@@ -284,30 +307,22 @@ function render() {
     const strip = document.createElement("div");
     strip.className = "slab-strip";
     const cert = document.createElement("span");
-    cert.className = "cert";
-    cert.textContent = "#" + card.cert;
+    cert.className = "cert"; cert.textContent = "#" + card.cert;
     const grade = document.createElement("span");
-    grade.className = "grade";
-    grade.textContent = card.grade || "—";
+    grade.className = "grade"; grade.textContent = card.grade || "—";
     strip.append(cert, grade);
 
     const body = document.createElement("div");
     body.className = "slab-body";
     const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = card.name || "(unnamed card)";
+    name.className = "name"; name.textContent = card.name || "(unnamed card)";
     const date = document.createElement("span");
-    date.className = "date";
-    date.textContent = card.added;
+    date.className = "date"; date.textContent = card.added;
     const del = document.createElement("button");
-    del.className = "del";
-    del.type = "button";
-    del.textContent = "Delete";
+    del.className = "del"; del.type = "button"; del.textContent = "Delete";
     del.addEventListener("click", () => {
       if (confirm("Delete this card from your inventory?")) {
-        inventory.splice(index, 1);
-        saveInventory(inventory);
-        render();
+        inventory.splice(index, 1); saveInventory(inventory); render();
       }
     });
     body.append(name, date, del);
@@ -323,74 +338,94 @@ $("addBtn").addEventListener("click", () => {
   const name  = $("cardName").value.trim();
   const grade = $("cardGrade").value.trim();
 
-  if (!cert) {
-    alert("Please enter (or scan) a cert number first.");
-    return;
-  }
+  if (!cert) { alert("Please enter (or scan) a cert number first."); return; }
 
-  inventory.unshift({
-    cert,
-    name,
-    grade,
-    added: new Date().toLocaleDateString()
-  });
+  inventory.unshift({ cert, name, grade, added: new Date().toLocaleDateString() });
   saveInventory(inventory);
   render();
 
-  $("certNumber").value = "";
-  $("cardName").value = "";
-  $("cardGrade").value = "";
-  scanStatus.textContent = "";
-  scanStatus.className = "status";
+  $("certNumber").value = ""; $("cardName").value = ""; $("cardGrade").value = "";
+  scanStatus.textContent = ""; scanStatus.className = "status";
 });
 
-// ---- D. PHOTO SCAN PIPELINE ---------------------------------------------
-// Step 1: try to decode a QR code or barcode with ZXing.
-//         Newer PSA labels carry a QR whose content includes the cert
-//         number — decoding it is near-instant and very reliable.
-// Step 2: run OCR on the same photo to read the printed label text,
-//         which lets us guess the grade and card name (and the cert
-//         too, if there was no QR).
-// Both steps happen entirely on your phone.
+// ---- D. LIVE QR SCANNER (primary path) ----------------------------------
+// A live camera feed continuously scans for a QR/barcode. This is far
+// more reliable than a single still photo: the phone autofocuses and
+// ZXing re-checks many frames per second until it locks on. The moment
+// it reads the code, we grab the cert number and stop the camera.
+let codeReader = null;     // the ZXing reader instance
+let scanning   = false;
 
-$("scanBtn").addEventListener("click", () => $("photoInput").click());
+async function startLiveScan() {
+  if (scanning) return;
+  scanning = true;
+
+  $("scannerWrap").classList.add("active");
+  scanStatus.className = "status";
+  scanStatus.textContent = "Starting camera… point it at the QR code on the label.";
+
+  try {
+    codeReader = new ZXing.BrowserMultiFormatReader();
+
+    // Ask specifically for the REAR camera (environment).
+    const constraints = { video: { facingMode: { ideal: "environment" } } };
+
+    // The callback fires repeatedly. `result` is set once a code is read.
+    await codeReader.decodeFromConstraints(constraints, "video", (result, err) => {
+      if (result) {
+        const digits = (result.getText() || "").match(/\d{8,10}/);
+        if (digits) {
+          $("certNumber").value = digits[0];
+          scanStatus.className = "status ok";
+          scanStatus.textContent = "QR read — cert #" + digits[0] +
+            ". Now tap “Read label from photo” to grab the name & grade, or type them.";
+        } else {
+          scanStatus.className = "status ok";
+          scanStatus.textContent = "Code read, but no cert number inside it. Type the cert below.";
+        }
+        stopLiveScan(); // success — release the camera
+      }
+      // `err` fires constantly while searching; that's normal, so we ignore it.
+    });
+  } catch (e) {
+    // Usually: camera permission denied, or no camera available.
+    scanStatus.className = "status err";
+    scanStatus.textContent =
+      "Couldn't open the camera. Allow camera access in your browser, or use “Read label from photo” instead.";
+    stopLiveScan();
+  }
+}
+
+function stopLiveScan() {
+  if (codeReader) { try { codeReader.reset(); } catch (e) {} codeReader = null; }
+  $("scannerWrap").classList.remove("active");
+  scanning = false;
+}
+
+$("scanBtn").addEventListener("click", startLiveScan);
+$("cancelScanBtn").addEventListener("click", () => {
+  stopLiveScan();
+  if (!$("certNumber").value) { scanStatus.className = "status"; scanStatus.textContent = "Camera stopped."; }
+});
+
+// ---- E. STILL-PHOTO OCR (grade/name + older slabs) ----------------------
+// For the card name and grade (which aren't in the QR), and for pre-2020
+// slabs that have no QR at all, take a still photo and OCR the text.
+$("photoBtn").addEventListener("click", () => $("photoInput").click());
 
 $("photoInput").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
 
-  const scanBtn = $("scanBtn");
-  scanBtn.disabled = true;
+  const photoBtn = $("photoBtn");
+  photoBtn.disabled = true;
   scanStatus.className = "status";
+  scanStatus.textContent = "Reading the label text locally… (about 10 seconds)";
 
-  // An object URL lets both libraries read the photo straight from memory
   const photoURL = URL.createObjectURL(file);
+  const alreadyHaveCert = $("certNumber").value.trim();
 
-  let certFromCode = "";
-
-  // ---------- Step 1: QR / barcode ----------
   try {
-    scanStatus.textContent = "Checking for a QR code or barcode…";
-    const reader = new ZXing.BrowserMultiFormatReader();
-    const result = await reader.decodeFromImageUrl(photoURL);
-    // The QR usually contains a web address ending in the cert number,
-    // so we just pull the first 8–10 digit run out of whatever it says.
-    const digits = (result.getText() || "").match(/\d{8,10}/);
-    if (digits) {
-      certFromCode = digits[0];
-      $("certNumber").value = certFromCode;
-      scanStatus.className = "status ok";
-      scanStatus.textContent = "QR read — cert #" + certFromCode + ". Reading label text…";
-    }
-  } catch (err) {
-    // No code found in the photo — perfectly normal on older labels.
-    // We silently continue to OCR.
-  }
-
-  // ---------- Step 2: OCR the label text ----------
-  try {
-    if (!certFromCode) scanStatus.textContent = "No QR found — reading label text instead…";
-
     const result = await Tesseract.recognize(photoURL, "eng", {
       logger: (m) => {
         if (m.status === "recognizing text") {
@@ -399,15 +434,14 @@ $("photoInput").addEventListener("change", async (event) => {
       }
     });
 
-    const parsed = parseLabelText(result.data.text, certFromCode);
+    const parsed = parseLabelText(result.data.text, alreadyHaveCert);
 
-    // Only fill fields we actually found, and never overwrite the
-    // more-reliable QR cert with an OCR guess.
-    if (!certFromCode && parsed.cert) $("certNumber").value = parsed.cert;
+    // Don't overwrite a cert we already got reliably from the QR scan.
+    if (!alreadyHaveCert && parsed.cert) $("certNumber").value = parsed.cert;
     if (parsed.grade) $("cardGrade").value = parsed.grade;
     if (parsed.name)  $("cardName").value  = parsed.name;
 
-    const gotCert = certFromCode || parsed.cert;
+    const gotCert = alreadyHaveCert || parsed.cert;
     if (gotCert || parsed.grade || parsed.name) {
       scanStatus.className = "status ok";
       scanStatus.textContent =
@@ -417,86 +451,55 @@ $("photoInput").addEventListener("change", async (event) => {
         ". Double-check against the label, then add.";
     } else {
       scanStatus.className = "status err";
-      scanStatus.textContent = "Couldn't read the label. Try a closer, well-lit, straight-on photo — or type the details below.";
+      scanStatus.textContent = "Couldn't read the label. Try a sharper, glare-free photo — or type the details below.";
     }
   } catch (err) {
-    if (certFromCode) {
-      scanStatus.className = "status ok";
-      scanStatus.textContent = "Cert #" + certFromCode + " read from QR. Type the name and grade below.";
-    } else {
-      scanStatus.className = "status err";
-      scanStatus.textContent = "Scan failed to run. Please type the details manually.";
-    }
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Photo reading failed. Please type the details manually.";
   } finally {
     URL.revokeObjectURL(photoURL);
-    scanBtn.disabled = false;
-    event.target.value = ""; // allow re-scanning the same photo
+    photoBtn.disabled = false;
+    event.target.value = "";
   }
 });
 
-// ---- E. LABEL-TEXT PARSING ------------------------------------------------
-// Takes the raw OCR text of a PSA label and tries to pick out:
-//   cert  — an 8–10 digit run of numbers
-//   grade — standard PSA wording, e.g. "GEM MT 10", "MINT 9", "NM-MT 8"
-//   name  — the remaining descriptive lines (year / set / player)
-// These are best-effort guesses; the form stays editable so you can fix
-// anything the camera misread.
+// ---- F. LABEL-TEXT PARSING ------------------------------------------------
 function parseLabelText(rawText, knownCert) {
   const out = { cert: "", grade: "", name: "" };
 
-  // Cert: look for 8–10 digits, tolerating OCR-inserted spaces
   const certMatch = rawText.match(/\b\d{8,10}\b/) ||
                     rawText.replace(/[ \t]/g, "").match(/\d{8,10}/);
   if (certMatch) out.cert = certMatch[0];
 
-  // Grade: match PSA's standard grade wording (longest names first so
-  // e.g. "NM-MT" wins over plain "NM"). Also catches "AUTHENTIC".
   const gradeRe = /\b(GEM\s*MT|GEM\s*MINT|NM\s*-?\s*MT|EX\s*-?\s*MT|VG\s*-?\s*EX|MINT|NM|EX|VG|GOOD|FR|PR|AUTHENTIC)\s*(10|[1-9](?:\.5)?)?\b/i;
   const gradeMatch = rawText.match(gradeRe);
-  if (gradeMatch) {
-    out.grade = gradeMatch[0].replace(/\s+/g, " ").trim().toUpperCase();
-  }
+  if (gradeMatch) out.grade = gradeMatch[0].replace(/\s+/g, " ").trim().toUpperCase();
 
-  // Name: keep label lines that are NOT the cert, NOT the grade, and
-  // look like real words (PSA prints year/set/player on the left side).
   const certToSkip = knownCert || out.cert;
-  const lines = rawText
-    .split("\n")
+  const lines = rawText.split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => {
-      if (line.length < 3) return false;                     // noise
+      if (line.length < 3) return false;
       if (certToSkip && line.includes(certToSkip)) return false;
       if (out.grade && line.toUpperCase().includes(out.grade)) return false;
-      if (/^[\d\s.#-]+$/.test(line)) return false;           // digits only
-      if (/^PSA$/i.test(line)) return false;                 // the logo text
+      if (/^[\d\s.#-]+$/.test(line)) return false;
+      if (/^PSA$/i.test(line)) return false;
       const letters = (line.match(/[A-Za-z]/g) || []).length;
-      return letters >= 3;                                   // must have words
+      return letters >= 3;
     });
 
-  // The first few surviving lines are almost always year/set/player
   out.name = lines.slice(0, 3).join(" ").trim();
-
   return out;
 }
 
-// ---- F. EXPORT TO CSV ----------------------------------------------------
-// Every value is wrapped in quotes with inner quotes doubled — the
-// standard CSV escaping rule — so commas or quotes in card names can
-// never break your spreadsheet columns.
-function csvCell(value) {
-  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
-}
+// ---- G. EXPORT TO CSV ----------------------------------------------------
+function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') + '"'; }
 
 $("exportBtn").addEventListener("click", () => {
-  if (inventory.length === 0) {
-    alert("Nothing to export yet — add a card first.");
-    return;
-  }
+  if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
   const header = ["Cert Number", "Card Name", "Grade", "Date Added"];
-  const rows = inventory.map((c) =>
-    [c.cert, c.name, c.grade, c.added].map(csvCell).join(",")
-  );
+  const rows = inventory.map((c) => [c.cert, c.name, c.grade, c.added].map(csvCell).join(","));
   const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -504,27 +507,23 @@ $("exportBtn").addEventListener("click", () => {
   const a = document.createElement("a");
   a.href = url;
   a.download = "card-inventory-" + new Date().toISOString().slice(0, 10) + ".csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 });
 
-// ---- G. CLEAR DATA ---------------------------------------------------------
+// ---- H. CLEAR DATA ---------------------------------------------------------
 $("clearBtn").addEventListener("click", () => {
   if (inventory.length === 0) return;
   const sure = confirm(
     "This permanently deletes all " + inventory.length +
-    " logged cards from this device.\n\nTip: export a CSV first!\n\nClear everything?"
-  );
-  if (sure) {
-    inventory = [];
-    saveInventory(inventory);
-    render();
-  }
+    " logged cards from this device.\n\nTip: export a CSV first!\n\nClear everything?");
+  if (sure) { inventory = []; saveInventory(inventory); render(); }
 });
 
-// ---- Initial paint on page load -------------------------------------------
+// ---- Release the camera if the user leaves the page ------------------------
+window.addEventListener("pagehide", stopLiveScan);
+
+// ---- Initial paint ---------------------------------------------------------
 render();
 </script>
 </body>
