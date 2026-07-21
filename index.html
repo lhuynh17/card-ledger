@@ -217,27 +217,94 @@ button:disabled{ opacity:.5; cursor:wait; }
   padding: 6px 12px;
 }
 .slab-strip .cert{ font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
-.slab-strip .grade{
+/* Grade shown as a badge in the red strip.
+   Under 10 = a clean gold-ringed token circle; a perfect 10 = a shiny
+   metallic gold award medal with a glossy sheen. */
+.grade-badge{
+  flex:0 0 auto;
+  display:inline-flex; align-items:center; justify-content:center;
   font-family: var(--font-display);
-  font-size: 16px; font-weight: 700; letter-spacing:.04em;
-  color: var(--grade-gold); text-transform: uppercase;
+  font-weight:700; line-height:1; letter-spacing:.02em;
+}
+/* grades 1–9 (and half grades): token circle */
+.grade-badge.num{
+  width:34px; height:34px; border-radius:50%;
+  font-size:17px;
+  background: radial-gradient(circle at 30% 28%, #33415C, #202A3E);
+  color: var(--grade-gold);
+  border:1.5px solid var(--grade-gold);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,.14);
+}
+/* the coveted 10: glossy gold medal */
+.grade-badge.ten{
+  position:relative;
+  width:38px; height:38px; border-radius:50%;
+  font-size:17px; color:#3a2c05;
+  text-shadow:0 1px 0 rgba(255,255,255,.45);
+  background: radial-gradient(circle at 32% 26%,
+              #FFF6D5 0%, #F4CF63 34%, #E4A72B 66%, #B87715 100%);
+  border:1.5px solid #FFE9A8;
+  box-shadow:
+    0 0 0 2px rgba(233,185,73,.35),
+    0 2px 6px rgba(0,0,0,.45),
+    inset 0 1px 2px rgba(255,255,255,.85),
+    inset 0 -2px 4px rgba(120,80,10,.5);
+}
+.grade-badge.ten::after{   /* glossy highlight */
+  content:""; position:absolute; left:19%; top:11%; width:50%; height:32%;
+  background: linear-gradient(180deg, rgba(255,255,255,.8), rgba(255,255,255,0));
+  border-radius:50%; pointer-events:none;
+}
+/* non-numeric grades (e.g. AUTH): small pill */
+.grade-badge.text{
+  height:30px; padding:0 12px; border-radius:999px;
+  font-family: var(--font-body); font-size:12px; font-weight:600;
+  letter-spacing:.05em; text-transform:uppercase;
+  background: var(--surface-2); color: var(--text);
+  border:1px solid var(--line);
+}
+/* no grade yet */
+.grade-badge.empty{
+  width:34px; height:34px; border-radius:50%;
+  background:transparent; color:var(--muted);
+  border:1px dashed var(--line); font-size:16px;
 }
 .slab-body{
   display:flex; justify-content:space-between; align-items:center;
-  gap:10px; padding: 10px 12px;
-}
-.slab-thumb{
-  width:44px; height:44px; object-fit:cover; flex:0 0 auto;
-  border-radius:6px; border:1px solid var(--line);
+  gap:12px; padding: 10px 12px;
 }
 .slab-main{ flex:1 1 auto; min-width:0; }
 .slab-body .name{ font-weight: 600; font-size: 15px; overflow-wrap:anywhere; }
 .slab-body .meta{ font-size: 12px; color: var(--muted); margin-top:2px; }
-.slab-body .del{
-  width:auto; margin:0; padding: 6px 10px;
-  background: transparent; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+/* Slab photo now sits on the RIGHT of the info */
+.slab-thumb{
+  width:64px; height:64px; object-fit:cover; flex:0 0 auto;
+  border-radius:8px; border:1px solid var(--line);
 }
+/* Edit / Delete actions under the info */
+.slab-actions{ display:flex; gap:8px; margin-top:9px; }
+.act{
+  width:auto; margin:0; padding:6px 12px; font-size:12px;
+  border-radius:8px; background:transparent;
+  border:1px solid var(--line); color:var(--muted);
+}
+.act.edit{ color: var(--grade-gold); border-color: rgba(233,185,73,.55); }
+
+/* Inline edit form (shown when a card is being edited) */
+.slab-edit{ padding: 12px 14px; }
+.slab-edit h3{
+  font-family: var(--font-display); font-size:16px; font-weight:600;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+  margin-bottom:4px;
+}
+.slab-edit label{ margin:10px 0 4px; }
+.edit-photo{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.edit-thumb{
+  width:56px; height:56px; object-fit:cover;
+  border-radius:8px; border:1px solid var(--line);
+}
+.edit-actions{ display:flex; gap:10px; margin-top:14px; }
+.edit-actions button{ flex:1; margin-top:0; }
 .empty{
   text-align:center; color: var(--muted);
   font-size: 14px; padding: 18px 8px;
@@ -281,30 +348,29 @@ button:disabled{ opacity:.5; cursor:wait; }
   <p class="status" id="scanStatus" role="status"></p>
 
   <label for="certNumber">Cert number</label>
-  <input type="text" id="certNumber" inputmode="numeric" autocomplete="off"
-         placeholder="8–10 digit certificate number">
+  <input type="text" id="certNumber" inputmode="numeric" autocomplete="off">
 
   <label for="cardName">Card name</label>
   <div class="field-row">
-    <input type="text" id="cardName" autocomplete="off" placeholder="e.g. 1999 Pokémon Game Charizard #4">
+    <input type="text" id="cardName" autocomplete="off">
     <button type="button" class="btn-paste" id="pasteNameBtn" title="Paste copied text into this field">📋 Paste</button>
   </div>
 
   <label for="cardGrade">Grade</label>
   <div class="field-row">
-    <input type="text" id="cardGrade" autocomplete="off" placeholder="e.g. GEM MT 10">
+    <input type="text" id="cardGrade" autocomplete="off">
     <button type="button" class="btn-paste" id="pasteGradeBtn" title="Paste copied text into this field">📋 Paste</button>
   </div>
 
-  <label for="cardPop">Pop (population)</label>
+  <label for="cardPop">Pop</label>
   <div class="field-row">
-    <input type="text" id="cardPop" inputmode="numeric" autocomplete="off" placeholder="e.g. 1523">
+    <input type="text" id="cardPop" inputmode="numeric" autocomplete="off">
     <button type="button" class="btn-paste" id="pastePopBtn" title="Paste copied text into this field">📋 Paste</button>
   </div>
 
   <label>Slab photo</label>
-  <input type="file" id="slabPhotoInput" accept="image/*" capture="environment">
-  <button type="button" class="btn-photo" id="slabPhotoBtn">📸 Take slab photo</button>
+  <input type="file" id="slabPhotoInput" accept="image/*">
+  <button type="button" class="btn-photo" id="slabPhotoBtn">📸 Add slab photo (take or upload)</button>
   <div id="photoPreviewWrap">
     <img id="photoPreview" alt="Slab photo preview">
     <button type="button" id="clearPhotoBtn">Remove photo</button>
@@ -347,6 +413,7 @@ const DB_NAME  = "slabLedger";
 const DB_STORE = "cards";
 let db = null;
 let inventory = [];   // in-memory working copy, newest first; each has .id
+let editingId = null; // id of the card currently being edited inline, or null
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -377,6 +444,15 @@ function dbDelete(id) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DB_STORE, "readwrite");
     tx.objectStore(DB_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+function dbPut(card) {   // updates an existing card in place (matched by id)
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(card);
     tx.oncomplete = () => resolve();
     tx.onerror    = () => reject(tx.error);
   });
@@ -423,6 +499,29 @@ const countChip  = $("countChip");
 const scanStatus = $("scanStatus");
 
 // ---- B. RENDERING ------------------------------------------------------
+// Pull the numeric grade out of text like "GEM MT 10" -> "10", "NM-MT 8" -> "8".
+function gradeNumber(text) {
+  const m = String(text || "").match(/\b(10|[1-9](?:\.5)?)\b/);
+  return m ? m[1] : "";
+}
+
+// Build the grade badge element: shiny medal for a 10, token circle for
+// 1–9, a small pill for word-only grades (AUTH), or a dashed blank.
+function buildGradeBadge(gradeText) {
+  const badge = document.createElement("span");
+  badge.className = "grade-badge";
+  const txt = String(gradeText || "").trim();
+  const num = gradeNumber(txt);
+
+  if (num === "10")      { badge.classList.add("ten");  badge.textContent = "10"; }
+  else if (num)          { badge.classList.add("num");  badge.textContent = num; }
+  else if (txt)          { badge.classList.add("text"); badge.textContent = txt.slice(0, 8); }
+  else                   { badge.classList.add("empty"); badge.textContent = "—"; }
+
+  if (txt) badge.title = txt;   // full grade on long-press/hover
+  return badge;
+}
+
 // User data is always inserted with textContent (never innerHTML).
 function render() {
   listEl.innerHTML = "";
@@ -436,22 +535,60 @@ function render() {
     return;
   }
 
-  inventory.forEach((card, index) => {
+  inventory.forEach((card) => {
     const li = document.createElement("li");
     li.className = "slab";
+
+    // If this card is being edited, show the inline edit form instead.
+    if (card.id === editingId) {
+      li.appendChild(buildEditForm(card));
+      listEl.appendChild(li);
+      return;
+    }
 
     const strip = document.createElement("div");
     strip.className = "slab-strip";
     const cert = document.createElement("span");
     cert.className = "cert"; cert.textContent = "#" + card.cert;
-    const grade = document.createElement("span");
-    grade.className = "grade"; grade.textContent = card.grade || "—";
-    strip.append(cert, grade);
+    strip.append(cert, buildGradeBadge(card.grade));
 
     const body = document.createElement("div");
     body.className = "slab-body";
 
-    // Optional slab photo thumbnail
+    // Left side: name, meta, and the Edit / Delete actions
+    const main = document.createElement("div");
+    main.className = "slab-main";
+    const name = document.createElement("div");
+    name.className = "name"; name.textContent = card.name || "(unnamed card)";
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const gNum  = gradeNumber(card.grade);
+    const gQual = (card.grade || "").replace(/\b(10|[1-9](?:\.5)?)\b/, "").replace(/\s+/g, " ").trim();
+    const metaParts = [];
+    if (gNum && gQual) metaParts.push(gQual);
+    if (card.pop) metaParts.push("Pop " + card.pop);
+    metaParts.push(card.added);
+    meta.textContent = metaParts.join(" · ");
+
+    const actions = document.createElement("div");
+    actions.className = "slab-actions";
+    const edit = document.createElement("button");
+    edit.className = "act edit"; edit.type = "button"; edit.textContent = "Edit";
+    edit.addEventListener("click", () => { editingId = card.id; render(); });
+    const del = document.createElement("button");
+    del.className = "act"; del.type = "button"; del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      if (confirm("Delete this card from your inventory?")) {
+        try { await dbDelete(card.id); } catch (e) {}
+        inventory = inventory.filter((c) => c.id !== card.id);
+        render();
+      }
+    });
+    actions.append(edit, del);
+    main.append(name, meta, actions);
+    body.appendChild(main);
+
+    // Right side: the slab photo (if any)
     if (card.photo) {
       const thumb = document.createElement("img");
       thumb.className = "slab-thumb";
@@ -460,31 +597,104 @@ function render() {
       body.appendChild(thumb);
     }
 
-    const main = document.createElement("div");
-    main.className = "slab-main";
-    const name = document.createElement("div");
-    name.className = "name"; name.textContent = card.name || "(unnamed card)";
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    // Show pop (if present) and the date added on one line
-    meta.textContent = (card.pop ? "Pop " + card.pop + " · " : "") + card.added;
-    main.append(name, meta);
-
-    const del = document.createElement("button");
-    del.className = "del"; del.type = "button"; del.textContent = "Delete";
-    del.addEventListener("click", async () => {
-      if (confirm("Delete this card from your inventory?")) {
-        try { await dbDelete(card.id); } catch (e) {}
-        inventory = inventory.filter((c) => c.id !== card.id);
-        render();
-      }
-    });
-
-    body.append(main, del);
-
     li.append(strip, body);
     listEl.appendChild(li);
   });
+}
+
+// Build the inline edit form for a card. Lets you fix any field or
+// replace/remove the photo, then Save (writes to IndexedDB) or Cancel.
+function buildEditForm(card) {
+  const wrap = document.createElement("div");
+  wrap.className = "slab-edit";
+
+  let editPhoto = card.photo || "";   // working copy of the photo while editing
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Edit card";
+  wrap.appendChild(heading);
+
+  // Helper: a labelled text input pre-filled with the current value
+  function field(labelText, value, numeric) {
+    const l = document.createElement("label");
+    l.textContent = labelText;
+    const i = document.createElement("input");
+    i.type = "text"; i.value = value || "";
+    if (numeric) i.inputMode = "numeric";
+    wrap.append(l, i);
+    return i;
+  }
+
+  const certI  = field("Cert number", card.cert, true);
+  const nameI  = field("Card name", card.name, false);
+  const gradeI = field("Grade", card.grade, false);
+  const popI   = field("Pop", card.pop, true);
+
+  // Photo controls (updated in place so typed edits aren't lost)
+  const photoLabel = document.createElement("label");
+  photoLabel.textContent = "Slab photo";
+  const photoArea = document.createElement("div");
+  photoArea.className = "edit-photo";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file"; fileInput.accept = "image/*";
+  fileInput.style.display = "none";
+  fileInput.addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try { editPhoto = await shrinkImage(f, 800, 0.7); refreshPhoto(); }
+    catch (err) { alert("Couldn't process that photo."); }
+    finally { e.target.value = ""; }
+  });
+
+  function miniBtn(text, onClick) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "act"; b.textContent = text;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function refreshPhoto() {
+    photoArea.textContent = "";           // clear (safe: no user HTML)
+    photoArea.appendChild(fileInput);
+    if (editPhoto) {
+      const img = document.createElement("img");
+      img.className = "edit-thumb"; img.src = editPhoto; img.alt = "Slab photo";
+      photoArea.append(img,
+        miniBtn("Replace", () => fileInput.click()),
+        miniBtn("Remove", () => { editPhoto = ""; refreshPhoto(); }));
+    } else {
+      photoArea.append(miniBtn("Add photo", () => fileInput.click()));
+    }
+  }
+  refreshPhoto();
+  wrap.append(photoLabel, photoArea);
+
+  // Save / Cancel
+  const row = document.createElement("div");
+  row.className = "edit-actions";
+  const save = document.createElement("button");
+  save.type = "button"; save.className = "btn-add"; save.textContent = "Save changes";
+  save.addEventListener("click", async () => {
+    const cert = certI.value.trim();
+    if (!cert) { alert("Cert number can't be empty."); return; }
+    const updated = { ...card, cert,
+      name: nameI.value.trim(), grade: gradeI.value.trim(),
+      pop: popI.value.trim(), photo: editPhoto };
+    try { await dbPut(updated); }
+    catch (e) { alert("Couldn't save changes — device storage may be full."); return; }
+    const idx = inventory.findIndex((c) => c.id === card.id);
+    if (idx >= 0) inventory[idx] = updated;
+    editingId = null;
+    render();
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button"; cancel.className = "btn-cancel"; cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => { editingId = null; render(); });
+  row.append(save, cancel);
+  wrap.appendChild(row);
+
+  return wrap;
 }
 
 // ---- C. ADDING A CARD --------------------------------------------------
