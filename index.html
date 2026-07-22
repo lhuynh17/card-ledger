@@ -352,12 +352,13 @@ select option{ background: var(--surface-2); color: var(--text); }
 #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); }
 #inventoryList.grid-view .slab{ display:grid; grid-template-columns:1fr auto; align-items:start; }
 #inventoryList.grid-view .slab-main{ grid-column:1; }
-#inventoryList.grid-view .grade-cell{ width:68px; }
-#inventoryList.grid-view .slab-thumb{ grid-column:1/-1; grid-row:2; width:100%; height:250px; }
+#inventoryList.grid-view .grade-desktop{ grid-column:2; grid-row:1; width:68px; }
+#inventoryList.grid-view .slab-media{ grid-column:1/-1; grid-row:2; width:100%; }
+#inventoryList.grid-view .slab-thumb{ width:100%; height:250px; }
 #inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
 
 /* ============ 5. INVENTORY LIST ============ */
-#inventoryList{ list-style:none; display:grid; gap:20px; }
+#inventoryList{ list-style:none; display:grid; gap:14px; }
 .slab{
   position:relative;
   background: linear-gradient(180deg, rgba(75,123,229,.08), rgba(75,123,229,.02));
@@ -376,6 +377,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   color: var(--muted-2); background: var(--surface-2);
 }
 .slab-thumb.placeholder svg{ width:30px; height:30px; }
+.slab-media{ flex:0 0 auto; }
 .slab-main{ flex:1 1 auto; min-width:0; }
 .slab-main .cert{
   font-family: var(--font-mono); font-size: 17px; font-weight:600;
@@ -407,7 +409,8 @@ select option{ background: var(--surface-2); color: var(--text); }
 .act.del:hover{ color: var(--accent); border-color: var(--accent-line); }
 
 /* ---- Grade badge (right side of tile) ---- */
-.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; margin-left:auto; }
+.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; }
+.grade-mobile{ display:none; }
 .grade-badge.grader{
   min-width:48px; height:40px; padding:0 10px; border-radius:7px;
   display:inline-flex; align-items:center; justify-content:center;
@@ -532,7 +535,8 @@ select option{ background: var(--surface-2); color: var(--text); }
   .slab-main .name-link::after{ content:" ↗"; color:var(--muted); font-size:10px; vertical-align:top; }
   .slab-main .cert{ font-size:15px; }
   .slab-main .meta{ font-size:12px; }
-  .grade-cell{ grid-column:2; width:auto; margin-left:0; justify-self:end; }
+  .grade-desktop{ display:none; }
+  .grade-mobile{ display:flex; width:auto; margin:0 auto 8px; }
   .grade-medal{ width: clamp(64px, 22vw, 96px); }
   .grade-badge.num{ width:52px; height:52px; font-size:23px; }
   .slab-actions{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
@@ -542,7 +546,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   #inventoryList.grid-view{ grid-template-columns:1fr; gap:10px; }
   #inventoryList.grid-view .slab{ padding:11px; }
   #inventoryList.grid-view .slab-thumb{ height:190px; }
-  #inventoryList.grid-view .grade-cell{ width:auto; }
+  #inventoryList.grid-view .grade-desktop{ display:none; }
   #inventoryList.grid-view .grade-medal{ width:58px; }
   #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
   #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; }
@@ -1147,13 +1151,23 @@ function render() {
       return;
     }
     li.className = "slab";
+    const co = card.company && COMPANIES[card.company] ? card.company : "PSA";
+
+    // Mobile keeps the grade directly above the photo; desktop hides this copy.
+    const media = document.createElement("div");
+    media.className = "slab-media";
+    const mobileGrade = document.createElement("div");
+    mobileGrade.className = "grade-cell grade-mobile";
+    mobileGrade.appendChild(buildGradeBadge(card.grade, co));
+    media.appendChild(mobileGrade);
 
     // Photo sits on the left in list view; object-fit:contain shows the full slab.
     const thumb = card.photo ? document.createElement("img") : document.createElement("div");
     thumb.className = "slab-thumb" + (card.photo ? "" : " placeholder");
     if (card.photo) { thumb.src = card.photo; thumb.alt = "Slab photo"; }
     else thumb.innerHTML = icon("image");
-    li.appendChild(thumb);
+    media.appendChild(thumb);
+    li.appendChild(media);
 
     // ---- Card information ----
     const main = document.createElement("div");
@@ -1176,7 +1190,6 @@ function render() {
 
     const meta = document.createElement("div");
     meta.className = "meta";
-    const co = card.company && COMPANIES[card.company] ? card.company : "PSA";
     const metaParts = [];
     if (card.pop) metaParts.push("Pop " + card.pop);
     if (card.grade) metaParts.push(gradeDisplay(co, card.grade));
@@ -1250,14 +1263,14 @@ function render() {
     if (card.name) actions.append(research);
     actions.append(sale, del);
 
-    // Keep the grade in the lower action area so the name gets the full width.
-    const gradeCell = document.createElement("div");
-    gradeCell.className = "grade-cell";
-    gradeCell.appendChild(buildGradeBadge(card.grade, co));
-    actions.appendChild(gradeCell);
-
     main.appendChild(actions);
     li.appendChild(main);
+
+    // Desktop keeps the grade in its own right-side column.
+    const desktopGrade = document.createElement("div");
+    desktopGrade.className = "grade-cell grade-desktop";
+    desktopGrade.appendChild(buildGradeBadge(card.grade, co));
+    li.appendChild(desktopGrade);
 
     listEl.appendChild(li);
   });
