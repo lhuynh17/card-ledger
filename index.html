@@ -2,25 +2,28 @@
 <html lang="en">
 <head>
 <!-- ============================================================
-     SLAB LEDGER v4 — personal graded-card inventory
+     SLAB LEDGER — personal graded-card inventory
      One single file: HTML + CSS + JavaScript.
      Everything runs locally on your phone. Nothing is uploaded,
      and this app does NOT fetch or parse any external website.
 
+     Supports multiple grading companies (PSA and BGS/Beckett).
+     The chosen company drives the grade options, the cert-number
+     format, and which cert page the lookup button opens.
+
      Workflow for logging a card:
-       1) SCAN QR (live camera) — PSA slabs made 2020+ have a QR on
-          the label. The live camera reads it instantly and fills
-          the cert number for you.
-       2) OPEN CERT PAGE — tap to open PSA's own public cert page in
-          a new browser tab. YOU read the card name and grade off
-          the page with your own eyes and type them into the two
-          fields. (This is just you doing a normal manual lookup —
-          the app never reads that page for you.)
-       3) READ PHOTO (OCR) — optional. For older pre-2020 slabs with
-          no QR, or if you'd rather not open a tab, take a still
-          photo and the app attempts to read the label text locally.
-          OCR is best-effort and often imperfect, so every field
-          stays editable before you tap Add.
+       0) PICK THE GRADING COMPANY — PSA or BGS.
+       1) SCAN QR (live camera) — many modern slabs have a QR on the
+          label. The live camera reads it instantly and fills the
+          cert number for you. Otherwise just type the cert.
+       2) OPEN CERT PAGE — tap to open the grader's own public cert
+          page in a new browser tab. YOU read the card name and grade
+          off the page with your own eyes and type (or paste) them
+          into the fields. (This is just you doing a normal manual
+          lookup — the app never reads that page for you.)
+          PSA links straight to the cert; Beckett is a search form,
+          so it opens their lookup page for you to paste into.
+       3) ADD A SLAB PHOTO (optional) and tap Add to inventory.
      ============================================================ -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -31,363 +34,696 @@
 
 <!-- ZXing: trusted open-source QR / barcode reader (runs locally) -->
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-<!-- Tesseract.js: trusted open-source OCR engine (runs locally) -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <!-- ExcelJS: builds real .xlsx files (with embedded photos) in the browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 
 <style>
 /* ============ 1. DESIGN TOKENS ============ */
 :root{
-  --bg:        #0F1626;
-  --surface:   #1B2436;
-  --surface-2: #232E44;
-  --line:      #2E3A54;
+  --bg:        #060A13;
+  --surface:   #0C1019;
+  --surface-2: #12161F;
+  --field:     #252D3D;
+  --field-hover:#2D374A;
+  --line:      #232A38;
+  --line-soft: #1A2130;
   --text:      #EDF1F8;
-  --muted:     #93A0B8;
-  --label-red: #D6404A;
-  --grade-gold:#E9B949;
-  --ok:        #4CC38A;
-  --radius: 14px;
+  --muted:     #8A94A6;
+  --muted-2:   #6B7484;
+  --accent:      #4B7BE5;
+  --accent-soft: rgba(75,123,229,.14);
+  --accent-line: rgba(75,123,229,.5);
+  --accent-grad-a: #2E4FA8;
+  --accent-grad-b: #1D3574;
+  --gold:      #E9B949;
+  --ok:        #35B37E;
+  --radius: 16px;
+  --radius-sm: 10px;
   --font-display: "Barlow Condensed", sans-serif;
   --font-body:    "Inter", system-ui, sans-serif;
   --font-mono:    "IBM Plex Mono", monospace;
 }
 
-/* ============ 2. BASE LAYOUT (mobile-first) ============ */
+/* ============ 2. BASE LAYOUT ============ */
 *{ box-sizing:border-box; margin:0; padding:0; }
 html{ -webkit-text-size-adjust:100%; }
 body{
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 600px at 50% -200px, #0E1420 0%, transparent 70%),
+    var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.5;
-  padding: max(14px, env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
-  max-width: 560px;
+  padding: clamp(16px, 3vw, 40px);
+  max-width: 1320px;
   margin-inline: auto;
+  min-height: 100vh;
 }
 
-header{
-  background: var(--label-red);
-  border-radius: var(--radius) var(--radius) 4px 4px;
-  padding: 12px 16px 10px;
-  display:flex; align-items:baseline; justify-content:space-between;
-  margin-bottom: 14px;
+/* ---- Header ---- */
+.app-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 8px 4px 28px;
 }
-header h1{
+.brand{ display:flex; align-items:center; gap:16px; }
+.brand .logo{
+  width:52px; height:52px; flex:0 0 auto;
+  border:2px solid var(--accent); border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:700; font-size:30px;
+  color: var(--accent);
+  box-shadow: 0 0 22px rgba(75,123,229,.25), inset 0 0 12px rgba(75,123,229,.12);
+}
+.brand h1{
   font-family: var(--font-display);
-  font-size: 28px; font-weight: 700;
-  letter-spacing: .04em; text-transform: uppercase;
+  font-size: 30px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; line-height:1;
 }
-header .count-chip{
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: 600;
-  background: rgba(0,0,0,.25);
-  padding: 3px 10px; border-radius: 99px;
+.brand .subtitle{
+  font-size: 14px; color: var(--muted); margin-top:4px;
 }
-
-section{
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 14px;
-}
-section > h2{
-  font-family: var(--font-display);
-  font-size: 20px; font-weight: 600;
-  letter-spacing: .05em; text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-
-/* ============ 3. FORM CONTROLS ============ */
-label{
-  display:block;
-  font-size: 13px; font-weight: 600;
-  color: var(--muted);
-  margin: 12px 0 5px;
-}
-input[type="text"]{
-  width:100%;
+.count-chip{
+  font-size: 14px; font-weight: 500; color: var(--muted);
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  font-size: 16px;
-  padding: 12px;
+  padding: 8px 16px; border-radius: 99px;
 }
-input[type="text"]:focus{ outline: 2px solid var(--grade-gold); outline-offset: 1px; }
-#certNumber{ font-family: var(--font-mono); letter-spacing:.06em; }
 
-/* A row that puts a text field and its Paste button side by side */
-.field-row{ display:flex; gap:8px; align-items:stretch; }
+/* ---- Panels ---- */
+section{
+  background: linear-gradient(180deg, var(--surface) 0%, #090D15 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: clamp(18px, 2.4vw, 30px);
+  margin-bottom: 22px;
+}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; margin-bottom: 22px;
+}
+.panel-title{
+  display:flex; align-items:center; gap:10px;
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.panel-title svg{ width:22px; height:22px; color: var(--accent); }
+.panel-title .pill{
+  font-family: var(--font-body);
+  font-size: 13px; font-weight: 600; letter-spacing:0;
+  color: var(--text);
+  background: var(--accent-soft); border:1px solid var(--accent-line);
+  padding: 2px 11px; border-radius: 99px;
+}
+
+/* ============ 3. ACTION BUTTONS (scan / lookup / photo) ============ */
+.action-grid{
+  display:grid; grid-template-columns: 1fr 1fr; gap:16px;
+}
+.action-btn{
+  display:flex; align-items:center; gap:16px;
+  width:100%; text-align:left; cursor:pointer;
+  background: var(--surface-2);
+  border:1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 18px 22px;
+  color: var(--text);
+  transition: border-color .15s ease, background .15s ease, transform .06s ease;
+}
+.action-btn:hover{ background: var(--field); border-color: var(--line); }
+.action-btn:active{ transform: scale(.995); }
+.action-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.action-btn .ico{
+  flex:0 0 auto; width:26px; height:26px; color: var(--muted);
+  display:flex; align-items:center; justify-content:center;
+}
+.action-btn .ico svg{ width:26px; height:26px; }
+.action-btn .txt{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.action-btn .t1{ font-weight:600; font-size:16px; }
+.action-btn .t2{ font-size:13px; color: var(--muted); }
+/* Scan is the primary red-accented action */
+.action-btn.primary{
+  background: linear-gradient(180deg, rgba(75,123,229,.10), rgba(75,123,229,.03));
+  border-color: var(--accent-line);
+}
+.action-btn.primary:hover{ background: linear-gradient(180deg, rgba(75,123,229,.16), rgba(75,123,229,.05)); }
+.action-btn.primary .ico{ color: var(--accent); }
+
+.soft-divider{
+  height:1px; background: var(--line-soft); margin: 20px 0;
+}
+/* full-width photo action */
+.action-btn.wide{ justify-content:center; text-align:center; }
+.action-btn.wide .txt{ align-items:center; }
+.action-btn.wide .ico{ color: var(--accent); }
+
+/* ============ 4. FORM GRID ============ */
+.form-grid{
+  display:grid; grid-template-columns: 1fr 1fr;
+  gap: 18px 22px; margin-top: 26px;
+}
+.field{ display:flex; flex-direction:column; }
+.field.full{ grid-column: 1 / -1; }
+label{
+  display:block;
+  font-size: 14px; font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 9px;
+}
+input[type="text"], input[type="number"], input[type="date"], select, textarea{
+  width:100%;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 14px 16px;
+}
+input::placeholder, textarea::placeholder{ color: var(--muted-2); }
+input[type="text"]:hover, input[type="number"]:hover, input[type="date"]:hover, select:hover, textarea:hover{ background: var(--field-hover); }
+input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus{
+  outline: none; border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--field-hover);
+}
+textarea{ resize:vertical; min-height: 54px; }
+#cardCost, #cardNotes{ height:53px; }
+#cardNotes{ min-height:53px; resize:none; }
+#certNumber{ font-family: var(--font-mono); letter-spacing:.06em; }
+select{
+  appearance:none; -webkit-appearance:none; cursor:pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(50% + 2px),
+    calc(100% - 15px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 40px;
+}
+select option{ background: var(--surface-2); color: var(--text); }
+
+/* input + paste button side by side (legacy, still used in edit form helpers) */
+.field-row{ display:flex; gap:10px; align-items:stretch; }
 .field-row input[type="text"]{ flex:1 1 auto; }
 .btn-paste{
-  flex:0 0 auto; width:auto; margin:0;
-  background: var(--surface-2); color: var(--text);
-  border:1px solid var(--line); border-radius:10px;
-  padding: 0 14px; font-size: 14px;
+  flex:0 0 auto; display:flex; align-items:center; gap:7px;
+  background: var(--surface-2); color: var(--muted);
+  border:1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0 16px; font-size: 14px; font-weight:500; cursor:pointer;
   white-space: nowrap;
 }
+.btn-paste:hover{ background: var(--field); color: var(--text); }
+.btn-paste svg{ width:15px; height:15px; }
 
-button{
-  font-family: var(--font-body);
-  font-size: 15px; font-weight: 600;
-  border: none; border-radius: 10px;
-  padding: 13px 14px;
-  width: 100%;
-  cursor: pointer;
-  margin-top: 12px;
-  transition: transform .06s ease;
+/* Paste button embedded INSIDE the input box (name & pop fields) */
+.input-wrap{ position:relative; }
+.input-wrap input[type="text"]{ padding-right: 92px; }   /* room for the button */
+.btn-paste.inset{
+  position:absolute; top:50%; right:6px; transform:translateY(-50%);
+  height:calc(100% - 12px); padding:0 12px; gap:6px;
+  font-size:13px; border-radius:8px;
+  background: var(--surface-2); color: var(--muted);
 }
-button:active{ transform: scale(.98); }
-button:focus-visible{ outline: 2px solid var(--grade-gold); outline-offset: 2px; }
-.btn-scan   { background: var(--grade-gold); color: #1A1405; }
-.btn-lookup { background: #2C3B5C; color: var(--text); }
-.btn-photo  { background: var(--surface-2); color: var(--text); border:1px dashed var(--muted); }
-.btn-add    { background: var(--grade-gold); color: #1A1405; }
-.btn-export { background: var(--ok); color: #06281A; }
-.btn-clear  { background: transparent; color: var(--label-red); border:1px solid var(--label-red); }
-.btn-cancel { background: transparent; color: var(--muted); border:1px solid var(--line); }
-button:disabled{ opacity:.5; cursor:wait; }
+.btn-paste.inset:hover{ background: var(--field-hover); color: var(--text); }
+.btn-paste.inset svg{ width:14px; height:14px; }
 
-#photoInput{ display:none; }
-#slabPhotoInput{ display:none; }
+/* Add to inventory button */
+.btn-add{
+  grid-column: 1 / -1;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  width:100%; margin-top: 8px;
+  background: linear-gradient(180deg, var(--accent-grad-a), var(--accent-grad-b));
+  color: #fff;
+  border:1px solid rgba(120,160,255,.4); border-radius: var(--radius-sm);
+  padding: 17px; font-size: 16px; font-weight:600; cursor:pointer;
+  box-shadow: 0 6px 18px rgba(46,79,168,.35), inset 0 1px 0 rgba(255,255,255,.15);
+  transition: filter .15s ease, transform .06s ease;
+}
+.btn-add:hover{ filter: brightness(1.12); }
+.btn-add:active{ transform: scale(.995); }
+.btn-add svg{ width:18px; height:18px; }
+.btn-reset-form{
+  grid-column:1/-1; width:100%; padding:13px; cursor:pointer;
+  background:transparent; color:var(--muted); border:1px solid var(--line);
+  border-radius:var(--radius-sm); font-size:14px; font-weight:500;
+}
+.btn-reset-form:hover{ color:var(--text); background:var(--surface-2); }
 
-/* Preview of the slab photo for the card you're about to add */
-#photoPreviewWrap{ display:none; margin-top:10px; align-items:center; gap:10px; }
+/* Photo preview chip */
+#slabPhotoInput, #photoInput{ display:none; }
+#photoPreviewWrap{ display:none; margin-top:14px; align-items:center; gap:12px; }
 #photoPreviewWrap.active{ display:flex; }
 #photoPreview{
-  width:64px; height:64px; object-fit:cover;
+  width:54px; height:76px; object-fit:contain; background:#000;
   border-radius:8px; border:1px solid var(--line);
 }
 #clearPhotoBtn{
-  width:auto; margin:0; padding:6px 10px; font-size:12px;
+  padding:8px 14px; font-size:13px; cursor:pointer;
   background:transparent; color:var(--muted);
   border:1px solid var(--line); border-radius:8px;
 }
+#clearPhotoBtn:hover{ color:var(--text); border-color:var(--muted); }
 
-/* Live camera view — hidden until "Scan QR" is tapped */
-#scannerWrap{ display:none; margin-top: 12px; }
+/* ---- Live camera view ---- */
+#scannerWrap{ display:none; margin-top: 18px; }
 #scannerWrap.active{ display:block; }
 #video{
-  width:100%;
-  aspect-ratio: 4 / 3;
-  background:#000;
-  border-radius: 10px;
-  object-fit: cover;
+  width:100%; max-width:520px; aspect-ratio: 4 / 3;
+  background:#000; border-radius: var(--radius-sm);
+  object-fit: cover; display:block; margin-inline:auto;
 }
-.scan-frame{
-  position: relative;
-}
-/* A simple reticle overlay to help the user aim at the QR */
+.scan-frame{ position: relative; }
 .scan-frame::after{
-  content:"";
-  position:absolute; inset: 18% 24%;
-  border: 2px solid var(--grade-gold);
-  border-radius: 8px;
-  pointer-events:none;
+  content:""; position:absolute; inset: 18% 30%;
+  border: 2px solid var(--accent); border-radius: 8px; pointer-events:none;
 }
+.btn-cancel{
+  display:block; margin: 14px auto 0; cursor:pointer;
+  background: transparent; color: var(--muted);
+  border:1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 10px 20px; font-size:14px;
+}
+.btn-cancel:hover{ color: var(--text); }
 
 .status{
   font-size: 13px; color: var(--muted);
-  margin-top: 8px; min-height: 1.2em;
+  margin-top: 14px; min-height: 1.2em;
 }
 .status.ok{ color: var(--ok); }
-.status.err{ color: var(--label-red); }
+.status.err{ color: var(--accent); }
+.status:empty{ display:none; }
 
-.hint{
-  font-size: 12px; color: var(--muted);
-  margin-top: 6px;
+/* ---- Search box ---- */
+.search-wrap{ position:relative; width: min(300px, 42vw); }
+.search-wrap input{
+  width:100%; padding: 11px 40px 11px 16px; font-size:14px;
+  background: var(--surface-2); border:1px solid var(--line);
+  border-radius: var(--radius-sm); color: var(--text);
+}
+.search-wrap input:focus{ outline:none; border-color: var(--accent-line); box-shadow:0 0 0 3px var(--accent-soft); }
+.search-wrap svg{
+  position:absolute; right:14px; top:50%; transform:translateY(-50%);
+  width:16px; height:16px; color: var(--muted); pointer-events:none;
 }
 
-/* ============ 4. INVENTORY LIST ============ */
-#inventoryList{ list-style:none; display:grid; gap:10px; }
+.inventory-tools{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.tabs, .view-toggle{ display:flex; padding:3px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); }
+.tabs button, .view-toggle button{ border:0; background:transparent; color:var(--muted); padding:8px 13px; border-radius:7px; cursor:pointer; font:600 13px var(--font-body); }
+.tabs button.active, .view-toggle button.active{ background:var(--field); color:var(--text); box-shadow:0 1px 5px rgba(0,0,0,.25); }
+.tabs button span{ display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:20px; margin-left:6px; padding:0 7px; border-radius:999px; background:var(--field-hover); border:1px solid var(--line); color:var(--text); font-size:11px; }
+.tabs button.active span{ background:var(--accent-soft); border-color:var(--accent-line); color:#AFC6FF; }
+.totals-bar{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 0 16px; }
+.total-card{ background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+.total-card span{ display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
+.total-card strong{ display:block; font:600 17px var(--font-mono); margin-top:2px; }
+.slab.sale-open{ flex-wrap:wrap; }
+.sale-panel{ flex:1 0 100%; grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; margin-top:14px; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); }
+.sale-panel .field label{ margin-bottom:5px; }
+.sale-panel .sale-note{ grid-column:1/-1; }
+.sale-actions{ grid-column:1/-1; display:flex; justify-content:flex-end; gap:10px; }
+.sold-stamp{ color:var(--ok); font-weight:600; }
+.money{ color:var(--text); font-weight:600; }
+.act.sell{ color:var(--ok); border-color:rgba(53,179,126,.38); }
+
+#inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+#inventoryList.grid-view .slab{ display:grid; grid-template-columns:1fr auto; align-items:start; }
+#inventoryList.grid-view .slab-main{ grid-column:1; }
+#inventoryList.grid-view .grade-cell{ grid-column:2; grid-row:1; width:76px; }
+#inventoryList.grid-view .slab-thumb{ grid-column:1/-1; grid-row:2; width:100%; height:250px; }
+#inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
+
+/* ============ 5. INVENTORY LIST ============ */
+#inventoryList{ list-style:none; display:grid; gap:14px; }
 .slab{
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.slab-strip{
-  background: var(--label-red);
-  display:flex; justify-content:space-between; align-items:center;
-  padding: 6px 12px;
-}
-.slab-strip .cert{ font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
-/* Grade shown as a badge in the red strip.
-   Under 10 = a clean gold-ringed token circle; a perfect 10 = a shiny
-   metallic gold award medal with a glossy sheen. */
-.grade-badge{
-  flex:0 0 auto;
-  display:inline-flex; align-items:center; justify-content:center;
-  font-family: var(--font-display);
-  font-weight:700; line-height:1; letter-spacing:.02em;
-}
-/* grades 1–9 (and half grades): token circle */
-.grade-badge.num{
-  width:34px; height:34px; border-radius:50%;
-  font-size:17px;
-  background: radial-gradient(circle at 30% 28%, #33415C, #202A3E);
-  color: var(--grade-gold);
-  border:1.5px solid var(--grade-gold);
-  box-shadow: inset 0 1px 2px rgba(255,255,255,.14);
-}
-/* the coveted 10: glossy gold medal */
-.grade-badge.ten{
   position:relative;
-  width:38px; height:38px; border-radius:50%;
-  font-size:17px; color:#3a2c05;
-  text-shadow:0 1px 0 rgba(255,255,255,.45);
-  background: radial-gradient(circle at 32% 26%,
-              #FFF6D5 0%, #F4CF63 34%, #E4A72B 66%, #B87715 100%);
-  border:1.5px solid #FFE9A8;
-  box-shadow:
-    0 0 0 2px rgba(233,185,73,.35),
-    0 2px 6px rgba(0,0,0,.45),
-    inset 0 1px 2px rgba(255,255,255,.85),
-    inset 0 -2px 4px rgba(120,80,10,.5);
+  background: linear-gradient(180deg, rgba(75,123,229,.05), rgba(75,123,229,.015));
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display:flex; align-items:center; gap:20px;
 }
-.grade-badge.ten::after{   /* glossy highlight */
-  content:""; position:absolute; left:19%; top:11%; width:50%; height:32%;
-  background: linear-gradient(180deg, rgba(255,255,255,.8), rgba(255,255,255,0));
-  border-radius:50%; pointer-events:none;
+.slab-thumb{
+  width:100px; height:138px; object-fit:contain; flex:0 0 auto;
+  border-radius:8px; border:1px solid var(--line); background:#000;
 }
-/* non-numeric grades (e.g. AUTH): small pill */
+.slab-thumb.placeholder{
+  display:flex; align-items:center; justify-content:center;
+  color: var(--muted-2); background: var(--surface-2);
+}
+.slab-thumb.placeholder svg{ width:30px; height:30px; }
+.slab-main{ flex:1 1 auto; min-width:0; }
+.slab-main .cert{
+  font-family: var(--font-mono); font-size: 17px; font-weight:600;
+  color: #7DA6FF; letter-spacing:.04em;
+  margin-bottom:7px;
+  text-shadow: 0 0 14px rgba(75,123,229,.35);
+}
+.slab-main .name{
+  font-weight: 600; font-size: 17px; line-height:1.3;
+  overflow-wrap:anywhere; margin-bottom:6px;
+}
+.slab-main .name-link{ color:var(--text); text-decoration:none; border-bottom:1px dashed rgba(125,166,255,.55); }
+.slab-main .name-link:hover{ color:#AFC6FF; border-bottom-style:solid; }
+.slab-main .name-link:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; border-radius:2px; }
+.slab-main .meta{ font-size: 13px; color: var(--muted); }
+.slab-main .notes{
+  font-size:13px; color: var(--muted-2); margin-top:6px;
+  overflow-wrap:anywhere; font-style:italic;
+}
+.slab-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.act{
+  display:flex; align-items:center; gap:6px;
+  padding:8px 14px; font-size:13px; font-weight:500; cursor:pointer;
+  border-radius:8px; background: var(--surface-2);
+  border:1px solid var(--line); color: var(--muted);
+}
+.act:hover{ color: var(--text); border-color: var(--muted); }
+.act svg{ width:14px; height:14px; }
+.act.del:hover{ color: var(--accent); border-color: var(--accent-line); }
+
+/* ---- Grade badge (right side of tile) ---- */
+.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; }
+.grade-badge.grader{
+  min-width:48px; height:40px; padding:0 10px; border-radius:7px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-family:var(--font-display); font-size:21px; font-weight:700;
+  line-height:1; letter-spacing:.01em; box-shadow:inset 0 1px 0 rgba(255,255,255,.22);
+}
+.grade-badge.grader.psa{ background:#fff; color:#111; border:3px solid #F02B3D; }
+.grade-badge.grader.bgs{ background:#E9B949; color:#17130A; border:1px solid #F5D36E; }
+.grade-badge.grader.blank{ background:var(--surface-2); color:var(--muted); border:1px dashed var(--line); }
+.grade-badge.grader.psa{ flex-direction:column; gap:1px; }
+.grade-badge.grader.bgs{ flex-direction:column; gap:1px; }
+.grade-badge .psa-mark{ width:27px; height:9px; display:block; object-fit:contain; }
+.grade-badge .bgs-mark{ color:#111; font-family:var(--font-body); font-size:8px; font-weight:800; letter-spacing:.1em; line-height:1; }
+.grade-badge .grade-value{ line-height:.9; }
+/* numeric 1–9 & half grades: token circle */
+.grade-badge.num{
+  width:64px; height:64px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:700; font-size:28px;
+  background: radial-gradient(circle at 32% 28%, #2A3346, #171D28);
+  color: var(--gold);
+  border:1.5px solid var(--gold);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,.14);
+}
+.grade-badge.num.half{ font-size:20px; letter-spacing:-.02em; }
+/* worded grades (AUTH): pill */
 .grade-badge.text{
-  height:30px; padding:0 12px; border-radius:999px;
-  font-family: var(--font-body); font-size:12px; font-weight:600;
+  padding:0 16px; height:38px; border-radius:999px;
+  display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-body); font-size:13px; font-weight:600;
   letter-spacing:.05em; text-transform:uppercase;
   background: var(--surface-2); color: var(--text);
   border:1px solid var(--line);
 }
-/* no grade yet */
+/* empty */
 .grade-badge.empty{
-  width:34px; height:34px; border-radius:50%;
-  background:transparent; color:var(--muted);
-  border:1px dashed var(--line); font-size:16px;
+  width:56px; height:56px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:transparent; color:var(--muted-2);
+  border:1px dashed var(--line); font-size:22px;
 }
-.slab-body{
-  display:flex; justify-content:space-between; align-items:center;
-  gap:12px; padding: 10px 12px;
-}
-.slab-main{ flex:1 1 auto; min-width:0; }
-.slab-body .name{ font-weight: 600; font-size: 15px; overflow-wrap:anywhere; }
-.slab-body .meta{ font-size: 12px; color: var(--muted); margin-top:2px; }
-/* Slab photo now sits on the RIGHT of the info */
-.slab-thumb{
-  width:64px; height:96px; object-fit:contain; flex:0 0 auto;
-  border-radius:8px; border:1px solid var(--line);
-  background:#000;
-}
-/* Edit / Delete actions under the info */
-.slab-actions{ display:flex; gap:8px; margin-top:9px; }
-.act{
-  width:auto; margin:0; padding:6px 12px; font-size:12px;
-  border-radius:8px; background:transparent;
-  border:1px solid var(--line); color:var(--muted);
-}
-.act.edit{ color: var(--grade-gold); border-color: rgba(233,185,73,.55); }
+/* the coveted 10: winged medal (SVG), sized here */
+.grade-medal{ width: clamp(96px, 11vw, 128px); height:auto; display:block; }
 
-/* Inline edit form (shown when a card is being edited) */
-.slab-edit{ padding: 12px 14px; }
+/* ---- Inline edit form ---- */
+.slab.editing{ display:block; background: var(--surface-2); border-color: var(--line); }
 .slab-edit h3{
-  font-family: var(--font-display); font-size:16px; font-weight:600;
+  font-family: var(--font-display); font-size:18px; font-weight:600;
   letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
-  margin-bottom:4px;
+  margin-bottom:16px;
 }
-.slab-edit label{ margin:10px 0 4px; }
-.edit-photo{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.slab-edit .form-grid{ margin-top:0; }
+.edit-photo{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .edit-thumb{
-  width:56px; height:56px; object-fit:cover;
+  width:54px; height:76px; object-fit:contain; background:#000;
   border-radius:8px; border:1px solid var(--line);
 }
-.edit-actions{ display:flex; gap:10px; margin-top:14px; }
-.edit-actions button{ flex:1; margin-top:0; }
+.edit-actions{ display:flex; gap:12px; margin-top:20px; }
+.edit-actions button{
+  flex:1; padding:14px; font-size:15px; font-weight:600; cursor:pointer;
+  border-radius: var(--radius-sm);
+}
+.edit-actions .save{
+  background: linear-gradient(180deg, var(--accent-grad-a), var(--accent-grad-b));
+  color: #fff; border:1px solid rgba(120,160,255,.4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15);
+}
+.edit-actions .save:hover{ filter: brightness(1.12); }
+.edit-actions .cancel{
+  background: transparent; color: var(--muted); border:1px solid var(--line);
+}
+.edit-actions .cancel:hover{ color: var(--text); }
+
 .empty{
-  text-align:center; color: var(--muted);
-  font-size: 14px; padding: 18px 8px;
+  text-align:center; color: var(--muted-2);
+  font-size: 14px; padding: 40px 8px;
 }
 
+/* ---- Export buttons ---- */
+.export-grid{
+  display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:18px;
+}
+.btn-export{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  padding: 15px; font-size:15px; font-weight:500; cursor:pointer;
+  background: var(--surface-2); color: var(--text);
+  border:1px solid var(--line); border-radius: var(--radius-sm);
+  transition: background .15s ease;
+}
+.btn-export:hover{ background: var(--field); }
+.btn-export:disabled{ opacity:.5; cursor:wait; }
+.btn-export svg{ width:17px; height:17px; }
+.btn-export .x{ color: var(--ok); }
+.btn-export .dl{ color: var(--accent); }
+
+/* ============ RESPONSIVE ============ */
+/* The two-column form and horizontal inventory tiles are kept on mobile
+   too (per design). On small screens we tighten spacing and shrink the
+   photo/medal rather than collapsing to a single column. */
+@media (max-width: 720px){
+  body{ padding: 14px; }
+  section{ padding: 16px; }
+  .action-grid{ gap:10px; }
+  .action-btn{ padding:12px 14px; gap:10px; }
+  .action-btn .t1{ font-size:14px; }
+  .action-btn .t2{ font-size:11px; }
+  .action-btn .ico, .action-btn .ico svg{ width:20px; height:20px; }
+  .form-grid{ gap:12px 12px; margin-top:18px; }
+  input[type="text"], input[type="number"], input[type="date"], select, textarea{ padding:11px 12px; font-size:14px; }
+  #cardCost, #cardNotes{ height:45px; min-height:45px; }
+  .input-wrap input[type="text"]{ padding-right: 84px; }
+  .btn-paste{ padding:0 10px; font-size:12px; }
+  .btn-paste.inset{ padding:0 10px; font-size:12px; }
+  .brand h1{ font-size:24px; }
+  .brand .logo{ width:44px; height:44px; font-size:26px; }
+
+  /* keep inventory tile horizontal */
+  .slab{ gap:12px; padding:14px; }
+  .slab-thumb{ width:76px; height:108px; }
+  .slab-main .name{ font-size:15px; }
+  .slab-main .cert{ font-size:15px; }
+  .slab-main .meta{ font-size:12px; }
+  .grade-cell{ width: clamp(64px, 22vw, 96px); }
+  .grade-medal{ width: clamp(64px, 22vw, 96px); }
+  .grade-badge.num{ width:52px; height:52px; font-size:23px; }
+  .act{ padding:7px 11px; font-size:12px; }
+}
+@media (max-width: 560px){
+  #inventoryList.grid-view{ grid-template-columns:1fr 1fr; gap:10px; }
+  #inventoryList.grid-view .slab{ padding:11px; }
+  #inventoryList.grid-view .slab-thumb{ height:190px; }
+  #inventoryList.grid-view .grade-cell{ width:54px; }
+  #inventoryList.grid-view .grade-medal{ width:58px; }
+  #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
+  #inventoryList.grid-view .slab-actions{ flex-direction:column; }
+  .sale-panel{ grid-template-columns:1fr; }
+  .totals-bar{ grid-template-columns:1fr; }
+}
+@media (max-width: 420px){
+  .action-btn .t2{ display:none; }         /* drop subtitles on very small screens */
+  .slab-actions{ gap:8px; }
+}
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Slab Ledger</h1>
+<header class="app-header">
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <h1>Slab Ledger</h1>
+      <div class="subtitle">Track your graded card inventory</div>
+    </div>
+  </div>
   <span class="count-chip" id="countChip">0 cards</span>
 </header>
 
-<!-- ================= CARD COMPONENT 1: ADD NEW ITEM ================= -->
+<!-- ================= ADD NEW ITEM ================= -->
 <section aria-labelledby="addTitle">
-  <h2 id="addTitle">Add new item</h2>
-
-  <!-- PRIMARY PATH: live QR scanner (best for 2020+ slabs) -->
-  <button type="button" class="btn-scan" id="scanBtn">🎯 Scan QR (live camera)</button>
-
-  <!-- The live camera view appears here when scanning is active -->
-  <div id="scannerWrap">
-    <div class="scan-frame">
-      <video id="video" muted playsinline></video>
+  <div class="panel-head">
+    <div class="panel-title" id="addTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+      Add new item
     </div>
+  </div>
+
+  <div class="action-grid">
+    <!-- PRIMARY: live QR scanner -->
+    <button type="button" class="action-btn primary" id="scanBtn">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M20 14v.01M14 20v.01M20 20v.01M17 17v.01"/></svg></span>
+      <span class="txt"><span class="t1">Scan QR (Live Camera)</span><span class="t2">Scan the QR code on the slab label</span></span>
+    </button>
+
+    <!-- MANUAL LOOKUP: opens PSA's own public cert page in a new tab -->
+    <button type="button" class="action-btn" id="lookupBtn">
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+      <span class="txt"><span class="t1">Open cert page</span><span class="t2">Look up name &amp; grade</span></span>
+    </button>
+  </div>
+
+  <!-- Live camera view (hidden until Scan is tapped) -->
+  <div id="scannerWrap">
+    <div class="scan-frame"><video id="video" muted playsinline></video></div>
     <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
   </div>
 
-  <!-- MANUAL LOOKUP HELPER: opens PSA's own public cert page in a new
-       tab so the user can read the name & grade and type them in.
-       The app does not read the page — the person does. -->
-  <button type="button" class="btn-lookup" id="lookupBtn">🔎 Open cert page (look up name &amp; grade)</button>
+  <div class="soft-divider"></div>
 
-  <!-- OPTIONAL: still-photo OCR, mainly for older slabs with no QR -->
-  <input type="file" id="photoInput" accept="image/*" capture="environment">
-  <button type="button" class="btn-photo" id="photoBtn">📷 Read from photo (optional / older slabs)</button>
-
-  <p class="hint">Fastest reliable flow: scan the QR → tap “Open cert page” → on PSA’s page long-press the card name and choose Copy → come back and tap “📋 Paste” next to the field. Repeat for the grade. (Photo/OCR is a rough fallback for slabs with no QR.)</p>
   <p class="status" id="scanStatus" role="status"></p>
 
-  <label for="certNumber">Cert number</label>
-  <input type="text" id="certNumber" inputmode="numeric" autocomplete="off">
+  <!-- Form fields -->
+  <div class="form-grid">
+    <div class="field">
+      <label for="cardCompany">Grading company</label>
+      <select id="cardCompany">
+        <option value="PSA">PSA</option>
+        <option value="BGS">BGS (Beckett)</option>
+      </select>
+    </div>
 
-  <label for="cardName">Card name</label>
-  <div class="field-row">
-    <input type="text" id="cardName" autocomplete="off">
-    <button type="button" class="btn-paste" id="pasteNameBtn" title="Paste copied text into this field">📋 Paste</button>
+    <div class="field">
+      <label for="certNumber">Cert number</label>
+      <input type="text" id="certNumber" autocomplete="off">
+    </div>
+
+    <div class="field full">
+      <label for="cardName">Card name</label>
+      <div class="input-wrap">
+        <input type="text" id="cardName" autocomplete="off">
+        <button type="button" class="btn-paste inset" id="pasteNameBtn" title="Paste copied text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>Paste
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="cardGrade">Grade</label>
+      <select id="cardGrade">
+        <option value="">— select —</option>
+        <option value="10">10</option>
+        <option value="9">9</option>
+        <option value="8">8</option>
+        <option value="7">7</option>
+        <option value="6">6</option>
+        <option value="5">5</option>
+        <option value="4">4</option>
+        <option value="3">3</option>
+        <option value="2">2</option>
+        <option value="1">1</option>
+        <option value="AUTHENTIC">Authentic</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="cardPop">Pop <span style="color:var(--muted-2)">(optional)</span></label>
+      <div class="input-wrap">
+        <input type="text" id="cardPop" inputmode="numeric" autocomplete="off">
+        <button type="button" class="btn-paste inset" id="pastePopBtn" title="Paste copied text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>Paste
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="cardCost">Cost <span style="color:var(--muted-2)">(optional)</span></label>
+      <input type="number" id="cardCost" inputmode="decimal" min="0" step="0.01">
+    </div>
+
+    <div class="field">
+      <label for="cardNotes">Notes <span style="color:var(--muted-2)">(optional)</span></label>
+      <textarea id="cardNotes" rows="1"></textarea>
+    </div>
+
+    <!-- Slab photo capture (full-width, below Grade & Pop) -->
+    <div class="field full">
+      <input type="file" id="slabPhotoInput" accept="image/*">
+      <button type="button" class="action-btn wide" id="slabPhotoBtn">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+        <span class="txt"><span class="t1">Add slab photo (optional)</span><span class="t2">Take or upload a photo of the slab</span></span>
+      </button>
+      <div id="photoPreviewWrap">
+        <img id="photoPreview" alt="Slab photo preview">
+        <button type="button" id="clearPhotoBtn">Remove photo</button>
+      </div>
+    </div>
+
+    <button type="button" class="btn-add" id="addBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add to inventory
+    </button>
+    <button type="button" class="btn-reset-form" id="resetFormBtn">Clear form</button>
   </div>
-
-  <label for="cardGrade">Grade</label>
-  <div class="field-row">
-    <input type="text" id="cardGrade" autocomplete="off">
-    <button type="button" class="btn-paste" id="pasteGradeBtn" title="Paste copied text into this field">📋 Paste</button>
-  </div>
-
-  <label for="cardPop">Pop</label>
-  <div class="field-row">
-    <input type="text" id="cardPop" inputmode="numeric" autocomplete="off">
-    <button type="button" class="btn-paste" id="pastePopBtn" title="Paste copied text into this field">📋 Paste</button>
-  </div>
-
-  <label>Slab photo</label>
-  <input type="file" id="slabPhotoInput" accept="image/*">
-  <button type="button" class="btn-photo" id="slabPhotoBtn">📸 Add slab photo (take or upload)</button>
-  <div id="photoPreviewWrap">
-    <img id="photoPreview" alt="Slab photo preview">
-    <button type="button" id="clearPhotoBtn">Remove photo</button>
-  </div>
-
-  <button type="button" class="btn-add" id="addBtn">＋ Add to inventory</button>
 </section>
 
-<!-- ================= CARD COMPONENT 2: LIVE INVENTORY ================= -->
+<!-- ================= INVENTORY ================= -->
 <section aria-labelledby="invTitle">
-  <h2 id="invTitle">Inventory</h2>
+  <div class="panel-head">
+    <div class="panel-title" id="invTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/><path d="M3 7l2-3h14l2 3M9 12h6"/></svg>
+      Portfolio
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search inventory…" autocomplete="off">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    </div>
+  </div>
+
+  <div class="inventory-tools">
+    <div class="tabs" role="tablist" aria-label="Inventory status">
+      <button type="button" id="activeTab" class="active" role="tab" aria-selected="true">Inventory <span id="activeCount">0</span></button>
+      <button type="button" id="soldTab" role="tab" aria-selected="false">Sold <span id="soldCount">0</span></button>
+    </div>
+    <div class="view-toggle" aria-label="Inventory view">
+      <button type="button" id="listViewBtn" class="active">List</button>
+      <button type="button" id="gridViewBtn">Grid</button>
+    </div>
+  </div>
+
+  <div class="totals-bar" id="totalsBar">
+    <div class="total-card"><span id="totalOneLabel">Inventory cost</span><strong id="totalOne">$0.00</strong></div>
+    <div class="total-card"><span id="totalTwoLabel">Items</span><strong id="totalTwo">0</strong></div>
+    <div class="total-card"><span id="totalThreeLabel">Potential basis</span><strong id="totalThree">$0.00</strong></div>
+  </div>
+
   <ul id="inventoryList"></ul>
 
-  <button type="button" class="btn-export" id="exportBtn">⬇ Export data (CSV)</button>
-  <button type="button" class="btn-export" id="exportXlsxBtn">🖼 Export with photos (Excel)</button>
-  <button type="button" class="btn-clear" id="clearBtn">Clear all data</button>
+  <div class="export-grid">
+    <button type="button" class="btn-export" id="exportBtn">
+      <svg class="dl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
+      Export data (CSV)
+    </button>
+    <button type="button" class="btn-export" id="exportXlsxBtn">
+      <svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 9 6 6M15 9l-6 6"/></svg>
+      Export with photos (Excel)
+    </button>
+  </div>
 </section>
 
 <script>
@@ -398,10 +734,8 @@ button:disabled{ opacity:.5; cursor:wait; }
      B. Rendering the inventory list
      C. Adding & deleting cards
      D. LIVE QR scanner (ZXing, camera video feed)
-     E. Still-photo OCR (Tesseract) for grade/name & older slabs
-     F. Label-text parsing
-     G. CSV & Excel(+photos) export
-     H. Clear data
+     E. CSV & Excel(+photos) export
+     F. Clear data
    ===================================================================== */
 
 // ---- A. STORAGE: INDEXEDDB -------------------------------------------------
@@ -499,85 +833,408 @@ const listEl     = $("inventoryList");
 const countChip  = $("countChip");
 const scanStatus = $("scanStatus");
 
+// ---- GRADING COMPANIES ----------------------------------------------------
+// Each company defines its own grade options, the page to look a cert up on,
+// and how to sanity-check a cert number. Adding another grader later (CGC,
+// SGC…) is just another entry here.
+const COMPANIES = {
+  PSA: {
+    label: "PSA",
+    // whole grades 1–10 + Authentic
+    grades: ["10","9","8","7","6","5","4","3","2","1","AUTHENTIC"],
+    // PSA supports a direct, cert-in-URL page
+    certUrl: (cert) => "https://www.psacard.com/cert/" + cert,
+    // PSA certs are 8–10 digits
+    certOk: (cert) => /^\d{8,10}$/.test(cert),
+    certHint: "8–10 digit cert number",
+  },
+  BGS: {
+    label: "BGS",
+    // BGS uses half grades and a Pristine/Black Label 10
+    grades: ["BL10","P10","10","9.5","9","8.5","8","7.5","7","6.5","6",
+             "5.5","5","4","3","2","1","AUTHENTIC"],
+    // Beckett has no cert-in-URL deep link; open the lookup page and paste
+    certUrl: () => "https://www.beckett.com/grading/card-lookup",
+    // BGS certs are alphanumeric, ~6–15 chars
+    certOk: (cert) => /^[A-Za-z0-9-]{6,15}$/.test(cert),
+    certHint: "cert number from the Beckett label",
+  },
+};
+// Friendly text for a grade code (used in dropdowns).
+function gradeLabel(company, code) {
+  if (code === "BL10") return "10 — Black Label (Pristine)";
+  if (code === "P10")  return "10 — Pristine";
+  if (code === "AUTHENTIC") return "Authentic";
+  return code;
+}
+// "COMPANY grade" text for the inventory meta line (e.g. "BGS 10 Black Label").
+function gradeDisplay(company, code) {
+  const label = (COMPANIES[company] || COMPANIES.PSA).label;
+  if (code === "BL10") return label + " 10 Black Label";
+  if (code === "P10")  return label + " 10 Pristine";
+  if (code === "AUTHENTIC") return label + " Authentic";
+  return label + " " + code;
+}
+// The company currently chosen in the add form.
+function currentCompany() {
+  const sel = $("cardCompany");
+  return (sel && COMPANIES[sel.value]) ? sel.value : "PSA";
+}
+// Rebuild a <select> with a company's grades, keeping the current value if
+// it still exists for the new company (otherwise reset to blank).
+function populateGradeSelect(selectEl, company, keepValue) {
+  const co = COMPANIES[company] || COMPANIES.PSA;
+  const prev = keepValue != null ? keepValue : selectEl.value;
+  selectEl.textContent = "";
+  const blank = document.createElement("option");
+  blank.value = ""; blank.textContent = "— select —";
+  selectEl.appendChild(blank);
+  co.grades.forEach((code) => {
+    const o = document.createElement("option");
+    o.value = code; o.textContent = gradeLabel(company, code);
+    selectEl.appendChild(o);
+  });
+  selectEl.value = co.grades.includes(prev) ? prev : "";
+}
+
 // ---- B. RENDERING ------------------------------------------------------
-// Pull the numeric grade out of text like "GEM MT 10" -> "10", "NM-MT 8" -> "8".
+// Pull the numeric grade out of text like "GEM MT 10" -> "10", "NM-MT 8" -> "8",
+// and BGS codes like "BL10"/"P10" -> "10".
 function gradeNumber(text) {
-  const m = String(text || "").match(/\b(10|[1-9](?:\.5)?)\b/);
+  const t = String(text || "");
+  if (/^(BL10|P10)$/.test(t)) return "10";
+  const m = t.match(/\b(10|[1-9](?:\.5)?)\b/);
   return m ? m[1] : "";
 }
 
-// Build the grade badge element: shiny medal for a 10, token circle for
-// 1–9, a small pill for word-only grades (AUTH), or a dashed blank.
-function buildGradeBadge(gradeText) {
-  const badge = document.createElement("span");
-  badge.className = "grade-badge";
+// Turn a formal cert-page title into broader eBay keywords. PSA titles often
+// repeat the set name and include label words that ordinary sellers omit.
+function ebayCardKeywords(cardName) {
+  const generic = new Set(["POKEMON", "CARD", "HOLO", "HOLOGRAPHIC", "FOIL"]);
+  const seen = new Set();
+  const words = String(cardName || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => {
+      if (!word || generic.has(word) || /^20\d{2}$/.test(word) || seen.has(word)) return false;
+      seen.add(word);
+      return true;
+    });
+  return words.length >= 2 ? words.join(" ") : String(cardName || "").trim();
+}
+
+function ebaySearchTerms(card) {
+  const company = card.company && COMPANIES[card.company] ? card.company : "PSA";
+  const numericGrade = gradeNumber(card.grade);
+  let exactGrade = numericGrade ? '"' + company + ' ' + numericGrade + '"' : company;
+  if (card.grade === "BL10") exactGrade += ' "Black Label"';
+  if (card.grade === "P10") exactGrade += " Pristine";
+  return [ebayCardKeywords(card.name), exactGrade, "-raw", "-ungraded"].filter(Boolean).join(" ");
+}
+
+// SVG for a small inline icon (edit pencil / trash / image placeholder).
+function icon(name) {
+  const paths = {
+    edit:  '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 21"/>'
+  };
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+         'stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</svg>';
+}
+
+// The coveted PSA 10: a glossy domed gold medal with feathered wings
+// sweeping out to the sides and a ribbon banner across the bottom.
+// Rendered inline as SVG so it stays crisp at any size, no image file.
+function grade10MedalSVG() {
+  return `
+<svg class="grade-medal" viewBox="0 0 140 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grade 10">
+  <defs>
+    <radialGradient id="coinDome" cx="42%" cy="30%" r="80%">
+      <stop offset="0%"  stop-color="#FFF6D0"/>
+      <stop offset="30%" stop-color="#F7D25E"/>
+      <stop offset="66%" stop-color="#EAA932"/>
+      <stop offset="100%" stop-color="#B9791A"/>
+    </radialGradient>
+    <linearGradient id="coinRim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FCE7A0"/>
+      <stop offset="50%" stop-color="#E0A62C"/>
+      <stop offset="100%" stop-color="#94600F"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#F9DD79"/>
+      <stop offset="55%" stop-color="#E7AE35"/>
+      <stop offset="100%" stop-color="#A66E12"/>
+    </linearGradient>
+    <linearGradient id="bannerG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#F9DD79"/>
+      <stop offset="100%" stop-color="#D79A22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- wings / laurel sweep (both sides) -->
+  <g stroke="#8A5B10" stroke-width="0.4">
+    ${wing(1)}
+    ${wing(-1)}
+  </g>
+
+  <!-- ribbon banner across the bottom -->
+  <g stroke="#8A5B10" stroke-width="0.6">
+    <!-- folded end tails -->
+    <path d="M34 78 L24 92 L40 90 L44 80 Z" fill="#B77E1A"/>
+    <path d="M106 78 L116 92 L100 90 L96 80 Z" fill="#B77E1A"/>
+    <!-- main banner body (gentle downward curve) -->
+    <path d="M30 74 Q70 66 110 74 L110 88 Q70 100 30 88 Z" fill="url(#bannerG)"/>
+    <!-- inner shade line -->
+    <path d="M38 79 Q70 73 102 79" fill="none" stroke="#C68F1E" stroke-width="1.4"/>
+  </g>
+
+  <!-- domed coin -->
+  <circle cx="70" cy="48" r="34" fill="url(#coinRim)"/>
+  <circle cx="70" cy="48" r="28.5" fill="url(#coinDome)" stroke="#B5801C" stroke-width="1"/>
+  <!-- inner rim groove -->
+  <circle cx="70" cy="48" r="28.5" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+  <circle cx="70" cy="48" r="22" fill="none" stroke="rgba(120,80,10,.4)" stroke-width="1"/>
+  <!-- number -->
+  <text x="70" y="49" text-anchor="middle" dominant-baseline="central"
+        font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="30"
+        fill="#6A4A0A">10</text>
+  <!-- glossy top highlight -->
+  <ellipse cx="62" cy="35" rx="16" ry="8" fill="rgba(255,255,255,.5)"/>
+</svg>`;
+}
+// A feathered wing sweeping out from behind the coin. s = +1 right, -1 left.
+// Built from a stack of curved feather blades, longest on top, fanning down.
+function wing(s) {
+  // Each feather: [baseX offset from coin edge, baseY, tipX offset, tipY, width]
+  // Authored for the right side; mirrored for the left by multiplying x-offsets by s.
+  const feathers = [
+    [2, 34, 40, 30, 5],   // top, longest, angled up
+    [3, 39, 41, 39, 5.5],
+    [3, 44, 39, 47, 5.5],
+    [4, 49, 34, 54, 5],
+    [5, 54, 27, 60, 4.5], // bottom, shortest, tucks toward banner
+  ];
+  const cx = 70, edge = 26;   // coin center & where feathers attach
+  let out = "";
+  for (const [bxo, by, txo, ty, w] of feathers) {
+    const bx = cx + s * (edge + bxo);
+    const tx = cx + s * txo;
+    // control point bulges the feather's leading edge outward
+    const mx = (bx + tx) / 2 + s * 2;
+    const my = (by + ty) / 2 - w;
+    out += `<path d="M${bx.toFixed(1)} ${by} Q${mx.toFixed(1)} ${my.toFixed(1)} ${tx.toFixed(1)} ${ty}
+      Q${((bx+tx)/2).toFixed(1)} ${((by+ty)/2+w*0.6).toFixed(1)} ${bx.toFixed(1)} ${by} Z" fill="url(#gold)"/>`;
+  }
+  return out;
+}
+
+// Build the grade badge: ornate medal for a 10, token circle for 1–9,
+// a pill for word grades (AUTH), or a dashed blank.
+function buildGradeBadge(gradeText, company) {
   const txt = String(gradeText || "").trim();
   const num = gradeNumber(txt);
-
-  if (num === "10")      { badge.classList.add("ten");  badge.textContent = "10"; }
-  else if (num)          { badge.classList.add("num");  badge.textContent = num; }
-  else if (txt)          { badge.classList.add("text"); badge.textContent = txt.slice(0, 8); }
-  else                   { badge.classList.add("empty"); badge.textContent = "—"; }
-
-  if (txt) badge.title = txt;   // full grade on long-press/hover
+  const badge = document.createElement("span");
+  const grader = company === "BGS" ? "bgs" : "psa";
+  badge.className = "grade-badge grader " + (txt ? grader : "blank");
+  const value = num || (txt === "AUTHENTIC" ? "AUTH" : txt.slice(0, 5)) || "—";
+  if (txt && grader === "psa") {
+    const mark = document.createElement("img");
+    mark.className = "psa-mark";
+    mark.src = "data:image/png;base64,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";
+    mark.alt = "PSA";
+    const grade = document.createElement("span"); grade.className = "grade-value"; grade.textContent = value;
+    badge.append(mark, grade);
+  } else if (txt && grader === "bgs") {
+    const mark = document.createElement("span");
+    mark.className = "bgs-mark";
+    mark.textContent = "BGS";
+    const grade = document.createElement("span"); grade.className = "grade-value"; grade.textContent = value;
+    badge.append(mark, grade);
+  } else {
+    badge.textContent = value;
+  }
+  if (txt) badge.title = txt;
   return badge;
+}
+
+// Inventory state: active/sold tab, search, and list/grid preference.
+let searchQuery = "";
+let currentTab = "active";
+let viewMode = localStorage.getItem("slabLedgerView") === "grid" ? "grid" : "list";
+const money = (value) => new Intl.NumberFormat("en-US", { style:"currency", currency:"USD" }).format(Number(value) || 0);
+const numberValue = (value) => Math.max(0, Number.parseFloat(value) || 0);
+
+function visibleInventory() {
+  const q = searchQuery.trim().toLowerCase();
+  return inventory.filter((c) => {
+    const inTab = currentTab === "sold" ? Boolean(c.sold) : !c.sold;
+    if (!inTab) return false;
+    if (!q) return true;
+    return [c.company, c.cert, c.name, c.grade, c.pop, c.notes, c.saleNotes, c.added, c.cost, c.soldPrice, c.soldDate]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  });
+}
+
+async function saveCardUpdate(updated) {
+  await dbPut(updated);
+  const idx = inventory.findIndex((c) => c.id === updated.id);
+  if (idx >= 0) inventory[idx] = updated;
+}
+
+function updateSummary() {
+  const active = inventory.filter((c) => !c.sold);
+  const sold = inventory.filter((c) => c.sold);
+  $("activeCount").textContent = active.length;
+  $("soldCount").textContent = sold.length;
+  if (currentTab === "sold") {
+    const revenue = sold.reduce((sum, c) => sum + numberValue(c.soldPrice), 0);
+    const cogs = sold.reduce((sum, c) => sum + numberValue(c.cost), 0);
+    $("totalOneLabel").textContent = "Sales revenue"; $("totalOne").textContent = money(revenue);
+    $("totalTwoLabel").textContent = "Cost of goods sold"; $("totalTwo").textContent = money(cogs);
+    $("totalThreeLabel").textContent = "Gross profit"; $("totalThree").textContent = money(revenue - cogs);
+  } else {
+    const basis = active.reduce((sum, c) => sum + numberValue(c.cost), 0);
+    $("totalOneLabel").textContent = "Inventory cost"; $("totalOne").textContent = money(basis);
+    $("totalTwoLabel").textContent = "Items"; $("totalTwo").textContent = active.length;
+    $("totalThreeLabel").textContent = "Potential basis"; $("totalThree").textContent = money(basis);
+  }
 }
 
 // User data is always inserted with textContent (never innerHTML).
 function render() {
   listEl.innerHTML = "";
-  countChip.textContent = inventory.length + (inventory.length === 1 ? " card" : " cards");
+  const total = inventory.length;
+  countChip.textContent = total + (total === 1 ? " card" : " cards");
+  listEl.classList.toggle("grid-view", viewMode === "grid");
+  $("listViewBtn").classList.toggle("active", viewMode === "list");
+  $("gridViewBtn").classList.toggle("active", viewMode === "grid");
+  updateSummary();
 
-  if (inventory.length === 0) {
+  if (total === 0) {
     const li = document.createElement("li");
     li.className = "empty";
-    li.textContent = "No cards logged yet. Scan a slab above to get started.";
+    li.textContent = "No cards logged yet. Add a slab above to get started.";
     listEl.appendChild(li);
     return;
   }
 
-  inventory.forEach((card) => {
+  const shown = visibleInventory();
+  if (shown.length === 0) {
     const li = document.createElement("li");
-    li.className = "slab";
+    li.className = "empty";
+    li.textContent = searchQuery.trim()
+      ? "No cards match “" + searchQuery.trim() + "”."
+      : (currentTab === "sold" ? "No sold cards yet." : "No cards currently in inventory.");
+    listEl.appendChild(li);
+    return;
+  }
+
+  shown.forEach((card) => {
+    const li = document.createElement("li");
 
     // If this card is being edited, show the inline edit form instead.
     if (card.id === editingId) {
+      li.className = "slab editing";
       li.appendChild(buildEditForm(card));
       listEl.appendChild(li);
       return;
     }
+    li.className = "slab";
 
-    const strip = document.createElement("div");
-    strip.className = "slab-strip";
-    const cert = document.createElement("span");
-    cert.className = "cert"; cert.textContent = "#" + card.cert;
-    strip.append(cert, buildGradeBadge(card.grade));
+    // Photo sits on the left in list view; object-fit:contain shows the full slab.
+    const thumb = card.photo ? document.createElement("img") : document.createElement("div");
+    thumb.className = "slab-thumb" + (card.photo ? "" : " placeholder");
+    if (card.photo) { thumb.src = card.photo; thumb.alt = "Slab photo"; }
+    else thumb.innerHTML = icon("image");
+    li.appendChild(thumb);
 
-    const body = document.createElement("div");
-    body.className = "slab-body";
-
-    // Left side: name, meta, and the Edit / Delete actions
+    // ---- Card information ----
     const main = document.createElement("div");
     main.className = "slab-main";
-    const name = document.createElement("div");
-    name.className = "name"; name.textContent = card.name || "(unnamed card)";
+
+    const cert = document.createElement("div");
+    cert.className = "cert"; cert.textContent = "#" + card.cert;
+
+    const name = document.createElement(card.name ? "a" : "div");
+    name.className = "name" + (card.name ? " name-link" : "");
+    name.textContent = card.name || "(unnamed card)";
+    if (card.name) {
+      const searchTerms = ebaySearchTerms(card);
+      const params = new URLSearchParams({ _nkw: searchTerms, LH_Sold: "1", LH_Complete: "1", _sop: "13" });
+      name.href = "https://www.ebay.com/sch/i.html?" + params.toString();
+      name.target = "_blank";
+      name.rel = "noopener noreferrer";
+      name.title = "View recent sold listings on eBay";
+    }
+
     const meta = document.createElement("div");
     meta.className = "meta";
-    const gNum  = gradeNumber(card.grade);
-    const gQual = (card.grade || "").replace(/\b(10|[1-9](?:\.5)?)\b/, "").replace(/\s+/g, " ").trim();
+    const co = card.company && COMPANIES[card.company] ? card.company : "PSA";
     const metaParts = [];
-    if (gNum && gQual) metaParts.push(gQual);
     if (card.pop) metaParts.push("Pop " + card.pop);
-    metaParts.push(card.added);
-    meta.textContent = metaParts.join(" · ");
+    if (card.grade) metaParts.push(gradeDisplay(co, card.grade));
+    if (card.added) metaParts.push(card.added);
+    if (numberValue(card.cost)) metaParts.push("Cost " + money(card.cost));
+    if (card.sold) metaParts.push("Sold " + money(card.soldPrice) + (card.soldDate ? " on " + card.soldDate : ""));
+    meta.textContent = metaParts.join("  ·  ");
+
+    main.append(cert, name, meta);
+
+    if (card.notes) {
+      const notes = document.createElement("div");
+      notes.className = "notes"; notes.textContent = card.notes;
+      main.appendChild(notes);
+    }
+    if (card.sold && card.saleNotes) {
+      const saleNotes = document.createElement("div");
+      saleNotes.className = "notes"; saleNotes.textContent = "Sale note: " + card.saleNotes;
+      main.appendChild(saleNotes);
+    }
 
     const actions = document.createElement("div");
     actions.className = "slab-actions";
     const edit = document.createElement("button");
-    edit.className = "act edit"; edit.type = "button"; edit.textContent = "Edit";
+    edit.className = "act"; edit.type = "button";
+    edit.innerHTML = icon("edit") + "Edit";
     edit.addEventListener("click", () => { editingId = card.id; render(); });
+    const research = document.createElement("button");
+    research.className = "act"; research.type = "button";
+    research.textContent = "Research";
+    research.title = "Copy search terms and open eBay Product Research";
+    research.addEventListener("click", () => {
+      const terms = ebaySearchTerms(card);
+      window.open("https://www.ebay.com/sh/research", "_blank", "noopener");
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(terms).then(() => {
+          research.textContent = "Copied — paste in eBay";
+          setTimeout(() => { research.textContent = "Research"; }, 2200);
+        }).catch(() => prompt("Copy these terms, then paste them into Product Research:", terms));
+      } else {
+        prompt("Copy these terms, then paste them into Product Research:", terms);
+      }
+    });
+    const sale = document.createElement("button");
+    sale.className = "act sell"; sale.type = "button";
+    sale.textContent = card.sold ? "Return to inventory" : "Mark sold";
+    sale.addEventListener("click", async () => {
+      if (card.sold) {
+        if (!confirm("Return this card to active inventory?")) return;
+        try { await saveCardUpdate({ ...card, sold:false, soldPrice:"", soldDate:"", saleNotes:"" }); render(); }
+        catch (e) { alert("Couldn't update this card."); }
+      } else {
+        editingId = null;
+        document.querySelectorAll(".sale-panel").forEach((el) => el.remove());
+        li.classList.add("sale-open");
+        const panel = buildSalePanel(card);
+        li.appendChild(panel);
+      }
+    });
     const del = document.createElement("button");
-    del.className = "act"; del.type = "button"; del.textContent = "Delete";
+    del.className = "act del"; del.type = "button";
+    del.innerHTML = icon("trash") + "Delete";
     del.addEventListener("click", async () => {
       if (confirm("Delete this card from your inventory?")) {
         try { await dbDelete(card.id); } catch (e) {}
@@ -585,22 +1242,46 @@ function render() {
         render();
       }
     });
-    actions.append(edit, del);
-    main.append(name, meta, actions);
-    body.appendChild(main);
+    actions.append(edit);
+    if (card.name) actions.append(research);
+    actions.append(sale, del);
+    main.appendChild(actions);
+    li.appendChild(main);
 
-    // Right side: the slab photo (if any)
-    if (card.photo) {
-      const thumb = document.createElement("img");
-      thumb.className = "slab-thumb";
-      thumb.src = card.photo;
-      thumb.alt = "Slab photo";
-      body.appendChild(thumb);
-    }
+    // ---- Right: grade badge / medal ----
+    const gradeCell = document.createElement("div");
+    gradeCell.className = "grade-cell";
+    gradeCell.appendChild(buildGradeBadge(card.grade, co));
+    li.appendChild(gradeCell);
 
-    li.append(strip, body);
     listEl.appendChild(li);
   });
+}
+
+function buildSalePanel(card) {
+  const panel = document.createElement("div"); panel.className = "sale-panel";
+  const priceCell = document.createElement("div"); priceCell.className = "field";
+  const priceLabel = document.createElement("label"); priceLabel.textContent = "Sold price";
+  const price = document.createElement("input"); price.type = "number"; price.min = "0"; price.step = "0.01"; price.inputMode = "decimal"; price.placeholder = "0.00";
+  priceCell.append(priceLabel, price);
+  const dateCell = document.createElement("div"); dateCell.className = "field";
+  const dateLabel = document.createElement("label"); dateLabel.textContent = "Sold date";
+  const date = document.createElement("input"); date.type = "date"; date.value = new Date().toISOString().slice(0,10);
+  dateCell.append(dateLabel, date);
+  const noteCell = document.createElement("div"); noteCell.className = "field sale-note";
+  const noteLabel = document.createElement("label"); noteLabel.textContent = "Sale note (optional)";
+  const note = document.createElement("textarea"); note.rows = 2;
+  noteCell.append(noteLabel, note);
+  const save = document.createElement("button"); save.type = "button"; save.className = "act sell"; save.textContent = "Save sale";
+  save.addEventListener("click", async () => {
+    if (price.value === "" || numberValue(price.value) < 0) { alert("Enter the sold price."); return; }
+    try { await saveCardUpdate({ ...card, sold:true, soldPrice:numberValue(price.value), soldDate:date.value, saleNotes:note.value.trim() }); render(); }
+    catch (e) { alert("Couldn't save the sale."); }
+  });
+  const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "act"; cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => { const tile = panel.parentElement; panel.remove(); tile?.classList.remove("sale-open"); });
+  const actions = document.createElement("div"); actions.className = "sale-actions"; actions.append(cancel, save);
+  panel.append(priceCell, dateCell, noteCell, actions); setTimeout(() => price.focus(), 0); return panel;
 }
 
 // Build the inline edit form for a card. Lets you fix any field or
@@ -615,27 +1296,92 @@ function buildEditForm(card) {
   heading.textContent = "Edit card";
   wrap.appendChild(heading);
 
-  // Helper: a labelled text input pre-filled with the current value
-  function field(labelText, value, numeric) {
+  const grid = document.createElement("div");
+  grid.className = "form-grid";
+  wrap.appendChild(grid);
+
+  // Helper: a labelled text input in its own .field cell
+  function field(labelText, value, numeric, full) {
+    const cell = document.createElement("div");
+    cell.className = "field" + (full ? " full" : "");
     const l = document.createElement("label");
     l.textContent = labelText;
     const i = document.createElement("input");
     i.type = "text"; i.value = value || "";
     if (numeric) i.inputMode = "numeric";
-    wrap.append(l, i);
+    cell.append(l, i);
+    grid.appendChild(cell);
     return i;
   }
 
+  function noteField(value, labelText) {
+    const cell = document.createElement("div"); cell.className = "field full";
+    const l = document.createElement("label"); l.textContent = labelText || "Quick note";
+    const t = document.createElement("textarea"); t.rows = 2; t.value = value || "";
+    cell.append(l, t); grid.appendChild(cell); return t;
+  }
+
+  // Grading company dropdown (drives the grade options below).
+  function companyField(value) {
+    const cell = document.createElement("div");
+    cell.className = "field";
+    const l = document.createElement("label");
+    l.textContent = "Grading company";
+    const s = document.createElement("select");
+    Object.keys(COMPANIES).forEach((key) => {
+      const o = document.createElement("option");
+      o.value = key;
+      o.textContent = key === "BGS" ? "BGS (Beckett)" : COMPANIES[key].label;
+      s.appendChild(o);
+    });
+    s.value = COMPANIES[value] ? value : "PSA";
+    cell.append(l, s);
+    grid.appendChild(cell);
+    return s;
+  }
+
+  // Grade dropdown, populated from the selected company's grade set.
+  function gradeField(company, value) {
+    const cell = document.createElement("div");
+    cell.className = "field";
+    const l = document.createElement("label");
+    l.textContent = "Grade";
+    const s = document.createElement("select");
+    populateGradeSelect(s, company, value);
+    cell.append(l, s);
+    grid.appendChild(cell);
+    return s;
+  }
+
+  const companyI = companyField(card.company);
   const certI  = field("Cert number", card.cert, true);
   const nameI  = field("Card name", card.name, false);
-  const gradeI = field("Grade", card.grade, false);
+  const gradeI = gradeField(companyI.value, card.grade);
   const popI   = field("Pop", card.pop, true);
+  const costI  = field("Cost", card.cost, true);
+  const notesI = noteField(card.notes, "Quick note");
+  let soldPriceI = null, soldDateI = null, saleNotesI = null;
+  if (card.sold) {
+    soldPriceI = field("Sold price", card.soldPrice, true);
+    soldDateI = field("Sold date", card.soldDate, false);
+    soldDateI.type = "date";
+    saleNotesI = noteField(card.saleNotes, "Sale note");
+  }
 
-  // Photo controls (updated in place so typed edits aren't lost)
+  // Changing company repopulates the grade options (keeping the value if valid).
+  companyI.addEventListener("change", () => {
+    populateGradeSelect(gradeI, companyI.value, gradeI.value);
+  });
+
+  // Photo controls (full-width cell, updated in place so typed edits persist)
+  const photoCell = document.createElement("div");
+  photoCell.className = "field full";
   const photoLabel = document.createElement("label");
   photoLabel.textContent = "Slab photo";
   const photoArea = document.createElement("div");
   photoArea.className = "edit-photo";
+  photoCell.append(photoLabel, photoArea);
+  grid.appendChild(photoCell);
 
   const fileInput = document.createElement("input");
   fileInput.type = "file"; fileInput.accept = "image/*";
@@ -669,19 +1415,21 @@ function buildEditForm(card) {
     }
   }
   refreshPhoto();
-  wrap.append(photoLabel, photoArea);
 
   // Save / Cancel
   const row = document.createElement("div");
   row.className = "edit-actions";
   const save = document.createElement("button");
-  save.type = "button"; save.className = "btn-add"; save.textContent = "Save changes";
+  save.type = "button"; save.className = "save"; save.textContent = "Save changes";
   save.addEventListener("click", async () => {
     const cert = certI.value.trim();
     if (!cert) { alert("Cert number can't be empty."); return; }
-    const updated = { ...card, cert,
+    const updated = { ...card, company: companyI.value, cert,
       name: nameI.value.trim(), grade: gradeI.value.trim(),
-      pop: popI.value.trim(), photo: editPhoto };
+      pop: popI.value.trim(), cost: numberValue(costI.value), notes: notesI.value.trim(),
+      soldPrice: soldPriceI ? numberValue(soldPriceI.value) : card.soldPrice,
+      soldDate: soldDateI ? soldDateI.value : card.soldDate, photo: editPhoto };
+    if (saleNotesI) updated.saleNotes = saleNotesI.value.trim();
     try { await dbPut(updated); }
     catch (e) { alert("Couldn't save changes — device storage may be full."); return; }
     const idx = inventory.findIndex((c) => c.id === card.id);
@@ -690,7 +1438,7 @@ function buildEditForm(card) {
     render();
   });
   const cancel = document.createElement("button");
-  cancel.type = "button"; cancel.className = "btn-cancel"; cancel.textContent = "Cancel";
+  cancel.type = "button"; cancel.className = "cancel"; cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => { editingId = null; render(); });
   row.append(save, cancel);
   wrap.appendChild(row);
@@ -702,14 +1450,23 @@ function buildEditForm(card) {
 let pendingPhoto = "";   // downscaled slab photo (data URL) for the next card
 
 $("addBtn").addEventListener("click", async () => {
+  const company = currentCompany();
   const cert  = $("certNumber").value.trim();
   const name  = $("cardName").value.trim();
   const grade = $("cardGrade").value.trim();
   const pop   = $("cardPop").value.trim();
+  const cost  = numberValue($("cardCost").value);
+  const notes = $("cardNotes").value.trim();
 
   if (!cert) { alert("Please enter (or scan) a cert number first."); return; }
+  if (!COMPANIES[company].certOk(cert)) {
+    const ok = confirm("That doesn't look like a typical " + company + " " +
+      COMPANIES[company].certHint + ".\n\nAdd it anyway?");
+    if (!ok) return;
+  }
 
-  const card = { cert, name, grade, pop, photo: pendingPhoto,
+  const card = { company, cert, name, grade, pop, cost, notes, sold:false,
+                 soldPrice:"", soldDate:"", saleNotes:"", photo: pendingPhoto,
                  added: new Date().toLocaleDateString() };
 
   try {
@@ -719,17 +1476,42 @@ $("addBtn").addEventListener("click", async () => {
   } catch (e) {
     // Very unlikely with IndexedDB's large quota, but handle it honestly.
     alert("Couldn't save this card — device storage may be full.\n\n" +
-          "Export your data, then use “Clear all data,” or add without a photo.");
+          "Export your data, then delete some cards, or add without a photo.");
     return;
   }
   render();
 
-  // Reset the form for the next card
+  // Reset the form for the next card (keep the company selection)
   $("certNumber").value = ""; $("cardName").value = "";
-  $("cardGrade").value = "";  $("cardPop").value = "";
+  $("cardPop").value = ""; $("cardCost").value = ""; $("cardNotes").value = "";
+  populateGradeSelect($("cardGrade"), currentCompany(), "10");
   clearPendingPhoto();
   scanStatus.textContent = ""; scanStatus.className = "status";
 });
+
+// Rebuild the grade dropdown whenever the grading company changes.
+$("cardCompany").addEventListener("change", () => {
+  populateGradeSelect($("cardGrade"), currentCompany(), "10");
+});
+// Set the initial grade options to match the default company on load.
+populateGradeSelect($("cardGrade"), currentCompany(), "10");
+
+function resetAddForm() {
+  stopLiveScan();
+  $("cardCompany").value = "PSA";
+  $("certNumber").value = "";
+  $("cardName").value = "";
+  $("cardPop").value = "";
+  $("cardCost").value = "";
+  $("cardNotes").value = "";
+  populateGradeSelect($("cardGrade"), "PSA", "10");
+  clearPendingPhoto();
+  lastCertUrl = "";
+  lastCertNumber = "";
+  scanStatus.textContent = "";
+  scanStatus.className = "status";
+}
+$("resetFormBtn").addEventListener("click", resetAddForm);
 
 // ---- D. LIVE QR SCANNER (primary path) ----------------------------------
 // A live camera feed continuously scans for a QR/barcode. This is far
@@ -783,7 +1565,7 @@ async function startLiveScan() {
     // Usually: camera permission denied, or no camera available.
     scanStatus.className = "status err";
     scanStatus.textContent =
-      "Couldn't open the camera. Allow camera access in your browser, or use “Read label from photo” instead.";
+      "Couldn't open the camera. Allow camera access in your browser, or type the cert number below.";
     stopLiveScan();
   }
 }
@@ -801,24 +1583,29 @@ $("cancelScanBtn").addEventListener("click", () => {
 });
 
 // ---- Open cert page (manual lookup helper) -------------------------------
-// Opens PSA's own public cert page in a NEW TAB so YOU can read the card
-// name and grade and type them in. The app does not fetch or read that
-// page — this is just a normal browser visit to a public page, the same
-// as if you typed the address yourself.
+// Opens the grading company's own public cert page in a NEW TAB so YOU can
+// read the card name and grade and type them in. The app does not fetch or
+// read that page — it's a normal browser visit to a public page, the same as
+// if you typed the address yourself. PSA supports a direct cert-in-URL link;
+// Beckett is a search form, so we open its lookup page for you to paste into.
 $("lookupBtn").addEventListener("click", () => {
+  const company = currentCompany();
+  const co = COMPANIES[company];
   const cert = $("certNumber").value.trim();
-  if (!/^\d{8,10}$/.test(cert)) {
-    alert("Scan a QR or type an 8–10 digit cert number first, then tap this to open its page.");
+  if (!cert) {
+    alert("Scan a QR or type a cert number first, then tap this to open its page.");
     return;
   }
-  // Prefer the exact URL the QR gave us; otherwise build the standard one.
-  const url = (lastCertUrl && lastCertNumber === cert)
+  // Prefer the exact URL a PSA QR gave us; otherwise build per company.
+  const url = (company === "PSA" && lastCertUrl && lastCertNumber === cert)
     ? lastCertUrl
-    : "https://www.psacard.com/cert/" + cert;
+    : co.certUrl(cert);
 
   window.open(url, "_blank", "noopener");
   scanStatus.className = "status";
-  scanStatus.textContent = "Opened PSA's cert page in a new tab — read the name & grade there, then type them below.";
+  scanStatus.textContent = (company === "BGS")
+    ? "Opened Beckett's cert lookup — paste your cert number there, then read the name & grade and type them below."
+    : "Opened PSA's cert page in a new tab — read the name & grade there, then type them below.";
 });
 
 // ---- Paste-into-field buttons --------------------------------------------
@@ -838,7 +1625,7 @@ async function pasteInto(fieldId) {
       scanStatus.textContent = "Pasted. Check it looks right, then add the card.";
     } else {
       scanStatus.className = "status";
-      scanStatus.textContent = "Clipboard was empty — copy the text on PSA's page first.";
+      scanStatus.textContent = "Clipboard was empty — copy the text on the cert page first.";
     }
   } catch (e) {
     // Permission denied or unsupported — fall back to manual paste.
@@ -848,8 +1635,26 @@ async function pasteInto(fieldId) {
   }
 }
 $("pasteNameBtn").addEventListener("click", () => pasteInto("cardName"));
-$("pasteGradeBtn").addEventListener("click", () => pasteInto("cardGrade"));
 $("pastePopBtn").addEventListener("click", () => pasteInto("cardPop"));
+
+// ---- Search inventory (filters the list live) ----------------------------
+$("searchInput").addEventListener("input", (e) => {
+  searchQuery = e.target.value || "";
+  render();
+});
+
+function selectTab(tab) {
+  currentTab = tab; editingId = null;
+  $("activeTab").classList.toggle("active", tab === "active");
+  $("soldTab").classList.toggle("active", tab === "sold");
+  $("activeTab").setAttribute("aria-selected", String(tab === "active"));
+  $("soldTab").setAttribute("aria-selected", String(tab === "sold"));
+  render();
+}
+$("activeTab").addEventListener("click", () => selectTab("active"));
+$("soldTab").addEventListener("click", () => selectTab("sold"));
+$("listViewBtn").addEventListener("click", () => { viewMode = "list"; localStorage.setItem("slabLedgerView", viewMode); render(); });
+$("gridViewBtn").addEventListener("click", () => { viewMode = "grid"; localStorage.setItem("slabLedgerView", viewMode); render(); });
 
 // ---- SLAB PHOTO CAPTURE (stored with the card) ---------------------------
 // Takes the photo you shoot, shrinks it to a small thumbnail in the browser
@@ -899,99 +1704,16 @@ function shrinkImage(file, maxEdge, quality) {
   });
 }
 
-// ---- E. STILL-PHOTO OCR (grade/name + older slabs) ----------------------
-// For the card name and grade (which aren't in the QR), and for pre-2020
-// slabs that have no QR at all, take a still photo and OCR the text.
-$("photoBtn").addEventListener("click", () => $("photoInput").click());
-
-$("photoInput").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const photoBtn = $("photoBtn");
-  photoBtn.disabled = true;
-  scanStatus.className = "status";
-  scanStatus.textContent = "Reading the label text locally… (about 10 seconds)";
-
-  const photoURL = URL.createObjectURL(file);
-  const alreadyHaveCert = $("certNumber").value.trim();
-
-  try {
-    const result = await Tesseract.recognize(photoURL, "eng", {
-      logger: (m) => {
-        if (m.status === "recognizing text") {
-          scanStatus.textContent = "Reading label text… " + Math.round(m.progress * 100) + "%";
-        }
-      }
-    });
-
-    const parsed = parseLabelText(result.data.text, alreadyHaveCert);
-
-    // Don't overwrite a cert we already got reliably from the QR scan.
-    if (!alreadyHaveCert && parsed.cert) $("certNumber").value = parsed.cert;
-    if (parsed.grade) $("cardGrade").value = parsed.grade;
-    if (parsed.name)  $("cardName").value  = parsed.name;
-
-    const gotCert = alreadyHaveCert || parsed.cert;
-    if (gotCert || parsed.grade || parsed.name) {
-      scanStatus.className = "status ok";
-      scanStatus.textContent =
-        "Filled in: " +
-        [gotCert ? "cert" : "", parsed.grade ? "grade" : "", parsed.name ? "name" : ""]
-          .filter(Boolean).join(", ") +
-        ". Double-check against the label, then add.";
-    } else {
-      scanStatus.className = "status err";
-      scanStatus.textContent = "Couldn't read the label. Try a sharper, glare-free photo — or type the details below.";
-    }
-  } catch (err) {
-    scanStatus.className = "status err";
-    scanStatus.textContent = "Photo reading failed. Please type the details manually.";
-  } finally {
-    URL.revokeObjectURL(photoURL);
-    photoBtn.disabled = false;
-    event.target.value = "";
-  }
-});
-
-// ---- F. LABEL-TEXT PARSING ------------------------------------------------
-function parseLabelText(rawText, knownCert) {
-  const out = { cert: "", grade: "", name: "" };
-
-  const certMatch = rawText.match(/\b\d{8,10}\b/) ||
-                    rawText.replace(/[ \t]/g, "").match(/\d{8,10}/);
-  if (certMatch) out.cert = certMatch[0];
-
-  const gradeRe = /\b(GEM\s*MT|GEM\s*MINT|NM\s*-?\s*MT|EX\s*-?\s*MT|VG\s*-?\s*EX|MINT|NM|EX|VG|GOOD|FR|PR|AUTHENTIC)\s*(10|[1-9](?:\.5)?)?\b/i;
-  const gradeMatch = rawText.match(gradeRe);
-  if (gradeMatch) out.grade = gradeMatch[0].replace(/\s+/g, " ").trim().toUpperCase();
-
-  const certToSkip = knownCert || out.cert;
-  const lines = rawText.split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => {
-      if (line.length < 3) return false;
-      if (certToSkip && line.includes(certToSkip)) return false;
-      if (out.grade && line.toUpperCase().includes(out.grade)) return false;
-      if (/^[\d\s.#-]+$/.test(line)) return false;
-      if (/^PSA$/i.test(line)) return false;
-      const letters = (line.match(/[A-Za-z]/g) || []).length;
-      return letters >= 3;
-    });
-
-  out.name = lines.slice(0, 3).join(" ").trim();
-  return out;
-}
-
-// ---- G. EXPORT TO CSV ----------------------------------------------------
+// ---- E. EXPORT TO CSV ----------------------------------------------------
 function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') + '"'; }
 
 $("exportBtn").addEventListener("click", () => {
   if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
-  const header = ["Cert Number", "Card Name", "Grade", "Pop", "Date Added", "Has Photo"];
+  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Notes", "Status", "Sold Price", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
   const rows = inventory.map((c) =>
-    [c.cert, c.name, c.grade, c.pop, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
+    [c.company || "PSA", c.cert, c.name, c.grade, c.pop, money(c.cost), c.notes,
+     c.sold ? "Sold" : "Inventory", c.sold ? money(c.soldPrice) : "", c.soldDate, c.saleNotes, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
   const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -1015,19 +1737,31 @@ $("exportXlsxBtn").addEventListener("click", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Inventory");
 
-    // Column layout (Photo is the last column, index 5)
+    // Column layout (Photo is the last column, index 12)
     ws.columns = [
+      { header: "Company",     key: "company", width: 10 },
       { header: "Cert Number", key: "cert",  width: 16 },
       { header: "Card Name",   key: "name",  width: 34 },
       { header: "Grade",       key: "grade", width: 12 },
       { header: "Pop",         key: "pop",   width: 10 },
+      { header: "Cost",        key: "cost",  width: 12 },
+      { header: "Notes",       key: "notes", width: 30 },
+      { header: "Status",      key: "status", width: 12 },
+      { header: "Sold Price",  key: "soldPrice", width: 12 },
+      { header: "Sold Date",   key: "soldDate", width: 14 },
+      { header: "Sale Notes",  key: "saleNotes", width: 30 },
       { header: "Date Added",  key: "added", width: 14 },
       { header: "Photo",       key: "photo", width: 20 },
     ];
     ws.getRow(1).font = { bold: true };
 
     inventory.forEach((c, i) => {
-      ws.addRow({ cert: c.cert, name: c.name, grade: c.grade, pop: c.pop, added: c.added });
+      const row = ws.addRow({ company: c.company || "PSA", cert: c.cert, name: c.name,
+                  grade: c.grade, pop: c.pop, cost: numberValue(c.cost), notes: c.notes,
+                  status: c.sold ? "Sold" : "Inventory", soldPrice: c.sold ? numberValue(c.soldPrice) : "",
+                  soldDate: c.soldDate, saleNotes: c.saleNotes, added: c.added });
+      row.getCell(6).numFmt = '$#,##0.00';
+      if (c.sold) row.getCell(9).numFmt = '$#,##0.00';
       const rowNumber = i + 2; // row 1 is the header
 
       if (c.photo) {
@@ -1036,7 +1770,7 @@ $("exportXlsxBtn").addEventListener("click", async () => {
         const imageId = wb.addImage({ base64, extension: "jpeg" });
         ws.getRow(rowNumber).height = 82;               // make room to see it
         ws.addImage(imageId, {
-          tl: { col: 5, row: rowNumber - 1 },           // top-left of Photo cell
+          tl: { col: 12, row: rowNumber - 1 },          // top-left of Photo cell
           ext: { width: 110, height: 100 },
         });
       }
@@ -1062,15 +1796,6 @@ function triggerDownload(blob, filename) {
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-
-// ---- H. CLEAR DATA ---------------------------------------------------------
-$("clearBtn").addEventListener("click", async () => {
-  if (inventory.length === 0) return;
-  const sure = confirm(
-    "This permanently deletes all " + inventory.length +
-    " logged cards from this device.\n\nTip: export a CSV or Excel file first!\n\nClear everything?");
-  if (sure) { try { await dbClear(); } catch (e) {} inventory = []; render(); }
-});
 
 // ---- Release the camera if the user leaves the page ------------------------
 window.addEventListener("pagehide", stopLiveScan);
