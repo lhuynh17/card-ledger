@@ -873,7 +873,7 @@ async function remotePhotoData(record, existing) {
 
 async function remoteToLocal(record, existing = null) {
   return {
-    ...(existing || {}), remoteId:record.id, _remoteUpdated:record.updated,
+    ...(existing || {}), remoteId:record.id, _remoteUpdated:remoteStamp(record),
     _photoFile:record.photo || "", _dirty:false, _deleted:false,
     company:record.company || "PSA", cert:record.cert || "", name:record.name || "",
     grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
@@ -881,6 +881,14 @@ async function remoteToLocal(record, existing = null) {
     soldDate:record.sold_date || "", saleNotes:record.sale_notes || "",
     added:record.added || "", photo:await remotePhotoData(record, existing)
   };
+}
+
+function remoteStamp(record) {
+  return record.updated || JSON.stringify([
+    record.company, record.cert, record.name, record.grade, record.pop, record.cost,
+    record.notes, record.sold, record.sold_price, record.sold_date, record.sale_notes,
+    record.added, record.photo
+  ]);
 }
 
 async function saveCardToCloud(card) {
@@ -896,13 +904,13 @@ async function saveCardToCloud(card) {
   const record = await pbRequest("/api/collections/cards/records" + (card.remoteId ? "/" + card.remoteId : ""), {
     method:card.remoteId ? "PATCH" : "POST", body:form
   });
-  card.remoteId = record.id; card._remoteUpdated = record.updated;
+  card.remoteId = record.id; card._remoteUpdated = remoteStamp(record);
   card._photoFile = record.photo || ""; card._dirty = false; card._photoDirty = false;
   return card;
 }
 
 async function fetchRemoteCards() {
-  const data = await pbRequest("/api/collections/cards/records?perPage=500&sort=-created");
+  const data = await pbRequest("/api/collections/cards/records?perPage=500");
   return data.items || [];
 }
 
@@ -946,7 +954,7 @@ async function syncCloud() {
       if (!existing) {
         const added = await remoteToLocal(record);
         added.id = await dbAdd(added);
-      } else if (!existing._dirty && existing._remoteUpdated !== record.updated) {
+      } else if (!existing._dirty && existing._remoteUpdated !== remoteStamp(record)) {
         await dbPut(await remoteToLocal(record, existing));
       }
     }
