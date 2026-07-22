@@ -555,13 +555,27 @@ select option{ background: var(--surface-2); color: var(--text); }
   .act{ justify-content:center; padding:7px 6px; font-size:11px; }
 }
 @media (max-width: 560px){
-  #inventoryList.grid-view{ grid-template-columns:1fr; gap:10px; }
-  #inventoryList.grid-view .slab{ padding:11px; }
-  #inventoryList.grid-view .slab-thumb{ height:190px; }
+  #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  #inventoryList.grid-view .slab{
+    grid-template-columns:1fr; grid-template-rows:auto 1fr;
+    gap:8px; padding:9px; align-items:start;
+  }
+  #inventoryList.grid-view .slab-media{ grid-column:1; grid-row:1; }
+  #inventoryList.grid-view .slab-main{ grid-column:1; grid-row:2; width:100%; }
+  #inventoryList.grid-view .slab-thumb{ height:150px; border-radius:6px; }
+  #inventoryList.grid-view .grade-mobile{ margin-bottom:6px; }
   #inventoryList.grid-view .grade-desktop{ display:none; }
   #inventoryList.grid-view .grade-medal{ width:58px; }
   #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
-  #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; }
+  #inventoryList.grid-view .slab-main .cert{ font-size:11px; margin-bottom:5px; }
+  #inventoryList.grid-view .slab-main .name{ font-size:13px; line-height:1.25; margin-bottom:5px; }
+  #inventoryList.grid-view .slab-main .meta,
+  #inventoryList.grid-view .slab-main .notes{ font-size:10px; line-height:1.3; }
+  #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; gap:5px; margin-top:9px; }
+  #inventoryList.grid-view .act{ min-width:0; padding:6px 3px; font-size:9px; gap:3px; }
+  #inventoryList.grid-view .act svg{ display:none; }
+  #inventoryList.grid-view .slab.editing,
+  #inventoryList.grid-view .slab.sale-open{ display:block; grid-column:1/-1; }
   .sale-panel{ grid-template-columns:1fr; }
   .totals-bar{ grid-template-columns:1fr; }
 }
