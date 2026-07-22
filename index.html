@@ -524,24 +524,27 @@ select option{ background: var(--surface-2); color: var(--text); }
   .brand .logo{ width:44px; height:44px; font-size:26px; }
 
   /* keep inventory tile horizontal */
-  .slab{ gap:12px; padding:14px; }
-  .slab-thumb{ width:76px; height:108px; }
+  .slab{ gap:10px; padding:14px; align-items:flex-start; }
+  .slab-thumb{ width:68px; height:98px; }
   .slab-main .name{ font-size:15px; }
+  .slab-main .name-link{ border-bottom:0; color:#AFC6FF; }
+  .slab-main .name-link::after{ content:" ↗"; color:var(--muted); font-size:10px; vertical-align:top; }
   .slab-main .cert{ font-size:15px; }
   .slab-main .meta{ font-size:12px; }
-  .grade-cell{ width: clamp(64px, 22vw, 96px); }
+  .grade-cell{ width:54px; }
   .grade-medal{ width: clamp(64px, 22vw, 96px); }
   .grade-badge.num{ width:52px; height:52px; font-size:23px; }
-  .act{ padding:7px 11px; font-size:12px; }
+  .slab-actions{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .act{ justify-content:center; padding:7px 6px; font-size:11px; }
 }
 @media (max-width: 560px){
-  #inventoryList.grid-view{ grid-template-columns:1fr 1fr; gap:10px; }
+  #inventoryList.grid-view{ grid-template-columns:1fr; gap:10px; }
   #inventoryList.grid-view .slab{ padding:11px; }
   #inventoryList.grid-view .slab-thumb{ height:190px; }
   #inventoryList.grid-view .grade-cell{ width:54px; }
   #inventoryList.grid-view .grade-medal{ width:58px; }
   #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
-  #inventoryList.grid-view .slab-actions{ flex-direction:column; }
+  #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; }
   .sale-panel{ grid-template-columns:1fr; }
   .totals-bar{ grid-template-columns:1fr; }
 }
