@@ -352,19 +352,20 @@ select option{ background: var(--surface-2); color: var(--text); }
 #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); }
 #inventoryList.grid-view .slab{ display:grid; grid-template-columns:1fr auto; align-items:start; }
 #inventoryList.grid-view .slab-main{ grid-column:1; }
-#inventoryList.grid-view .grade-cell{ grid-column:2; grid-row:1; width:76px; }
+#inventoryList.grid-view .grade-cell{ width:68px; }
 #inventoryList.grid-view .slab-thumb{ grid-column:1/-1; grid-row:2; width:100%; height:250px; }
 #inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
 
 /* ============ 5. INVENTORY LIST ============ */
-#inventoryList{ list-style:none; display:grid; gap:14px; }
+#inventoryList{ list-style:none; display:grid; gap:20px; }
 .slab{
   position:relative;
-  background: linear-gradient(180deg, rgba(75,123,229,.05), rgba(75,123,229,.015));
-  border: 1px solid var(--accent-line);
+  background: linear-gradient(180deg, rgba(75,123,229,.08), rgba(75,123,229,.02));
+  border: 2px solid rgba(75,123,229,.68);
   border-radius: var(--radius);
   padding: 18px 20px;
   display:flex; align-items:center; gap:20px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.32), 0 0 0 1px rgba(255,255,255,.025) inset;
 }
 .slab-thumb{
   width:100px; height:138px; object-fit:contain; flex:0 0 auto;
@@ -406,7 +407,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 .act.del:hover{ color: var(--accent); border-color: var(--accent-line); }
 
 /* ---- Grade badge (right side of tile) ---- */
-.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; }
+.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; margin-left:auto; }
 .grade-badge.grader{
   min-width:48px; height:40px; padding:0 10px; border-radius:7px;
   display:inline-flex; align-items:center; justify-content:center;
@@ -524,14 +525,14 @@ select option{ background: var(--surface-2); color: var(--text); }
   .brand .logo{ width:44px; height:44px; font-size:26px; }
 
   /* keep inventory tile horizontal */
-  .slab{ gap:10px; padding:14px; align-items:flex-start; }
-  .slab-thumb{ width:68px; height:98px; }
+  .slab{ gap:12px; padding:14px; align-items:center; }
+  .slab-thumb{ width:76px; height:108px; }
   .slab-main .name{ font-size:15px; }
   .slab-main .name-link{ border-bottom:0; color:#AFC6FF; }
   .slab-main .name-link::after{ content:" ↗"; color:var(--muted); font-size:10px; vertical-align:top; }
   .slab-main .cert{ font-size:15px; }
   .slab-main .meta{ font-size:12px; }
-  .grade-cell{ width:54px; }
+  .grade-cell{ grid-column:2; width:auto; margin-left:0; justify-self:end; }
   .grade-medal{ width: clamp(64px, 22vw, 96px); }
   .grade-badge.num{ width:52px; height:52px; font-size:23px; }
   .slab-actions{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
@@ -541,7 +542,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   #inventoryList.grid-view{ grid-template-columns:1fr; gap:10px; }
   #inventoryList.grid-view .slab{ padding:11px; }
   #inventoryList.grid-view .slab-thumb{ height:190px; }
-  #inventoryList.grid-view .grade-cell{ width:54px; }
+  #inventoryList.grid-view .grade-cell{ width:auto; }
   #inventoryList.grid-view .grade-medal{ width:58px; }
   #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
   #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; }
@@ -1248,14 +1249,15 @@ function render() {
     actions.append(edit);
     if (card.name) actions.append(research);
     actions.append(sale, del);
-    main.appendChild(actions);
-    li.appendChild(main);
 
-    // ---- Right: grade badge / medal ----
+    // Keep the grade in the lower action area so the name gets the full width.
     const gradeCell = document.createElement("div");
     gradeCell.className = "grade-cell";
     gradeCell.appendChild(buildGradeBadge(card.grade, co));
-    li.appendChild(gradeCell);
+    actions.appendChild(gradeCell);
+
+    main.appendChild(actions);
+    li.appendChild(main);
 
     listEl.appendChild(li);
   });
