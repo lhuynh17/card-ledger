@@ -568,6 +568,23 @@ select option{ background: var(--surface-2); color: var(--text); }
   .slab-actions{ gap:8px; }
 }
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+.header-actions{ display:flex; align-items:center; gap:10px; margin-left:auto; }
+.sync-btn{ border:1px solid var(--line); background:var(--surface); color:var(--muted); border-radius:999px; padding:8px 12px; font:600 12px var(--font-body); cursor:pointer; }
+.sync-btn.online{ color:var(--ok); border-color:rgba(52,211,153,.4); }
+.sync-btn.syncing{ color:var(--accent); border-color:rgba(75,123,229,.45); }
+.sync-btn.error{ color:#ff7885; border-color:rgba(240,43,61,.45); }
+.cloud-modal{ position:fixed; inset:0; z-index:10000; background:rgba(2,5,11,.82); display:none; align-items:center; justify-content:center; padding:18px; }
+.cloud-modal.open{ display:flex; }
+.cloud-card{ width:min(430px,100%); background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:0 24px 80px rgba(0,0,0,.5); }
+.cloud-card h2{ margin:0 0 7px; font-size:21px; }
+.cloud-card p{ margin:0 0 16px; color:var(--muted); line-height:1.45; }
+.cloud-card label{ display:block; margin:12px 0 6px; }
+.cloud-card input{ width:100%; box-sizing:border-box; }
+.cloud-actions{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px; }
+.cloud-actions button{ min-height:44px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); color:var(--text); font-weight:650; cursor:pointer; }
+.cloud-actions .primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+.cloud-message{ min-height:20px; margin-top:12px; color:#ff7885; font-size:13px; }
+@media(max-width:560px){ .app-header{ align-items:flex-start; } .header-actions{ flex-direction:column; align-items:flex-end; gap:6px; } .sync-btn{ padding:6px 9px; } }
 </style>
 </head>
 <body>
@@ -580,8 +597,27 @@ select option{ background: var(--surface-2); color: var(--text); }
       <div class="subtitle">Track your graded card inventory</div>
     </div>
   </div>
-  <span class="count-chip" id="countChip">0 cards</span>
+  <div class="header-actions">
+    <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
+    <span class="count-chip" id="countChip">0 cards</span>
+  </div>
 </header>
+
+<div class="cloud-modal" id="cloudModal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle">
+  <div class="cloud-card">
+    <h2 id="cloudTitle">Sync Slab Ledger</h2>
+    <p>Sign in with the app account you created in PocketBase. Your inventory will stay cached on this device and sync through your Synology.</p>
+    <label for="cloudEmail">Email</label>
+    <input id="cloudEmail" type="email" autocomplete="username">
+    <label for="cloudPassword">Password</label>
+    <input id="cloudPassword" type="password" autocomplete="current-password">
+    <div class="cloud-actions">
+      <button type="button" id="cloudCancelBtn">Continue offline</button>
+      <button type="button" class="primary" id="cloudLoginBtn">Sign in</button>
+    </div>
+    <div class="cloud-message" id="cloudMessage" role="status"></div>
+  </div>
+</div>
 
 <!-- ================= ADD NEW ITEM ================= -->
 <section aria-labelledby="addTitle">
@@ -764,9 +800,175 @@ select option{ background: var(--surface-2); color: var(--text); }
 const OLD_STORAGE_KEY = "psa_inventory";   // legacy localStorage key
 const DB_NAME  = "slabLedger";
 const DB_STORE = "cards";
+const PB_URL = "https://long-cloud.tail314ec.ts.net";
+const PB_AUTH_KEY = "slabLedgerCloudAuth";
 let db = null;
 let inventory = [];   // in-memory working copy, newest first; each has .id
 let editingId = null; // id of the card currently being edited inline, or null
+let cloudSession = null;
+let syncInProgress = false;
+let syncTimer = null;
+
+try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
+
+function setSyncStatus(text, state = "") {
+  const button = document.getElementById("syncBtn");
+  if (!button) return;
+  button.textContent = text;
+  button.className = "sync-btn" + (state ? " " + state : "");
+}
+
+async function pbRequest(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (cloudSession?.token) headers.set("Authorization", cloudSession.token);
+  const response = await fetch(PB_URL + path, { ...options, headers });
+  let data = null;
+  if (response.status !== 204) data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(data?.message || "Cloud request failed (" + response.status + ")");
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function cloudFields(card) {
+  return {
+    company: card.company || "PSA", cert: card.cert || "", name: card.name || "",
+    grade: card.grade || "", pop: card.pop || "", cost: numberValue(card.cost),
+    notes: card.notes || "", sold: Boolean(card.sold),
+    sold_price: numberValue(card.soldPrice), sold_date: card.soldDate || "",
+    sale_notes: card.saleNotes || "", added: card.added || ""
+  };
+}
+
+function dataUrlBlob(dataUrl) {
+  const parts = dataUrl.split(",");
+  const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const bytes = atob(parts[1]);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
+  return new Blob([array], { type:mime });
+}
+
+function blobDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function remotePhotoData(record, existing) {
+  if (!record.photo) return "";
+  if (existing?._photoFile === record.photo && existing.photo) return existing.photo;
+  const url = PB_URL + "/api/files/" + record.collectionId + "/" + record.id + "/" + encodeURIComponent(record.photo);
+  try {
+    const response = await fetch(url, { headers: cloudSession?.token ? { Authorization:cloudSession.token } : {} });
+    if (!response.ok) throw new Error("photo");
+    return await blobDataUrl(await response.blob());
+  } catch (e) { return url; }
+}
+
+async function remoteToLocal(record, existing = null) {
+  return {
+    ...(existing || {}), remoteId:record.id, _remoteUpdated:record.updated,
+    _photoFile:record.photo || "", _dirty:false, _deleted:false,
+    company:record.company || "PSA", cert:record.cert || "", name:record.name || "",
+    grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
+    notes:record.notes || "", sold:Boolean(record.sold), soldPrice:record.sold_price || 0,
+    soldDate:record.sold_date || "", saleNotes:record.sale_notes || "",
+    added:record.added || "", photo:await remotePhotoData(record, existing)
+  };
+}
+
+async function saveCardToCloud(card) {
+  const form = new FormData();
+  const fields = cloudFields(card);
+  Object.entries(fields).forEach(([key, value]) => form.append(key, String(value)));
+  if (!card.remoteId) form.append("owner", cloudSession.record.id);
+  if (!card.remoteId || card._photoDirty) {
+    if (String(card.photo || "").startsWith("data:")) {
+      form.append("photo", dataUrlBlob(card.photo), "slab.jpg");
+    } else if (!card.photo) form.append("photo", "");
+  }
+  const record = await pbRequest("/api/collections/cards/records" + (card.remoteId ? "/" + card.remoteId : ""), {
+    method:card.remoteId ? "PATCH" : "POST", body:form
+  });
+  card.remoteId = record.id; card._remoteUpdated = record.updated;
+  card._photoFile = record.photo || ""; card._dirty = false; card._photoDirty = false;
+  return card;
+}
+
+async function fetchRemoteCards() {
+  const data = await pbRequest("/api/collections/cards/records?perPage=500&sort=-created");
+  return data.items || [];
+}
+
+function cardMatchKey(card) {
+  return String(card.company || "PSA").toUpperCase() + "|" + String(card.cert || "").trim().toUpperCase();
+}
+
+async function syncCloud() {
+  if (!cloudSession?.token || !db || syncInProgress) return;
+  if (!navigator.onLine) { setSyncStatus("Offline", "error"); return; }
+  syncInProgress = true; setSyncStatus("Syncing…", "syncing");
+  try {
+    let local = await dbGetAll();
+    let remote = await fetchRemoteCards();
+    const remoteById = new Map(remote.map((r) => [r.id, r]));
+    const remoteByKey = new Map(remote.map((r) => [cardMatchKey(r), r]));
+
+    for (const card of local) {
+      if (card._deleted) {
+        if (card.remoteId && remoteById.has(card.remoteId)) {
+          await pbRequest("/api/collections/cards/records/" + card.remoteId, { method:"DELETE" });
+        }
+        await dbDelete(card.id);
+        continue;
+      }
+      if (!card.remoteId) {
+        const match = remoteByKey.get(cardMatchKey(card));
+        if (match) await dbPut(await remoteToLocal(match, card));
+        else await dbPut(await saveCardToCloud({ ...card, _dirty:true, _photoDirty:Boolean(card.photo) }));
+      } else if (card._dirty) {
+        await dbPut(await saveCardToCloud(card));
+      }
+    }
+
+    remote = await fetchRemoteCards();
+    const currentRemoteIds = new Set(remote.map((r) => r.id));
+    local = await dbGetAll();
+    const localByRemote = new Map(local.filter((c) => c.remoteId).map((c) => [c.remoteId, c]));
+    for (const record of remote) {
+      const existing = localByRemote.get(record.id);
+      if (!existing) {
+        const added = await remoteToLocal(record);
+        added.id = await dbAdd(added);
+      } else if (!existing._dirty && existing._remoteUpdated !== record.updated) {
+        await dbPut(await remoteToLocal(record, existing));
+      }
+    }
+    for (const card of local) {
+      if (card.remoteId && !card._dirty && !currentRemoteIds.has(card.remoteId)) await dbDelete(card.id);
+    }
+    inventory = (await dbGetAll()).filter((c) => !c._deleted).sort((a,b) => b.id - a.id);
+    render(); setSyncStatus("Synced", "online");
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      cloudSession = null; localStorage.removeItem(PB_AUTH_KEY);
+      setSyncStatus("Sign in to sync", "error");
+      document.getElementById("cloudModal").classList.add("open");
+    } else setSyncStatus("Sync paused", "error");
+    console.warn("Slab Ledger sync:", error);
+  } finally { syncInProgress = false; }
+}
+
+function syncSoon() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncCloud, 350);
+}
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -1097,9 +1299,13 @@ function visibleInventory() {
 }
 
 async function saveCardUpdate(updated) {
+  const previous = inventory.find((c) => c.id === updated.id);
+  updated._dirty = true;
+  if ((previous?.photo || "") !== (updated.photo || "")) updated._photoDirty = true;
   await dbPut(updated);
   const idx = inventory.findIndex((c) => c.id === updated.id);
   if (idx >= 0) inventory[idx] = updated;
+  syncSoon();
 }
 
 function updateSummary() {
@@ -1264,8 +1470,12 @@ function render() {
     del.innerHTML = icon("trash") + "Delete";
     del.addEventListener("click", async () => {
       if (confirm("Delete this card from your inventory?")) {
-        try { await dbDelete(card.id); } catch (e) {}
+        try {
+          if (card.remoteId) await dbPut({ ...card, _deleted:true, _dirty:true });
+          else await dbDelete(card.id);
+        } catch (e) {}
         inventory = inventory.filter((c) => c.id !== card.id);
+        syncSoon();
         render();
       }
     });
@@ -1458,10 +1668,8 @@ function buildEditForm(card) {
       soldPrice: soldPriceI ? numberValue(soldPriceI.value) : card.soldPrice,
       soldDate: soldDateI ? soldDateI.value : card.soldDate, photo: editPhoto };
     if (saleNotesI) updated.saleNotes = saleNotesI.value.trim();
-    try { await dbPut(updated); }
+    try { await saveCardUpdate(updated); }
     catch (e) { alert("Couldn't save changes — device storage may be full."); return; }
-    const idx = inventory.findIndex((c) => c.id === card.id);
-    if (idx >= 0) inventory[idx] = updated;
     editingId = null;
     render();
   });
@@ -1495,12 +1703,14 @@ $("addBtn").addEventListener("click", async () => {
 
   const card = { company, cert, name, grade, pop, cost, notes, sold:false,
                  soldPrice:"", soldDate:"", saleNotes:"", photo: pendingPhoto,
-                 added: new Date().toLocaleDateString() };
+                 added: new Date().toLocaleDateString(), _dirty:true,
+                 _photoDirty:Boolean(pendingPhoto) };
 
   try {
     // Save to IndexedDB first; it returns the new id, which we keep in memory.
     card.id = await dbAdd(card);
     inventory.unshift(card);
+    syncSoon();
   } catch (e) {
     // Very unlikely with IndexedDB's large quota, but handle it honestly.
     alert("Couldn't save this card — device storage may be full.\n\n" +
@@ -1825,6 +2035,50 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+// ---- Private Synology sign-in and synchronization -------------------------
+$('syncBtn').addEventListener('click', () => {
+  if (cloudSession?.token) syncCloud();
+  else {
+    $('cloudMessage').textContent = '';
+    $('cloudModal').classList.add('open');
+    $('cloudEmail').focus();
+  }
+});
+$('cloudCancelBtn').addEventListener('click', () => {
+  $('cloudModal').classList.remove('open');
+  sessionStorage.setItem('slabLedgerOfflineChosen', '1');
+});
+$('cloudLoginBtn').addEventListener('click', async () => {
+  const email = $('cloudEmail').value.trim();
+  const password = $('cloudPassword').value;
+  if (!email || !password) { $('cloudMessage').textContent = 'Enter your email and password.'; return; }
+  const button = $('cloudLoginBtn');
+  button.disabled = true; $('cloudMessage').textContent = 'Signing in…';
+  try {
+    const response = await fetch(PB_URL + '/api/collections/users/auth-with-password', {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ identity:email, password })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.message || 'Sign-in failed.');
+    cloudSession = { token:data.token, record:data.record };
+    localStorage.setItem(PB_AUTH_KEY, JSON.stringify(cloudSession));
+    $('cloudPassword').value = ''; $('cloudMessage').textContent = '';
+    $('cloudModal').classList.remove('open');
+    setSyncStatus('Syncing…', 'syncing');
+    await syncCloud();
+  } catch (error) {
+    $('cloudMessage').textContent = error.message === 'Failed to fetch'
+      ? 'Could not reach your Synology. Check that Tailscale is connected.' : error.message;
+  } finally { button.disabled = false; }
+});
+$('cloudPassword').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') $('cloudLoginBtn').click();
+});
+window.addEventListener('online', syncSoon);
+window.addEventListener('focus', syncSoon);
+setInterval(syncCloud, 30000);
+
 // ---- Release the camera if the user leaves the page ------------------------
 window.addEventListener("pagehide", stopLiveScan);
 
@@ -1837,7 +2091,7 @@ async function init() {
       await migrateFromLocalStorage();     // bring over any old localStorage cards
     }
     const cards = await dbGetAll();
-    inventory = cards.sort((a, b) => b.id - a.id);   // newest first
+    inventory = cards.filter((c) => !c._deleted).sort((a, b) => b.id - a.id);   // newest first
   } catch (e) {
     // If IndexedDB can't open (very old browser / private-mode quirk), the
     // app still runs for this session; data just won't persist.
@@ -1846,6 +2100,13 @@ async function init() {
     scanStatus.textContent = "Note: storage couldn't start, so cards won't be saved between visits.";
   }
   render();
+  if (cloudSession?.token) {
+    setSyncStatus("Syncing…", "syncing");
+    syncCloud();
+  } else {
+    setSyncStatus("Sign in to sync");
+    if (!sessionStorage.getItem('slabLedgerOfflineChosen')) $('cloudModal').classList.add('open');
+  }
 }
 init();
 </script>
