@@ -1081,8 +1081,9 @@ const COMPANIES = {
     // BGS uses half grades and a Pristine/Black Label 10
     grades: ["BL10","P10","10","9.5","9","8.5","8","7.5","7","6.5","6",
              "5.5","5","4","3","2","1","AUTHENTIC"],
-    // Beckett has no cert-in-URL deep link; open the lookup page and paste
-    certUrl: () => "https://www.beckett.com/grading/card-lookup",
+    // Beckett accepts the cert in its lookup URL, so the result opens directly.
+    certUrl: (cert) => "https://www.beckett.com/grading/card-lookup?item_id=" +
+      encodeURIComponent(cert) + "&item_type=BGS",
     // BGS certs are alphanumeric, ~6–15 chars
     certOk: (cert) => /^[A-Za-z0-9-]{6,15}$/.test(cert),
     certHint: "cert number from the Beckett label",
