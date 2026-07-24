@@ -58,10 +58,12 @@ records.
    Slab Ledger.
 3. Enter the PocketBase email and password used by Slab Ledger.
 4. Keep `collector.env` private.
-5. Run `test-cloud.bat`. It should report the number of active cards found.
-6. Run `install-slab-ledger-integration.bat` again so the newest phone panel
+5. Run `setup-windows.bat` once to install the collector and its standard
+   Chromium browser.
+6. Run `test-cloud.bat`. It should report the number of active cards found.
+7. Run `install-slab-ledger-integration.bat` again so the newest phone panel
    is copied into the Slab Ledger folder.
-7. Start `run.bat`.
+8. Start `run.bat`.
 
 The Windows computer must have Tailscale connected and must be able to reach
 PocketBase. The phone also needs Tailscale connected while it synchronizes.

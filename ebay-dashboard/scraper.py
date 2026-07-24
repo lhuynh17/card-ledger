@@ -1,20 +1,23 @@
-"""Polite eBay search collector for the local dashboard.
+"""Paced eBay sold-search collector for the Slab Ledger dashboard.
 
 Install once on Windows:
-    py -m pip install requests beautifulsoup4
+    setup-windows.bat
 
 Run continuously and serve the dashboard:
     py scraper.py --watch
 
-Add inventory records to data.json to change what is collected. Review eBay's
-terms and robots rules before use. HTML can change, so selectors may
-occasionally need updates.
+The default browser backend uses standard Playwright Chromium with a persistent
+local profile. It does not use stealth plugins or attempt to solve challenges.
+Review eBay's terms before use. HTML can change, so selectors may occasionally
+need updates.
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
+import logging
 import os
 import random
 import re
@@ -37,6 +40,11 @@ SEARCH_URL = "https://www.ebay.com/sch/i.html"
 DATA_LOCK = threading.RLock()
 ENV_FILE = ROOT / "collector.env"
 CLOUD_CLIENT = None
+LOG_DIR = ROOT / "logs"
+FAILURE_DIR = LOG_DIR / "scraper-failures"
+PROFILE_DIR = ROOT / "data" / "ebay-browser-profile"
+LOCK_FILE = ROOT / "collector.lock"
+BROWSER_COLLECTOR = None
 
 # Continuous mode makes at most one request in each interval. Identical slabs
 # share one query and cached valuation, so duplicates add no eBay traffic.
@@ -52,6 +60,62 @@ REQUEST_TIMEOUT_SECONDS = 25
 POCKETBASE_POLL_SECONDS = 60
 
 USER_AGENT = "SlabLedgerMarketTracker/0.1 (personal inventory valuation)"
+REPLICA_WORDS = {
+    "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
+    "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
+}
+
+
+def configure_logging() -> logging.Logger:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("slab-market")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"
+    )
+    file_handler = logging.FileHandler(
+        LOG_DIR / "collector.log", encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    return logger
+
+
+LOGGER = configure_logging()
+
+
+def report(message: str, level: int = logging.INFO) -> None:
+    print(message)
+    LOGGER.log(level, message)
+
+
+def acquire_instance_lock() -> None:
+    """Prevent two collector windows from scraping the same queue."""
+    try:
+        handle = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(handle, str(os.getpid()).encode("ascii"))
+        os.close(handle)
+    except FileExistsError:
+        try:
+            existing_pid = int(LOCK_FILE.read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            existing_pid = 0
+        if existing_pid:
+            try:
+                os.kill(existing_pid, 0)
+            except OSError:
+                existing_pid = 0
+        if existing_pid:
+            raise RuntimeError(
+                "Another Slab Ledger collector is already running. "
+                "Close its window before starting a second copy."
+            )
+        LOCK_FILE.unlink(missing_ok=True)
+        acquire_instance_lock()
+        return
+    atexit.register(lambda: LOCK_FILE.unlink(missing_ok=True))
 
 
 def load_environment(path: Path = ENV_FILE) -> None:
@@ -80,6 +144,122 @@ def headers() -> dict[str, str]:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.8",
     }
+
+
+class BrowserCollector:
+    """Standard persistent Chromium session for rendered sold-search pages."""
+
+    def __init__(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as error:
+            raise RuntimeError(
+                "The browser collector is not installed. Run setup-windows.bat once."
+            ) from error
+        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        self._playwright = sync_playwright().start()
+        headless = os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() != "0"
+        try:
+            self._context = self._playwright.chromium.launch_persistent_context(
+                str(PROFILE_DIR),
+                headless=headless,
+                locale="en-US",
+                timezone_id="America/Chicago",
+                viewport={"width": 1440, "height": 900},
+            )
+        except Exception:
+            self._playwright.stop()
+            raise
+        report(
+            "Browser collector ready "
+            f"({'background' if headless else 'visible'} Chromium, persistent profile)."
+        )
+
+    def close(self) -> None:
+        try:
+            self._context.close()
+        finally:
+            self._playwright.stop()
+
+    def fetch(self, search: str, page_number: int) -> str:
+        params = {
+            "_nkw": search, "_pgn": page_number, "_ipg": 60,
+            "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
+        }
+        url = f"{SEARCH_URL}?{urlencode(params)}"
+        page = self._context.new_page()
+        try:
+            response = page.goto(
+                url, wait_until="domcontentloaded", timeout=45_000
+            )
+            if response and response.status in (403, 429):
+                raise RuntimeError(
+                    f"eBay returned {response.status}; stop and try again later"
+                )
+            try:
+                page.wait_for_selector(
+                    "li.s-item, a[href*='/itm/']", timeout=15_000
+                )
+            except Exception:
+                pass
+            # Load the first page's lazy-rendered rows without following links.
+            for position in (0.35, 0.7, 1.0):
+                page.evaluate(
+                    "(position) => window.scrollTo(0, "
+                    "document.documentElement.scrollHeight * position)",
+                    position,
+                )
+                page.wait_for_timeout(500)
+            body = page.locator("body").inner_text(timeout=5_000).lower()
+            if any(marker in body for marker in (
+                "pardon our interruption", "verify yourself", "security check",
+                "are you a human", "unusual activity",
+            )):
+                raise RuntimeError(
+                    "eBay returned a verification page; stop and try again later"
+                )
+            html = page.content()
+            if not BeautifulSoup(html, "html.parser").select_one(
+                "li.s-item, a[href*='/itm/']"
+            ):
+                raise RuntimeError("eBay returned no recognizable listing rows")
+            return html
+        except Exception as error:
+            self._save_failure(page, search, error)
+            if isinstance(error, RuntimeError):
+                raise
+            raise RuntimeError(f"Browser lookup failed: {error}") from error
+        finally:
+            page.close()
+
+    def _save_failure(self, page, search: str, error: Exception) -> None:
+        """Keep a small local diagnostic bundle; it is excluded from Git."""
+        FAILURE_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        safe = re.sub(r"[^A-Za-z0-9]+", "-", search).strip("-")[:45] or "search"
+        base = FAILURE_DIR / f"{stamp}-{safe}"
+        try:
+            page.screenshot(path=str(base.with_suffix(".png")), full_page=False)
+        except Exception:
+            pass
+        try:
+            base.with_suffix(".html").write_text(
+                page.content(), encoding="utf-8"
+            )
+        except Exception:
+            pass
+        report(
+            f"Browser lookup failed; diagnostic saved under {FAILURE_DIR.name}: {error}",
+            logging.WARNING,
+        )
+
+
+def browser_collector() -> BrowserCollector:
+    global BROWSER_COLLECTOR
+    if BROWSER_COLLECTOR is None:
+        BROWSER_COLLECTOR = BrowserCollector()
+        atexit.register(BROWSER_COLLECTOR.close)
+    return BROWSER_COLLECTOR
 
 
 class PocketBaseClient:
@@ -217,11 +397,25 @@ def grade_number(value: str) -> str:
     return match.group(1) if match else ""
 
 
+def normalized_card_name(name: str) -> str:
+    """Convert slab-label punctuation into the wording sellers commonly use."""
+    value = str(name or "").strip()
+    value = re.sub(r"(?<=[A-Za-z])\.(?=[A-Za-z&])", " ", value)
+    value = re.sub(r"(?<=[A-Za-z])/(?=[A-Za-z])", " ", value)
+    while re.search(r"(\S)&(\S)", value):
+        value = re.sub(r"(\S)&(\S)", r"\1 & \2", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def card_keywords(name: str) -> str:
     """Port of Slab Ledger's ebayCardKeywords() function."""
-    generic = {"POKEMON", "CARD", "HOLO", "HOLOGRAPHIC", "FOIL"}
+    generic = {
+        "POKEMON", "CARD", "CARDS", "TRADING", "COLLECTIBLE",
+        "HOLO", "HOLOFOIL", "HOLOGRAPHIC", "FOIL",
+    }
     words, seen = [], set()
-    for word in re.sub(r"[^A-Z0-9]+", " ", str(name or "").upper()).split():
+    clean_name = normalized_card_name(name)
+    for word in re.sub(r"[^A-Z0-9/]+", " ", clean_name.upper()).split():
         if word in generic or re.fullmatch(r"20\d{2}", word) or word in seen:
             continue
         seen.add(word)
@@ -242,6 +436,13 @@ def ebay_search_terms(card: dict) -> str:
 
 
 def fetch_page(session: requests.Session, search: str, page: int) -> str:
+    backend = os.getenv("SLAB_SCRAPER_BACKEND", "browser").strip().lower()
+    if backend == "browser":
+        return browser_collector().fetch(search, page)
+    if backend != "requests":
+        raise RuntimeError(
+            "SLAB_SCRAPER_BACKEND must be 'browser' or 'requests'."
+        )
     params = {
         "_nkw": search, "_pgn": page, "_ipg": 60,
         "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
@@ -298,17 +499,30 @@ def parse_listings(html: str, search: str) -> list[dict]:
 
 
 def comparable(card: dict, listing: dict) -> bool:
-    """Reject obvious false positives that escape the search query."""
+    """Score title overlap while strictly enforcing slab company and grade."""
     title = re.sub(r"[^A-Z0-9.]+", " ", listing["title"].upper())
+    if any(word in title for word in REPLICA_WORDS):
+        return False
     company = str(card.get("company") or "PSA").upper()
     grade = grade_number(str(card.get("grade") or ""))
     if company not in title or (grade and not re.search(rf"\b{re.escape(grade)}\b", title)):
         return False
-    meaningful = [w for w in card_keywords(card.get("name", "")).split() if len(w) > 1]
+    meaningful = [
+        word for word in card_keywords(card.get("name", "")).split()
+        if len(word) > 1
+    ]
     if not meaningful:
         return True
-    hits = sum(1 for word in meaningful if re.search(rf"\b{re.escape(word)}\b", title))
-    return hits / len(meaningful) >= 0.65
+    hits = sum(
+        1 for word in meaningful
+        if re.search(rf"\b{re.escape(word)}\b", title)
+    )
+    # Require the important first token plus broad title agreement. This keeps
+    # similarly graded cards from the same set out of the valuation.
+    first_matches = bool(
+        re.search(rf"\b{re.escape(meaningful[0])}\b", title)
+    )
+    return first_matches and hits / len(meaningful) >= 0.65
 
 
 def remove_price_outliers(listings: list[dict]) -> tuple[list[dict], int]:
@@ -638,6 +852,7 @@ def serve(port: int) -> None:
 
 if __name__ == "__main__":
     load_environment()
+    acquire_instance_lock()
     parser = argparse.ArgumentParser(description="Refresh and serve the eBay dashboard")
     parser.add_argument("--serve-only", action="store_true")
     parser.add_argument("--refresh-only", action="store_true")

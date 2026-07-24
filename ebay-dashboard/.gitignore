@@ -1,5 +1,8 @@
 collector.env
 data.json
+collector.lock
+data/
+logs/
 __pycache__/
 *.pyc
 *.tmp

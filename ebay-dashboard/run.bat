@@ -21,6 +21,15 @@ if not exist "data.json" (
     copy "data.example.json" "data.json" >nul
 )
 
+%SLAB_PYTHON% -c "import requests, bs4, playwright" >nul 2>nul
+if errorlevel 1 (
+    echo Required collector components are not installed.
+    echo Double-click setup-windows.bat once, then run this file again.
+    echo.
+    pause
+    exit /b 1
+)
+
 if not exist "collector.env" (
     echo PocketBase cloud configuration was not found.
     echo Copy collector.env.example to collector.env and fill in your account details.
@@ -39,6 +48,7 @@ echo   - Each search cached for 22 hours
 echo   - Collection active from 7:00 AM to 11:00 PM
 echo   - Maximum 72 requests per rolling 24 hours
 echo   - Automatic extended cooldown after a block response
+echo   - Standard persistent Chromium; no stealth or challenge bypass
 echo.
 echo Keep this window open. Press Ctrl+C to stop the collector.
 %SLAB_PYTHON% scraper.py --watch
