@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Slab Ledger — eBay Market Listings</title>
+  <style>
+    :root {
+      --ink: #17211b;
+      --muted: #68736c;
+      --paper: #f4f5f0;
+      --card: #ffffff;
+      --line: #dfe3dd;
+      --green: #184f37;
+      --green-soft: #e5efe9;
+      --lime: #c7f36a;
+      --shadow: 0 18px 50px rgba(20, 36, 26, .08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 86% 0%, rgba(199, 243, 106, .28), transparent 27rem),
+        var(--paper);
+      color: var(--ink);
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+    .shell { width: min(1240px, calc(100% - 36px)); margin: 0 auto; padding: 28px 0 60px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 800; letter-spacing: -.02em; }
+    .mark {
+      width: 38px; height: 38px; display: grid; place-items: center;
+      border-radius: 11px; background: var(--green); color: var(--lime);
+      font-size: 12px; letter-spacing: .06em;
+    }
+    .feed-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #2aa568; box-shadow: 0 0 0 4px #2aa5681c; }
+    .dot.error { background: #c84e42; box-shadow: 0 0 0 4px #c84e421c; }
+
+    .hero { padding: 72px 0 34px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; }
+    .eyebrow { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    h1 { max-width: 780px; margin: 10px 0 12px; font-size: clamp(42px, 7vw, 82px); line-height: .96; letter-spacing: -.065em; }
+    .intro { max-width: 630px; margin: 0; color: var(--muted); font-size: 17px; }
+    .count-block { min-width: 140px; text-align: right; }
+    .count { font-size: 38px; font-weight: 800; letter-spacing: -.05em; }
+    .count-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
+
+    .toolbar {
+      display: grid; grid-template-columns: minmax(220px, 1fr) 190px 190px;
+      gap: 10px; margin: 18px 0 22px;
+    }
+    .control {
+      width: 100%; min-height: 46px; padding: 0 14px;
+      border: 1px solid var(--line); border-radius: 11px;
+      background: rgba(255,255,255,.82); color: var(--ink); outline: none;
+    }
+    .control:focus { border-color: #6a8e79; box-shadow: 0 0 0 4px rgba(24,79,55,.09); }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+    .listing {
+      min-width: 0; display: flex; flex-direction: column; min-height: 276px;
+      padding: 20px; border: 1px solid var(--line); border-radius: 17px;
+      background: var(--card); box-shadow: var(--shadow); transition: transform .18s, box-shadow .18s;
+    }
+    .listing:hover { transform: translateY(-3px); box-shadow: 0 22px 60px rgba(20,36,26,.12); }
+    .listing-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+    .source {
+      max-width: 75%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding: 5px 8px; border-radius: 999px; background: var(--green-soft);
+      color: var(--green); font-size: 11px; font-weight: 750;
+    }
+    .condition { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .title {
+      display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+      margin: 22px 0 12px; font-size: 18px; line-height: 1.3; letter-spacing: -.02em; font-weight: 750;
+    }
+    .seller { color: var(--muted); font-size: 12px; }
+    .listing-bottom { margin-top: auto; padding-top: 22px; display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+    .price-label { color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .price { margin-top: 2px; font-size: 27px; font-weight: 820; letter-spacing: -.045em; }
+    .shipping { color: var(--muted); font-size: 11px; }
+    .ebay-link {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 42px;
+      padding: 0 14px; border-radius: 10px; background: var(--green); color: white;
+      text-decoration: none; font-size: 13px; font-weight: 750;
+    }
+    .ebay-link:hover { background: #0f3d29; }
+    .ebay-link:focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
+
+    .state {
+      grid-column: 1 / -1; padding: 70px 24px; border: 1px dashed #cdd3cc;
+      border-radius: 17px; color: var(--muted); text-align: center; background: rgba(255,255,255,.45);
+    }
+    .state strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 17px; }
+    .footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 920px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { padding-top: 52px; }
+    }
+    @media (max-width: 650px) {
+      .shell { width: min(100% - 24px, 1240px); padding-top: 18px; }
+      .hero { display: block; padding-top: 46px; }
+      .count-block { margin-top: 25px; text-align: left; }
+      .toolbar, .grid { grid-template-columns: 1fr; }
+      .topbar, .footer { align-items: flex-start; flex-direction: column; }
+      .listing { min-height: 245px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="mark">SL</span><span>Slab Ledger Market</span></div>
+      <div class="feed-status"><span class="dot" id="statusDot"></span><span id="statusText">Loading local data…</span></div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow">eBay sold comparables</div>
+        <h1>Market listings,<br>without the clutter.</h1>
+        <p class="intro">Browse the eBay results collected for your inventory. Search by title, filter by slab, and open the original listing when you need the details.</p>
+      </div>
+      <div class="count-block">
+        <div class="count" id="resultCount">—</div>
+        <div class="count-label">Listings shown</div>
+      </div>
+    </section>
+
+    <section class="toolbar" aria-label="Listing controls">
+      <input class="control" id="searchInput" type="search" placeholder="Search listing titles…" autocomplete="off">
+      <select class="control" id="sourceFilter" aria-label="Filter by source">
+        <option value="">All inventory searches</option>
+      </select>
+      <select class="control" id="sortSelect" aria-label="Sort listings">
+        <option value="price-asc">Price: low to high</option>
+        <option value="price-desc">Price: high to low</option>
+        <option value="title">Title: A to Z</option>
+      </select>
+    </section>
+
+    <section class="grid" id="listingGrid" aria-live="polite">
+      <div class="state"><strong>Loading market data</strong>Reading data.json…</div>
+    </section>
+
+    <footer class="footer">
+      <span id="updatedText">Waiting for local feed</span>
+      <span>Prices and listing availability can change on eBay.</span>
+    </footer>
+  </main>
+
+  <script>
+    const grid = document.getElementById("listingGrid");
+    const searchInput = document.getElementById("searchInput");
+    const sourceFilter = document.getElementById("sourceFilter");
+    const sortSelect = document.getElementById("sortSelect");
+    let listings = [];
+
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
+
+    const money = (value, currency = "USD") => new Intl.NumberFormat("en-US", {
+      style: "currency", currency, maximumFractionDigits: 2
+    }).format(Number(value) || 0);
+
+    function normalizeData(data) {
+      if (Array.isArray(data.listings)) {
+        return data.listings.map((item) => ({ ...item, source: item.search || item.query || "eBay search" }));
+      }
+
+      const inventory = new Map((data.inventory || []).map((card) => [card.id, card]));
+      return (data.valuations || []).flatMap((valuation) => {
+        const card = inventory.get(valuation.cardId);
+        const source = card
+          ? `${card.company || ""} ${card.grade || ""} · ${card.name || card.cert || "Inventory slab"}`
+          : valuation.query || "Inventory search";
+        return (valuation.comparables || []).map((item) => ({ ...item, source }));
+      });
+    }
+
+    function render() {
+      const term = searchInput.value.trim().toLowerCase();
+      const source = sourceFilter.value;
+      const [sortKey, direction] = sortSelect.value.split("-");
+      const visible = listings.filter((item) =>
+        (!term || `${item.title} ${item.seller || ""}`.toLowerCase().includes(term)) &&
+        (!source || item.source === source)
+      );
+
+      visible.sort((a, b) => {
+        if (sortKey === "title") return String(a.title).localeCompare(String(b.title));
+        return ((Number(a.total ?? a.price) || 0) - (Number(b.total ?? b.price) || 0)) *
+          (direction === "desc" ? -1 : 1);
+      });
+
+      document.getElementById("resultCount").textContent = visible.length.toLocaleString();
+      if (!visible.length) {
+        grid.innerHTML = `<div class="state"><strong>No listings found</strong>${listings.length ? "Try changing your search or filter." : "The feed does not contain any comparable listings yet."}</div>`;
+        return;
+      }
+
+      grid.innerHTML = visible.map((item) => {
+        const price = Number(item.price) || 0;
+        const shipping = Number(item.shipping) || 0;
+        const total = Number(item.total) || price + shipping;
+        return `
+          <article class="listing">
+            <div class="listing-top">
+              <span class="source" title="${escapeHtml(item.source)}">${escapeHtml(item.source)}</span>
+              <span class="condition">${escapeHtml(item.condition || "Sold listing")}</span>
+            </div>
+            <h2 class="title">${escapeHtml(item.title || "Untitled eBay listing")}</h2>
+            <div class="seller">${escapeHtml(item.seller || "eBay seller")}${item.soldText ? ` · ${escapeHtml(item.soldText)}` : ""}</div>
+            <div class="listing-bottom">
+              <div>
+                <div class="price-label">Total price</div>
+                <div class="price">${money(total, item.currency || "USD")}</div>
+                <div class="shipping">${shipping ? `${money(price, item.currency || "USD")} + ${money(shipping, item.currency || "USD")} shipping` : "Shipping included or free"}</div>
+              </div>
+              <a class="ebay-link" href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapeHtml(item.title || "listing")} on eBay">View on eBay ↗</a>
+            </div>
+          </article>`;
+      }).join("");
+    }
+
+    function loadData() {
+      fetch("data.json", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then((data) => {
+          listings = normalizeData(data);
+          const previousSource = sourceFilter.value;
+          sourceFilter.innerHTML = '<option value="">All inventory searches</option>';
+          [...new Set(listings.map((item) => item.source))].sort().forEach((source) =>
+            sourceFilter.add(new Option(source, source))
+          );
+          sourceFilter.value = previousSource;
+          document.getElementById("statusText").textContent = "Local feed connected";
+          document.getElementById("statusDot").classList.remove("error");
+          document.getElementById("updatedText").textContent = data.generatedAt
+            ? `Updated ${new Date(data.generatedAt).toLocaleString()}`
+            : "Local feed loaded";
+          render();
+        })
+        .catch(() => {
+          document.getElementById("statusText").textContent = "Feed unavailable";
+          document.getElementById("statusDot").classList.add("error");
+          document.getElementById("updatedText").textContent = "Start the local dashboard server to load data.json";
+          grid.innerHTML = '<div class="state"><strong>Could not read data.json</strong>Run <code>py scraper.py --serve-only</code>, then open the local dashboard address.</div>';
+        });
+    }
+
+    searchInput.addEventListener("input", render);
+    sourceFilter.addEventListener("change", render);
+    sortSelect.addEventListener("change", render);
+    loadData();
+    setInterval(loadData, 60000);
+  </script>
+</body>
+</html>

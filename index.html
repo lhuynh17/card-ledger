@@ -619,6 +619,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   </div>
   <div class="header-actions">
     <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
+    <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
     <span class="count-chip" id="countChip">0 cards</span>
   </div>
 </header>
@@ -841,6 +842,8 @@ function setSyncStatus(text, state = "") {
   if (!button) return;
   button.textContent = text;
   button.className = "sync-btn" + (state ? " " + state : "");
+  const logout = document.getElementById("logoutBtn");
+  if (logout) logout.hidden = !cloudSession?.token;
 }
 
 async function pbRequest(path, options = {}) {
@@ -2109,6 +2112,17 @@ $('syncBtn').addEventListener('click', () => {
     $('cloudModal').classList.add('open');
     $('cloudEmail').focus();
   }
+});
+$('logoutBtn').addEventListener('click', () => {
+  if (!confirm('Sign out of cloud sync on this device? Your local inventory will remain here.')) return;
+  cloudSession = null;
+  localStorage.removeItem(PB_AUTH_KEY);
+  sessionStorage.removeItem('slabLedgerOfflineChosen');
+  setSyncStatus('Sign in to sync');
+  $('cloudPassword').value = '';
+  $('cloudMessage').textContent = '';
+  $('cloudModal').classList.add('open');
+  $('cloudEmail').focus();
 });
 $('cloudCancelBtn').addEventListener('click', () => {
   $('cloudModal').classList.remove('open');

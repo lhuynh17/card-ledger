@@ -1,0 +1,5 @@
+collector.env
+data.json
+__pycache__/
+*.pyc
+*.tmp
