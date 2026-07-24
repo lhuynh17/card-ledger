@@ -240,6 +240,9 @@
     }
   }
 
+  // Give the main Slab Ledger tile controls a stable way to open this panel.
+  window.openSlabMarket = openMarket;
+
   function attachTiles() {
     const shown = visibleInventory();
     const tiles = [...document.querySelectorAll("#inventoryList > .slab:not(.editing)")];
@@ -266,5 +269,6 @@
   setInterval(updateLogoutButton, 2000);
   setInterval(syncMarketInventory, 5 * 60 * 1000);
   window.addEventListener("focus", syncSoon);
+  attachTiles();
   syncSoon();
 })();

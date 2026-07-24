@@ -1494,21 +1494,16 @@ function render() {
     edit.className = "act"; edit.type = "button";
     edit.innerHTML = icon("edit") + "Edit";
     edit.addEventListener("click", () => { editingId = card.id; render(); });
-    const research = document.createElement("button");
-    research.className = "act"; research.type = "button";
-    research.textContent = "Research";
-    research.title = "Copy search terms and open eBay Product Research";
-    research.addEventListener("click", () => {
-      const terms = ebaySearchTerms(card);
-      window.open("https://www.ebay.com/sh/research", "_blank", "noopener");
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(terms).then(() => {
-          research.textContent = "Copied — paste in eBay";
-          setTimeout(() => { research.textContent = "Research"; }, 2200);
-        }).catch(() => prompt("Copy these terms, then paste them into Product Research:", terms));
-      } else {
-        prompt("Copy these terms, then paste them into Product Research:", terms);
+    const market = document.createElement("button");
+    market.className = "act"; market.type = "button";
+    market.textContent = "Market";
+    market.title = "View recent eBay sold listings and assumed market price";
+    market.addEventListener("click", () => {
+      if (typeof window.openSlabMarket === "function") {
+        window.openSlabMarket(card);
+        return;
       }
+      alert("Market details are still loading. Please try again.");
     });
     const sale = document.createElement("button");
     sale.className = "act sell"; sale.type = "button";
@@ -1541,7 +1536,7 @@ function render() {
       }
     });
     actions.append(edit);
-    if (card.name) actions.append(research);
+    if (card.name && !card.sold) actions.append(market);
     actions.append(sale, del);
 
     main.appendChild(actions);
@@ -2190,5 +2185,6 @@ async function init() {
 }
 init();
 </script>
+<script src="ebay-dashboard/slab-ledger-market.js"></script>
 </body>
 </html>
