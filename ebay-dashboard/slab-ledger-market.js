@@ -115,35 +115,6 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && modal.classList.contains("open")) closeMarket();
     });
-
-    const syncButton = document.getElementById("syncBtn");
-    if (syncButton && !document.getElementById("cloudLogoutBtn")) {
-      const logout = document.createElement("button");
-      logout.id = "cloudLogoutBtn";
-      logout.type = "button";
-      logout.className = "sync-btn";
-      logout.textContent = "Sign out";
-      logout.title = "Sign out of PocketBase on this device";
-      logout.style.display = cloudSession?.token ? "" : "none";
-      logout.addEventListener("click", () => {
-        if (!confirm("Sign out of cloud sync on this device? Your local inventory will remain here.")) return;
-        cloudSession = null;
-        localStorage.removeItem(PB_AUTH_KEY);
-        sessionStorage.removeItem("slabLedgerOfflineChosen");
-        setSyncStatus("Sign in to sync");
-        logout.style.display = "none";
-        document.getElementById("cloudPassword").value = "";
-        document.getElementById("cloudMessage").textContent = "";
-        document.getElementById("cloudModal").classList.add("open");
-        document.getElementById("cloudEmail").focus();
-      });
-      syncButton.insertAdjacentElement("afterend", logout);
-    }
-  }
-
-  function updateLogoutButton() {
-    const logout = document.getElementById("cloudLogoutBtn");
-    if (logout) logout.style.display = cloudSession?.token ? "" : "none";
   }
 
   function closeMarket() {
@@ -263,10 +234,8 @@
   render = function () {
     originalRender();
     attachTiles();
-    updateLogoutButton();
     syncSoon();
   };
-  setInterval(updateLogoutButton, 2000);
   setInterval(syncMarketInventory, 5 * 60 * 1000);
   window.addEventListener("focus", syncSoon);
   attachTiles();
