@@ -779,6 +779,7 @@ select option{ background: var(--surface-2); color: var(--text); }
     <div class="tabs" role="tablist" aria-label="Inventory status">
       <button type="button" id="activeTab" class="active" role="tab" aria-selected="true">Inventory <span id="activeCount">0</span></button>
       <button type="button" id="soldTab" role="tab" aria-selected="false">Sold <span id="soldCount">0</span></button>
+      <button type="button" id="needsUpdateBtn" aria-pressed="false">Needs value update</button>
     </div>
     <div class="view-toggle" aria-label="Inventory view">
       <button type="button" id="listViewBtn" class="active">List</button>
@@ -866,7 +867,8 @@ function cloudFields(card) {
     grade: card.grade || "", pop: card.pop || "", cost: numberValue(card.cost),
     notes: card.notes || "", sold: Boolean(card.sold),
     sold_price: numberValue(card.soldPrice), sold_date: card.soldDate || "",
-    sale_notes: card.saleNotes || "", added: card.added || ""
+    sale_notes: card.saleNotes || "", selling_fees: numberValue(card.sellingFees),
+    shipping_cost: numberValue(card.shippingCost), added: card.added || ""
   };
 }
 
@@ -907,6 +909,7 @@ async function remoteToLocal(record, existing = null) {
     grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
     notes:record.notes || "", sold:Boolean(record.sold), soldPrice:record.sold_price || 0,
     soldDate:record.sold_date || "", saleNotes:record.sale_notes || "",
+    sellingFees:record.selling_fees || 0, shippingCost:record.shipping_cost || 0,
     added:record.added || "", photo:await remotePhotoData(record, existing)
   };
 }
@@ -915,6 +918,7 @@ function remoteStamp(record) {
   return record.updated || JSON.stringify([
     record.company, record.cert, record.name, record.grade, record.pop, record.cost,
     record.notes, record.sold, record.sold_price, record.sold_date, record.sale_notes,
+    record.selling_fees, record.shipping_cost,
     record.added, record.photo
   ]);
 }
@@ -991,6 +995,7 @@ async function syncCloud() {
     }
     inventory = (await dbGetAll()).filter((c) => !c._deleted).sort((a,b) => b.id - a.id);
     render(); setSyncStatus("Synced", "online");
+    window.dispatchEvent(new CustomEvent("slab-cloud-synced"));
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
       cloudSession = null; localStorage.removeItem(PB_AUTH_KEY);
@@ -1320,6 +1325,7 @@ function buildGradeBadge(gradeText, company) {
 // Inventory state: active/sold tab, search, and list/grid preference.
 let searchQuery = "";
 let currentTab = "active";
+let needsValueUpdate = false;
 let viewMode = localStorage.getItem("slabLedgerView") === "grid" ? "grid" : "list";
 const money = (value) => new Intl.NumberFormat("en-US", { style:"currency", currency:"USD" }).format(Number(value) || 0);
 const numberValue = (value) => Math.max(0, Number.parseFloat(value) || 0);
@@ -1329,6 +1335,12 @@ function visibleInventory() {
   return inventory.filter((c) => {
     const inTab = currentTab === "sold" ? Boolean(c.sold) : !c.sold;
     if (!inTab) return false;
+    if (needsValueUpdate && !c.sold) {
+      const value = window.slabMarketByCard?.get(String(c.remoteId || c.id));
+      const checked = value?.lastChecked ? new Date(value.lastChecked) : null;
+      if (checked && Number.isFinite(checked.getTime()) &&
+          Date.now() - checked.getTime() <= 90 * 86400000) return false;
+    }
     if (!q) return true;
     return [c.company, c.cert, c.name, c.grade, c.pop, c.notes, c.saleNotes, c.added, c.cost, c.soldPrice, c.soldDate]
       .some((v) => String(v || "").toLowerCase().includes(q));
@@ -1353,14 +1365,19 @@ function updateSummary() {
   if (currentTab === "sold") {
     const revenue = sold.reduce((sum, c) => sum + numberValue(c.soldPrice), 0);
     const cogs = sold.reduce((sum, c) => sum + numberValue(c.cost), 0);
-    $("totalOneLabel").textContent = "Sales revenue"; $("totalOne").textContent = money(revenue);
+    const sellingCosts = sold.reduce((sum, c) => sum + numberValue(c.sellingFees) + numberValue(c.shippingCost), 0);
+    $("totalOneLabel").textContent = "Net sales proceeds"; $("totalOne").textContent = money(revenue - sellingCosts);
     $("totalTwoLabel").textContent = "Cost of goods sold"; $("totalTwo").textContent = money(cogs);
-    $("totalThreeLabel").textContent = "Gross profit"; $("totalThree").textContent = money(revenue - cogs);
+    $("totalThreeLabel").textContent = "Profit after selling costs"; $("totalThree").textContent = money(revenue - sellingCosts - cogs);
   } else {
     const basis = active.reduce((sum, c) => sum + numberValue(c.cost), 0);
+    const market = active.reduce((sum, c) => {
+      const value = window.slabMarketByCard?.get(String(c.remoteId || c.id));
+      return sum + numberValue(value?.marketValue);
+    }, 0);
     $("totalOneLabel").textContent = "Inventory cost"; $("totalOne").textContent = money(basis);
-    $("totalTwoLabel").textContent = "Items"; $("totalTwo").textContent = active.length;
-    $("totalThreeLabel").textContent = "Potential basis"; $("totalThree").textContent = money(basis);
+    $("totalTwoLabel").textContent = "Market value"; $("totalTwo").textContent = money(market);
+    $("totalThreeLabel").textContent = "Unrealized gain/loss"; $("totalThree").textContent = money(market - basis);
   }
 }
 
@@ -1472,6 +1489,14 @@ function render() {
     if (card.grade) metaParts.push(gradeDisplay(co, card.grade));
     if (card.added) metaParts.push(card.added);
     if (numberValue(card.cost)) metaParts.push("Cost " + money(card.cost));
+    if (!card.sold) {
+      const marketRecord = window.slabMarketByCard?.get(String(card.remoteId || card.id));
+      if (numberValue(marketRecord?.marketValue)) {
+        const gain = numberValue(marketRecord.marketValue) - numberValue(card.cost);
+        metaParts.push("Market " + money(marketRecord.marketValue));
+        metaParts.push((gain >= 0 ? "Gain " : "Loss ") + money(Math.abs(gain)));
+      } else metaParts.push("Market not set");
+    }
     if (card.sold) metaParts.push("Sold " + money(card.soldPrice) + (card.soldDate ? " on " + card.soldDate : ""));
     meta.textContent = metaParts.join("  ·  ");
 
@@ -1511,7 +1536,7 @@ function render() {
     sale.addEventListener("click", async () => {
       if (card.sold) {
         if (!confirm("Return this card to active inventory?")) return;
-        try { await saveCardUpdate({ ...card, sold:false, soldPrice:"", soldDate:"", saleNotes:"" }); render(); }
+        try { await saveCardUpdate({ ...card, sold:false, soldPrice:"", soldDate:"", sellingFees:"", shippingCost:"", saleNotes:"" }); render(); }
         catch (e) { alert("Couldn't update this card."); }
       } else {
         editingId = null;
@@ -1562,6 +1587,14 @@ function buildSalePanel(card) {
   const dateLabel = document.createElement("label"); dateLabel.textContent = "Sold date";
   const date = document.createElement("input"); date.type = "date"; date.value = new Date().toISOString().slice(0,10);
   dateCell.append(dateLabel, date);
+  const feesCell = document.createElement("div"); feesCell.className = "field";
+  const feesLabel = document.createElement("label"); feesLabel.textContent = "Selling/platform fees";
+  const fees = document.createElement("input"); fees.type = "number"; fees.min = "0"; fees.step = "0.01"; fees.inputMode = "decimal"; fees.placeholder = "0.00";
+  feesCell.append(feesLabel, fees);
+  const shippingCell = document.createElement("div"); shippingCell.className = "field";
+  const shippingLabel = document.createElement("label"); shippingLabel.textContent = "Shipping cost";
+  const shipping = document.createElement("input"); shipping.type = "number"; shipping.min = "0"; shipping.step = "0.01"; shipping.inputMode = "decimal"; shipping.placeholder = "0.00";
+  shippingCell.append(shippingLabel, shipping);
   const noteCell = document.createElement("div"); noteCell.className = "field sale-note";
   const noteLabel = document.createElement("label"); noteLabel.textContent = "Sale note (optional)";
   const note = document.createElement("textarea"); note.rows = 2;
@@ -1569,13 +1602,13 @@ function buildSalePanel(card) {
   const save = document.createElement("button"); save.type = "button"; save.className = "act sell"; save.textContent = "Save sale";
   save.addEventListener("click", async () => {
     if (price.value === "" || numberValue(price.value) < 0) { alert("Enter the sold price."); return; }
-    try { await saveCardUpdate({ ...card, sold:true, soldPrice:numberValue(price.value), soldDate:date.value, saleNotes:note.value.trim() }); render(); }
+    try { await saveCardUpdate({ ...card, sold:true, soldPrice:numberValue(price.value), soldDate:date.value, sellingFees:numberValue(fees.value), shippingCost:numberValue(shipping.value), saleNotes:note.value.trim() }); render(); }
     catch (e) { alert("Couldn't save the sale."); }
   });
   const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "act"; cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => { const tile = panel.parentElement; panel.remove(); tile?.classList.remove("sale-open"); });
   const actions = document.createElement("div"); actions.className = "sale-actions"; actions.append(cancel, save);
-  panel.append(priceCell, dateCell, noteCell, actions); setTimeout(() => price.focus(), 0); return panel;
+  panel.append(priceCell, dateCell, feesCell, shippingCell, noteCell, actions); setTimeout(() => price.focus(), 0); return panel;
 }
 
 // Build the inline edit form for a card. Lets you fix any field or
@@ -1654,11 +1687,13 @@ function buildEditForm(card) {
   const popI   = field("Pop", card.pop, true);
   const costI  = field("Cost", card.cost, true);
   const notesI = noteField(card.notes, "Quick note");
-  let soldPriceI = null, soldDateI = null, saleNotesI = null;
+  let soldPriceI = null, soldDateI = null, sellingFeesI = null, shippingCostI = null, saleNotesI = null;
   if (card.sold) {
     soldPriceI = field("Sold price", card.soldPrice, true);
     soldDateI = field("Sold date", card.soldDate, false);
     soldDateI.type = "date";
+    sellingFeesI = field("Selling/platform fees", card.sellingFees, true);
+    shippingCostI = field("Shipping cost", card.shippingCost, true);
     saleNotesI = noteField(card.saleNotes, "Sale note");
   }
 
@@ -1722,7 +1757,10 @@ function buildEditForm(card) {
       name: nameI.value.trim(), grade: gradeI.value.trim(),
       pop: popI.value.trim(), cost: numberValue(costI.value), notes: notesI.value.trim(),
       soldPrice: soldPriceI ? numberValue(soldPriceI.value) : card.soldPrice,
-      soldDate: soldDateI ? soldDateI.value : card.soldDate, photo: editPhoto };
+      soldDate: soldDateI ? soldDateI.value : card.soldDate,
+      sellingFees: sellingFeesI ? numberValue(sellingFeesI.value) : card.sellingFees,
+      shippingCost: shippingCostI ? numberValue(shippingCostI.value) : card.shippingCost,
+      photo: editPhoto };
     if (saleNotesI) updated.saleNotes = saleNotesI.value.trim();
     try { await saveCardUpdate(updated); }
     catch (e) { alert("Couldn't save changes — device storage may be full."); return; }
@@ -1947,6 +1985,13 @@ function selectTab(tab) {
 }
 $("activeTab").addEventListener("click", () => selectTab("active"));
 $("soldTab").addEventListener("click", () => selectTab("sold"));
+$("needsUpdateBtn").addEventListener("click", () => {
+  needsValueUpdate = !needsValueUpdate;
+  $("needsUpdateBtn").classList.toggle("active", needsValueUpdate);
+  $("needsUpdateBtn").setAttribute("aria-pressed", String(needsValueUpdate));
+  if (needsValueUpdate && currentTab !== "active") selectTab("active");
+  else render();
+});
 $("listViewBtn").addEventListener("click", () => { viewMode = "list"; localStorage.setItem("slabLedgerView", viewMode); render(); });
 $("gridViewBtn").addEventListener("click", () => { viewMode = "grid"; localStorage.setItem("slabLedgerView", viewMode); render(); });
 
@@ -2004,10 +2049,15 @@ function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') +
 $("exportBtn").addEventListener("click", () => {
   if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
-  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Notes", "Status", "Sold Price", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
+  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Market Value", "Notes", "Status", "Sold Price", "Selling Fees", "Shipping Cost", "Net Proceeds", "Profit", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
   const rows = inventory.map((c) =>
-    [c.company || "PSA", c.cert, c.name, c.grade, c.pop, money(c.cost), c.notes,
-     c.sold ? "Sold" : "Inventory", c.sold ? money(c.soldPrice) : "", c.soldDate, c.saleNotes, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
+    [c.company || "PSA", c.cert, c.name, c.grade, c.pop, money(c.cost),
+     money(window.slabMarketByCard?.get(String(c.remoteId || c.id))?.marketValue), c.notes,
+     c.sold ? "Sold" : "Inventory", c.sold ? money(c.soldPrice) : "",
+     c.sold ? money(c.sellingFees) : "", c.sold ? money(c.shippingCost) : "",
+     c.sold ? money(numberValue(c.soldPrice) - numberValue(c.sellingFees) - numberValue(c.shippingCost)) : "",
+     c.sold ? money(numberValue(c.soldPrice) - numberValue(c.sellingFees) - numberValue(c.shippingCost) - numberValue(c.cost)) : "",
+     c.soldDate, c.saleNotes, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
   const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -2185,6 +2235,7 @@ async function init() {
 }
 init();
 </script>
-<script src="ebay-dashboard/slab-ledger-market.js?v=0a6174d"></script>
+<script src="ebay-dashboard/slab-ledger-market.js?v=business-ledger-1"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-1"></script>
 </body>
 </html>

@@ -10,8 +10,8 @@ if %errorlevel%==0 (
     set "SLAB_PYTHON=python"
 )
 
-echo This one-time installer will create the market_values collection.
-echo It will not delete or replace any existing PocketBase collection.
+echo This installer will prepare market values and business finance records.
+echo It adds missing fields and collections without deleting existing records.
 echo Your PocketBase superuser password will not be saved.
 echo.
 %SLAB_PYTHON% setup_pocketbase.py

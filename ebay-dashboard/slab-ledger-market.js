@@ -1,243 +1,186 @@
 (function () {
   "use strict";
 
-  const MARKET_BASE = "http://127.0.0.1:8000";
-  let syncTimer = null;
+  const DAY = 86400000;
+  const values = window.slabMarketByCard || new Map();
+  window.slabMarketByCard = values;
+  const idFor = (card) => String(card.remoteId || card.id);
+  const cash = (value) => new Intl.NumberFormat("en-US", {
+    style:"currency", currency:"USD", maximumFractionDigits:2
+  }).format(Number(value) || 0);
+  const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+  const jsonArray = (value) => {
+    if (Array.isArray(value)) return value;
+    try { return JSON.parse(value || "[]"); } catch (_) { return []; }
+  };
+  const shortDate = (value) => {
+    const date = new Date(value || "");
+    return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+  };
 
-  function marketId(card) {
-    return String(card.remoteId || card.id);
-  }
-
-  function activeInventoryPayload() {
-    return inventory.filter((card) => !card.sold).map((card) => ({
-      id: marketId(card),
-      company: card.company || "PSA",
-      cert: card.cert || "",
-      name: card.name || "",
-      grade: card.grade || "",
-      cost: Number(card.cost) || 0
-    }));
-  }
-
-  async function syncMarketInventory() {
-    // Cloud-signed-in apps already write inventory to PocketBase. The Windows
-    // collector reads it there, so phones never need to contact localhost.
-    if (cloudSession?.token) return;
-    try {
-      await fetch(MARKET_BASE + "/api/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inventory: activeInventoryPayload() })
-      });
-    } catch (error) {
-      // The market collector is optional. Slab Ledger continues normally when
-      // run.bat is closed or the local bridge is unavailable.
-    }
-  }
-
-  function syncSoon() {
-    clearTimeout(syncTimer);
-    syncTimer = setTimeout(syncMarketInventory, 1200);
-  }
-
-  function money(value) {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency", currency: "USD", maximumFractionDigits: 2
-    }).format(Number(value) || 0);
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    })[character]);
-  }
-
-  function addInterface() {
-    const style = document.createElement("style");
-    style.textContent = `
-      .slab[data-market-card] { cursor:pointer; }
-      .slab[data-market-card]:hover { border-color:#9fb6a6; }
-      .market-modal {
-        position:fixed; inset:0; z-index:1200; display:none; place-items:center;
-        padding:20px; background:rgba(8,16,11,.68); backdrop-filter:blur(5px);
-      }
-      .market-modal.open { display:grid; }
-      .market-panel {
-        width:min(760px,100%); max-height:min(760px,90vh); overflow:auto;
-        border:1px solid #dce5de; border-radius:18px; background:#fff;
-        color:#17211b; box-shadow:0 28px 90px rgba(0,0,0,.28);
-      }
-      .market-head { display:flex; justify-content:space-between; gap:20px; padding:22px 24px; border-bottom:1px solid #e3e8e4; }
-      .market-kicker { color:#52705d; font-size:11px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
-      .market-title { margin:5px 0 0; font-size:20px; line-height:1.25; }
-      .market-close { width:36px; height:36px; border:1px solid #dce3dd; border-radius:10px; background:#f5f7f4; cursor:pointer; font-size:20px; }
-      .market-body { padding:24px; }
-      .market-value-box { display:grid; grid-template-columns:1fr auto; align-items:end; gap:18px; padding:19px; border-radius:14px; background:#eaf2ed; }
-      .market-label { color:#5e6d63; font-size:11px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
-      .market-value { margin-top:3px; font-size:38px; font-weight:850; letter-spacing:-.05em; }
-      .market-confidence { color:#46614f; font-size:12px; text-align:right; }
-      .market-method { margin:10px 2px 22px; color:#6d776f; font-size:12px; }
-      .market-sales { display:grid; gap:9px; }
-      .market-sale { display:grid; grid-template-columns:1fr auto; gap:16px; padding:14px 0; border-bottom:1px solid #e7ebe8; }
-      .market-sale-title { color:#17211b; font-weight:700; text-decoration:none; }
-      .market-sale-title:hover { color:#17663e; text-decoration:underline; }
-      .market-sale-meta { margin-top:4px; color:#758078; font-size:11px; }
-      .market-sale-price { font-size:18px; font-weight:800; white-space:nowrap; }
-      .market-empty { padding:30px 12px; color:#6d776f; text-align:center; }
-      .market-error { padding:15px; border-radius:10px; background:#fff0ee; color:#8a332a; }
-      .market-search { display:inline-block; margin-top:18px; color:#175b39; font-weight:750; }
-      @media(max-width:560px) {
-        .market-modal { padding:8px; }
-        .market-panel { max-height:96vh; border-radius:14px; }
-        .market-value-box { grid-template-columns:1fr; }
-        .market-confidence { text-align:left; }
-      }
-    `;
-    document.head.appendChild(style);
-
-    const modal = document.createElement("div");
-    modal.id = "marketModal";
-    modal.className = "market-modal";
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", "marketModalTitle");
-    modal.innerHTML = `
-      <section class="market-panel">
-        <header class="market-head">
-          <div><div class="market-kicker">eBay sold market</div><h2 class="market-title" id="marketModalTitle">Market details</h2></div>
-          <button class="market-close" type="button" aria-label="Close market details">×</button>
-        </header>
-        <div class="market-body" id="marketModalBody"></div>
-      </section>`;
-    document.body.appendChild(modal);
-    modal.querySelector(".market-close").addEventListener("click", closeMarket);
-    modal.addEventListener("click", (event) => { if (event.target === modal) closeMarket(); });
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && modal.classList.contains("open")) closeMarket();
-    });
-  }
-
-  function closeMarket() {
-    document.getElementById("marketModal").classList.remove("open");
-    document.body.style.overflow = "";
-  }
-
-  async function cloudMarketValue(card) {
-    if (!cloudSession?.token || !card.remoteId) return undefined;
-    const filter = `card_id = "${String(card.remoteId).replaceAll('"', '\\"')}"`;
-    const data = await pbRequest(
-      "/api/collections/market_values/records?perPage=1&filter=" + encodeURIComponent(filter)
-    );
-    const record = data?.items?.[0];
-    if (!record) return null;
-    let comparables = record.comparables || [];
-    if (typeof comparables === "string") {
-      try { comparables = JSON.parse(comparables); } catch (error) { comparables = []; }
-    }
+  function fromRecord(record) {
+    const comparables = jsonArray(record.comparables);
     return {
-      cardId: record.card_id,
-      query: record.query || "",
-      searchUrl: record.search_url || "",
-      marketValue: Number(record.market_value) || 0,
-      confidence: record.confidence || "low",
-      lastChecked: record.checked_at || record.updated || "",
-      comparableCount: Number(record.comparable_count) || 0,
-      rejectedCount: Number(record.rejected_count) || 0,
-      low: Number(record.low) || 0,
-      high: Number(record.high) || 0,
-      recentComparables: Array.isArray(comparables) ? comparables : [],
-      comparables: Array.isArray(comparables) ? comparables : [],
-      error: record.error || ""
+      recordId:record.id, cardId:String(record.card_id),
+      marketValue:Number(record.market_value) || 0,
+      lastChecked:record.checked_at || record.updated || "",
+      source:record.source || "eBay Product Research",
+      notes:record.notes || "", comparables,
+      history:jsonArray(record.history), searchUrl:record.search_url || "",
+      confidence:record.confidence || "low"
     };
   }
 
-  async function localMarketValue(card) {
-    const response = await fetch(MARKET_BASE + "/data.json?time=" + Date.now(), { cache: "no-store" });
-    if (!response.ok) throw new Error("Market collector did not respond.");
-    const data = await response.json();
-    return (data.valuations || []).find((item) => String(item.cardId) === marketId(card)) || null;
+  function age(value) {
+    if (!value?.lastChecked) return { text:"Never valued", kind:"missing" };
+    const checked = new Date(value.lastChecked);
+    if (!Number.isFinite(checked.getTime())) return { text:"Never valued", kind:"missing" };
+    const days = Math.max(0, Math.floor((Date.now() - checked.getTime()) / DAY));
+    if (days <= 30) return { text:"Current", kind:"current" };
+    if (days <= 90) return { text:`${days} days old`, kind:"aging" };
+    return { text:`${days} days old`, kind:"stale" };
   }
 
-  async function openMarket(card) {
-    const modal = document.getElementById("marketModal");
-    const body = document.getElementById("marketModalBody");
-    document.getElementById("marketModalTitle").textContent = card.name || "Market details";
-    body.innerHTML = '<div class="market-empty">Loading recent sold listings…</div>';
-    modal.classList.add("open");
-    document.body.style.overflow = "hidden";
-
+  async function loadAll() {
+    if (!cloudSession?.token) return;
     try {
-      const cloudValue = await cloudMarketValue(card);
-      const value = cloudValue === undefined ? await localMarketValue(card) : cloudValue;
-      if (!value) {
-        body.innerHTML = `
-          <div class="market-empty">
-            <strong>No market lookup yet.</strong><br>
-            This card is in the paced collection queue. Keep the Windows collector running.
-          </div>`;
-        return;
+      const data = await pbRequest("/api/collections/market_values/records?perPage=500&sort=-checked_at");
+      values.clear();
+      for (const row of data?.items || []) {
+        const value = fromRecord(row);
+        if (!values.has(value.cardId)) values.set(value.cardId, value);
       }
-
-      const recent = (value.recentComparables || value.comparables || []).slice(0, 3);
-      const sales = recent.map((sale, index) => `
-        <article class="market-sale">
-          <div>
-            <a class="market-sale-title" href="${escapeHtml(sale.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sale.title || "eBay sold listing")}</a>
-            <div class="market-sale-meta">Sale ${index + 1}${sale.soldText ? " · " + escapeHtml(sale.soldText) : ""}</div>
-          </div>
-          <div class="market-sale-price">${money(sale.total || sale.price)}</div>
-        </article>`).join("");
-
-      body.innerHTML = `
-        <div class="market-value-box">
-          <div>
-            <div class="market-label">Assumed market price</div>
-            <div class="market-value">${value.marketValue ? money(value.marketValue) : "—"}</div>
-          </div>
-          <div class="market-confidence">
-            ${recent.length} recent accepted sale${recent.length === 1 ? "" : "s"}<br>
-            ${value.confidence || "low"} confidence
-          </div>
-        </div>
-        <div class="market-method">Average of the latest ${recent.length || 3} accepted sold listing${recent.length === 1 ? "" : "s"}. Obvious title mismatches and price outliers are excluded.</div>
-        <div class="market-sales">${sales || '<div class="market-empty">No accepted sold listings were returned yet.</div>'}</div>
-        ${value.error ? `<div class="market-error">${escapeHtml(value.error)}</div>` : ""}
-        <a class="market-search" href="${escapeHtml(value.searchUrl)}" target="_blank" rel="noopener noreferrer">Review the eBay sold search ↗</a>`;
+      render();
+      window.dispatchEvent(new CustomEvent("slab-market-updated"));
     } catch (error) {
-      body.innerHTML = `
-        <div class="market-error">
-          The local market collector is not available. Double-click run.bat and leave its window open, then try again.
-        </div>`;
+      console.warn("Market values unavailable:", error);
     }
   }
 
-  // Give the main Slab Ledger tile controls a stable way to open this panel.
-  window.openSlabMarket = openMarket;
+  function installUi() {
+    const style = document.createElement("style");
+    style.textContent = `
+      .slab[data-market-card]{cursor:pointer}.slab[data-market-card]:hover{border-color:#8cab97}
+      .market-age{display:inline-flex;margin-top:8px;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:750}
+      .market-age.current{background:#e3f5e9;color:#24633d}.market-age.aging{background:#fff3d2;color:#765b10}
+      .market-age.stale{background:#ffe5e1;color:#8a352c}.market-age.missing{background:var(--surface-2);color:var(--muted)}
+      .market-modal{position:fixed;inset:0;z-index:1200;display:none;place-items:center;padding:16px;background:rgba(7,13,10,.75);backdrop-filter:blur(5px)}
+      .market-modal.open{display:grid}.market-panel{width:min(800px,100%);max-height:94vh;overflow:auto;border-radius:17px;background:#fff;color:#17211b;box-shadow:0 28px 90px #0006}
+      .market-head{display:flex;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid #e2e8e3}.market-head h2{margin:4px 0 0;font-size:20px}
+      .market-kicker{color:#52705d;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.market-close{width:38px;height:38px;border:1px solid #dce3dd;border-radius:10px;background:#f5f7f4;font-size:21px;cursor:pointer}
+      .market-body{padding:22px}.market-summary{display:flex;justify-content:space-between;gap:15px;padding:17px;border-radius:13px;background:#eaf2ed}
+      .market-summary small{display:block;color:#5e6d63;font-weight:750;text-transform:uppercase}.market-price{font-size:36px;font-weight:850}.market-status{text-align:right;color:#52675a;font-size:12px}
+      .manual-comps{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:18px}.mf{display:grid;gap:5px}.mf.full{grid-column:1/-1}.mf label{font-size:11px;font-weight:750;color:#536159}
+      .mf input,.mf select,.mf textarea{box-sizing:border-box;width:100%;min-height:42px;padding:9px;border:1px solid #d7e0d9;border-radius:9px;background:#fff;color:#17211b;font:inherit}.mf textarea{min-height:70px}
+      .market-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;gap:9px}.market-actions a,.market-actions button{box-sizing:border-box;min-height:42px;padding:10px 13px;border:1px solid #d5ddd7;border-radius:9px;background:#f5f7f4;color:#17462f;font-weight:750;text-decoration:none;cursor:pointer}.market-actions .primary{background:#17663e;color:#fff}
+      .market-message{grid-column:1/-1;min-height:17px;color:#8a332a;font-size:12px}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
+      @media(max-width:620px){.market-modal{padding:6px}.market-body{padding:15px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}}
+    `;
+    document.head.appendChild(style);
+    const modal = document.createElement("div");
+    modal.id = "marketModal"; modal.className = "market-modal";
+    modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
+    modal.innerHTML = `<section class="market-panel"><header class="market-head">
+      <div><div class="market-kicker">Manual market research</div><h2 id="marketModalTitle">Market details</h2></div>
+      <button class="market-close" type="button" aria-label="Close market details">×</button>
+      </header><div class="market-body" id="marketModalBody"></div></section>`;
+    document.body.appendChild(modal);
+    const close = () => { modal.classList.remove("open"); document.body.style.overflow = ""; };
+    modal.querySelector(".market-close").addEventListener("click", close);
+    modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+  }
 
-  function attachTiles() {
+  function show(card, value = values.get(idFor(card))) {
+    const modal = document.getElementById("marketModal");
+    const comps = (value?.comparables || []).slice(0, 3);
+    const history = (value?.history || []).slice().reverse().slice(0, 8);
+    const state = age(value);
+    const query = ebaySearchTerms(card);
+    const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
+      _nkw:query, LH_Sold:"1", LH_Complete:"1", _sop:"13"
+    });
+    document.getElementById("marketModalTitle").textContent = card.name || "Market details";
+    document.getElementById("marketModalBody").innerHTML = `
+      <div class="market-summary"><div><small>Assumed market price</small><div class="market-price" id="marketAverage">${value?.marketValue ? cash(value.marketValue) : "—"}</div></div>
+      <div class="market-status">${safe(state.text)}<br>${safe(value?.source || "Enter up to three comps")}</div></div>
+      <form id="manualCompForm" class="manual-comps">
+      ${[0,1,2].map((i) => `<div class="mf"><label>Sold comp ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="0.00"></div>
+      <div class="mf full"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="https://..."></div>`).join("")}
+      <div class="mf"><label>Source</label><select id="marketSource">${["eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
+      <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
+      <div class="mf full"><label>Notes</label><textarea id="marketNotes" placeholder="Why these comps were selected…">${safe(value?.notes || "")}</textarea></div>
+      <div class="market-actions"><a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open sold search ↗</a><button class="primary" type="submit">Save market update</button></div>
+      <div class="market-message" id="marketMessage"></div></form>
+      <div class="market-history"><h3>Value history</h3>${history.length ? history.map((item) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}</span></div>`).join("") : "<p class='market-status' style='text-align:left'>No saved history yet.</p>"}</div>`;
+    modal.classList.add("open"); document.body.style.overflow = "hidden";
+    const priceInputs = [...document.querySelectorAll(".comp-price")];
+    const recalc = () => {
+      const valid = priceInputs.map((input) => Number(input.value)).filter((n) => n > 0);
+      document.getElementById("marketAverage").textContent = valid.length
+        ? cash(valid.reduce((sum, n) => sum + n, 0) / valid.length) : "—";
+    };
+    priceInputs.forEach((input) => input.addEventListener("input", recalc));
+    document.getElementById("manualCompForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const message = document.getElementById("marketMessage");
+      try { await save(card, value); }
+      catch (error) { message.textContent = error.message || "Could not save market data."; }
+    });
+  }
+
+  async function save(card, previous) {
+    if (!cloudSession?.token || !card.remoteId) throw new Error("Sign in and sync this card first.");
+    const prices = [...document.querySelectorAll(".comp-price")].map((input) => Number(input.value));
+    const urls = [...document.querySelectorAll(".comp-url")].map((input) => input.value.trim());
+    const comps = prices.map((price, index) => ({ price, total:price, url:urls[index], title:`Manual comp ${index + 1}` }))
+      .filter((comp) => comp.price > 0);
+    if (!comps.length) throw new Error("Enter at least one sold comp price.");
+    const average = Math.round(comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length * 100) / 100;
+    const source = document.getElementById("marketSource").value;
+    const checked = document.getElementById("marketDate").value + " 12:00:00.000Z";
+    const history = [...(previous?.history || []), { date:checked, value:average, source, comparables:comps }].slice(-100);
+    const payload = {
+      owner:cloudSession.record.id, card_id:String(card.remoteId), query:ebaySearchTerms(card),
+      search_url:comps.find((comp) => comp.url)?.url || "", market_value:average,
+      confidence:comps.length >= 3 ? "high" : comps.length === 2 ? "medium" : "low",
+      checked_at:checked, comparable_count:comps.length, rejected_count:0,
+      low:Math.min(...comps.map((comp) => comp.price)), high:Math.max(...comps.map((comp) => comp.price)),
+      comparables:comps, source, notes:document.getElementById("marketNotes").value.trim(),
+      history, error:""
+    };
+    const row = await pbRequest("/api/collections/market_values/records" + (previous?.recordId ? "/" + previous.recordId : ""), {
+      method:previous?.recordId ? "PATCH" : "POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)
+    });
+    const value = fromRecord(row); values.set(value.cardId, value);
+    render(); window.dispatchEvent(new CustomEvent("slab-market-updated")); show(card, value);
+  }
+
+  function decorate() {
     const shown = visibleInventory();
-    const tiles = [...document.querySelectorAll("#inventoryList > .slab:not(.editing)")];
-    tiles.forEach((tile, index) => {
-      const card = shown[index];
-      if (!card || card.sold) return;
-      tile.dataset.marketCard = marketId(card);
-      tile.title = "Click the card tile for recent eBay sold listings";
+    [...document.querySelectorAll("#inventoryList > .slab:not(.editing)")].forEach((tile, index) => {
+      const card = shown[index]; if (!card || card.sold) return;
+      const status = age(values.get(idFor(card)));
+      tile.dataset.marketCard = idFor(card);
+      const main = tile.querySelector(".slab-main");
+      if (main && !main.querySelector(".market-age")) {
+        const badge = document.createElement("div");
+        badge.className = "market-age " + status.kind; badge.textContent = status.text;
+        main.insertBefore(badge, main.querySelector(".slab-actions"));
+      }
       tile.addEventListener("click", (event) => {
-        if (event.target.closest("button, a, input, select, textarea, .slab-thumb")) return;
-        openMarket(card);
+        if (!event.target.closest("button,a,input,select,textarea,.slab-thumb")) show(card);
       });
     });
   }
 
-  addInterface();
-  const originalRender = render;
-  render = function () {
-    originalRender();
-    attachTiles();
-    syncSoon();
-  };
-  setInterval(syncMarketInventory, 5 * 60 * 1000);
-  window.addEventListener("focus", syncSoon);
-  attachTiles();
-  syncSoon();
+  installUi(); window.openSlabMarket = show; window.refreshSlabMarketData = loadAll;
+  const baseRender = render;
+  render = function () { baseRender(); decorate(); };
+  window.addEventListener("focus", loadAll);
+  window.addEventListener("slab-cloud-synced", loadAll);
+  decorate(); loadAll();
 })();

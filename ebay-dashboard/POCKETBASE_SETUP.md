@@ -1,80 +1,29 @@
-# PocketBase setup for remote market values
+# PocketBase setup for Slab Ledger
 
-Slab Ledger already stores inventory in the `cards` collection. Add one new
-base collection named `market_values`; do not add market fields to `cards`.
+Run `setup-pocketbase.bat` after pulling this version. Enter the PocketBase URL
+and superuser credentials when prompted. The installer never saves those
+superuser credentials and never deletes existing records.
 
-## Automatic setup
+It prepares:
 
-Run `setup-pocketbase.bat` and enter the PocketBase URL and superuser
-credentials when prompted. The installer:
+- `cards`: adds `selling_fees` and `shipping_cost`;
+- `market_values`: keeps manual comps, source, notes, update date, and history;
+- `business_entries`: stores owner-scoped expenses, contributions, draws,
+  loans, and other income.
 
-- creates `market_values` only if it is missing;
-- verifies all required fields when it already exists;
-- never deletes or replaces an existing collection;
-- does not save the superuser email, password, or token.
+Every market and business record is protected by owner-based API rules:
 
-The manual specification below is retained for review and troubleshooting.
-
-## Fields
-
-Create these fields in `market_values`:
-
-| Field | Type | Required |
-|---|---|---|
-| `owner` | Relation → `users` (single) | Yes |
-| `card_id` | Text | Yes |
-| `query` | Text | No |
-| `search_url` | URL or Text | No |
-| `market_value` | Number | No |
-| `confidence` | Select: `low`, `medium`, `high` | No |
-| `checked_at` | Date | No |
-| `comparable_count` | Number | No |
-| `rejected_count` | Number | No |
-| `low` | Number | No |
-| `high` | Number | No |
-| `comparables` | JSON | No |
-| `error` | Text | No |
-
-If your PocketBase version supports indexes, add a unique index over
-`owner, card_id`.
-
-## API rules
-
-Use these rules:
-
-- List/Search: `owner = @request.auth.id`
-- View: `owner = @request.auth.id`
+- List/View/Update/Delete: `owner = @request.auth.id`
 - Create: `@request.body.owner = @request.auth.id`
-- Update: `owner = @request.auth.id`
-- Delete: `owner = @request.auth.id`
 
-These rules ensure each signed-in user can only see and modify their own market
-records.
+## After setup
 
-## Collector configuration
+1. Refresh Slab Ledger and sign in.
+2. Use **Market** on an active card to save up to three manual comps.
+3. When marking a card sold, enter platform fees and shipping cost.
+4. Use **Business finances** for operating expenses and owner/capital activity.
+5. Keep receipts, invoices, bank statements, and annual exports with your tax
+   records. Slab Ledger organizes records but does not determine tax treatment.
 
-1. Copy `collector.env.example` to `collector.env`.
-2. Set `SLAB_POCKETBASE_URL` to the same `https://...ts.net` address used by
-   Slab Ledger.
-3. Enter the PocketBase email and password used by Slab Ledger.
-4. Keep `collector.env` private.
-5. Run `setup-windows.bat` once to install the collector and its standard
-   Chromium browser.
-6. Run `test-cloud.bat`. It should report the number of active cards found.
-7. Run `install-slab-ledger-integration.bat` again so the newest phone panel
-   is copied into the Slab Ledger folder.
-8. Start `run.bat`.
-
-The Windows computer must have Tailscale connected and must be able to reach
-PocketBase. The phone also needs Tailscale connected while it synchronizes.
-
-## Expected flow
-
-1. Slab Ledger saves inventory to `cards`.
-2. The Windows collector checks `cards` every minute.
-3. A paced eBay lookup produces a market value.
-4. The collector creates or updates the corresponding `market_values` record.
-5. Slab Ledger reads that record when the card tile is opened.
-
-`data.json` remains a local cache. PocketBase is the cross-device source of
-truth.
+The Windows scraper is optional and is not required for manual market values or
+the business ledger.

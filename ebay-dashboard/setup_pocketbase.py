@@ -1,8 +1,4 @@
-"""One-time, non-destructive PocketBase schema installer.
-
-Creates the market_values collection when it doesn't exist. Superuser
-credentials are used only for this process and are never written to disk.
-"""
+"""Non-destructive PocketBase installer for Slab Ledger business records."""
 
 from __future__ import annotations
 
@@ -17,11 +13,42 @@ import requests
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / "collector.env"
 TIMEOUT = 25
-REQUIRED_FIELDS = {
-    "owner", "card_id", "query", "search_url", "market_value", "confidence",
-    "checked_at", "comparable_count", "rejected_count", "low", "high",
-    "comparables", "error",
-}
+
+MARKET_FIELDS = [
+    {"name": "card_id", "type": "text", "required": True, "max": 100},
+    {"name": "query", "type": "text", "max": 2000},
+    {"name": "search_url", "type": "url"},
+    {"name": "market_value", "type": "number"},
+    {"name": "confidence", "type": "select", "maxSelect": 1,
+     "values": ["low", "medium", "high"]},
+    {"name": "checked_at", "type": "date"},
+    {"name": "comparable_count", "type": "number", "onlyInt": True},
+    {"name": "rejected_count", "type": "number", "onlyInt": True},
+    {"name": "low", "type": "number"},
+    {"name": "high", "type": "number"},
+    {"name": "comparables", "type": "json", "maxSize": 2000000},
+    {"name": "source", "type": "text", "max": 200},
+    {"name": "notes", "type": "text", "max": 10000},
+    {"name": "history", "type": "json", "maxSize": 2000000},
+    {"name": "error", "type": "text", "max": 5000},
+]
+
+BUSINESS_FIELDS = [
+    {"name": "entry_date", "type": "date", "required": True},
+    {"name": "entry_type", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["expense", "contribution", "draw", "other_income",
+                "loan_in", "loan_payment"]},
+    {"name": "category", "type": "text", "max": 300},
+    {"name": "amount", "type": "number", "required": True, "min": 0},
+    {"name": "vendor", "type": "text", "max": 500},
+    {"name": "deductible_percent", "type": "number", "min": 0, "max": 100},
+    {"name": "notes", "type": "text", "max": 10000},
+]
+
+CARD_FINANCE_FIELDS = [
+    {"name": "selling_fees", "type": "number", "min": 0},
+    {"name": "shipping_cost", "type": "number", "min": 0},
+]
 
 
 def configured_url() -> str:
@@ -43,129 +70,133 @@ def response_message(response: requests.Response) -> str:
 def authenticate(base_url: str, email: str, password: str) -> str:
     response = requests.post(
         base_url + "/api/collections/_superusers/auth-with-password",
-        json={"identity": email, "password": password},
-        timeout=TIMEOUT,
+        json={"identity": email, "password": password}, timeout=TIMEOUT,
     )
-    if response.status_code == 401 and response.headers.get("Content-Type", "").startswith("application/json"):
-        data = response.json()
-        if data.get("mfaId"):
-            raise RuntimeError(
-                "This superuser requires MFA. Create the collection in the "
-                "PocketBase dashboard or temporarily use a non-MFA setup account."
-            )
     if not response.ok:
         raise RuntimeError(f"Superuser sign-in failed: {response_message(response)}")
     return response.json()["token"]
 
 
-def api_get(base_url: str, token: str, path: str) -> requests.Response:
-    return requests.get(
-        base_url + path,
+def request(base_url: str, token: str, method: str, path: str, body=None):
+    response = requests.request(
+        method, base_url + path,
+        headers={"Authorization": token, "Accept": "application/json",
+                 "Content-Type": "application/json"},
+        json=body, timeout=TIMEOUT,
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"PocketBase {method} {path} failed: {response_message(response)}"
+        )
+    return response.json() if response.content else None
+
+
+def collection(base_url: str, token: str, name: str):
+    response = requests.get(
+        base_url + "/api/collections/" + name,
         headers={"Authorization": token, "Accept": "application/json"},
         timeout=TIMEOUT,
     )
-
-
-def verify_existing(collection: dict) -> None:
-    present = {field.get("name") for field in collection.get("fields", [])}
-    missing = sorted(REQUIRED_FIELDS - present)
-    if missing:
-        raise RuntimeError(
-            "market_values already exists but is missing fields: " + ", ".join(missing) +
-            ". Nothing was changed."
-        )
-    print("market_values already exists and contains every required field.")
-
-
-def create_collection(base_url: str, token: str, users_id: str) -> None:
-    owner_rule = '@request.auth.id != "" && owner = @request.auth.id'
-    body = {
-        "name": "market_values",
-        "type": "base",
-        "listRule": owner_rule,
-        "viewRule": owner_rule,
-        "createRule": '@request.auth.id != "" && @request.body.owner = @request.auth.id',
-        "updateRule": owner_rule,
-        "deleteRule": owner_rule,
-        "fields": [
-            {
-                "name": "owner", "type": "relation", "required": True,
-                "collectionId": users_id, "maxSelect": 1, "cascadeDelete": True,
-            },
-            {"name": "card_id", "type": "text", "required": True, "max": 100},
-            {"name": "query", "type": "text", "max": 2000},
-            {"name": "search_url", "type": "url"},
-            {"name": "market_value", "type": "number"},
-            {
-                "name": "confidence", "type": "select", "maxSelect": 1,
-                "values": ["low", "medium", "high"],
-            },
-            {"name": "checked_at", "type": "date"},
-            {"name": "comparable_count", "type": "number", "onlyInt": True},
-            {"name": "rejected_count", "type": "number", "onlyInt": True},
-            {"name": "low", "type": "number"},
-            {"name": "high", "type": "number"},
-            {"name": "comparables", "type": "json", "maxSize": 2000000},
-            {"name": "error", "type": "text", "max": 5000},
-        ],
-        "indexes": [
-            "CREATE UNIQUE INDEX `idx_market_values_owner_card` "
-            "ON `market_values` (`owner`, `card_id`)"
-        ],
-    }
-    response = requests.post(
-        base_url + "/api/collections",
-        headers={
-            "Authorization": token,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-        json=body,
-        timeout=TIMEOUT,
-    )
+    if response.status_code == 404:
+        return None
     if not response.ok:
-        raise RuntimeError(f"Collection creation failed: {response_message(response)}")
-    verify_existing(response.json())
-    print("market_values was created successfully.")
+        raise RuntimeError(f"Could not inspect {name}: {response_message(response)}")
+    return response.json()
+
+
+def owner_field(users_id: str):
+    return {
+        "name": "owner", "type": "relation", "required": True,
+        "collectionId": users_id, "maxSelect": 1, "cascadeDelete": True,
+    }
+
+
+def create_owner_collection(base_url: str, token: str, users_id: str,
+                            name: str, fields: list[dict], indexes=None):
+    rule = '@request.auth.id != "" && owner = @request.auth.id'
+    body = {
+        "name": name, "type": "base",
+        "listRule": rule, "viewRule": rule,
+        "createRule": '@request.auth.id != "" && @request.body.owner = @request.auth.id',
+        "updateRule": rule, "deleteRule": rule,
+        "fields": [owner_field(users_id), *fields],
+        "indexes": indexes or [],
+    }
+    created = request(base_url, token, "POST", "/api/collections", body)
+    print(f"{name} was created.")
+    return created
+
+
+def ensure_fields(base_url: str, token: str, current: dict,
+                  required: list[dict], label: str):
+    existing_names = {field.get("name") for field in current.get("fields", [])}
+    additions = [field for field in required if field["name"] not in existing_names]
+    if not additions:
+        print(f"{label} already contains every required field.")
+        return current
+    updated_fields = [*current.get("fields", []), *additions]
+    updated = request(
+        base_url, token, "PATCH",
+        "/api/collections/" + current["id"],
+        {"fields": updated_fields},
+    )
+    print(f"{label} added: " + ", ".join(field["name"] for field in additions))
+    return updated
+
+
+def configure_schema(base_url: str, token: str):
+    users = collection(base_url, token, "users")
+    if not users:
+        raise RuntimeError("The users collection was not found.")
+    users_id = users["id"]
+
+    cards = collection(base_url, token, "cards")
+    if not cards:
+        raise RuntimeError("The cards collection was not found.")
+    ensure_fields(base_url, token, cards, CARD_FINANCE_FIELDS, "cards")
+
+    market = collection(base_url, token, "market_values")
+    if market:
+        ensure_fields(base_url, token, market, MARKET_FIELDS, "market_values")
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "market_values", MARKET_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_market_values_owner_card` "
+             "ON `market_values` (`owner`, `card_id`)"],
+        )
+
+    business = collection(base_url, token, "business_entries")
+    if business:
+        ensure_fields(base_url, token, business, BUSINESS_FIELDS, "business_entries")
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "business_entries", BUSINESS_FIELDS,
+            ["CREATE INDEX `idx_business_entries_owner_date` "
+             "ON `business_entries` (`owner`, `entry_date`)"],
+        )
 
 
 def main() -> int:
     suggested = configured_url()
-    prompt = f"PocketBase URL [{suggested}]: " if suggested else "PocketBase URL: "
-    base_url = (input(prompt).strip() or suggested).rstrip("/")
-    if not base_url.startswith("https://") and not base_url.startswith("http://"):
-        print("Enter the full URL beginning with https:// or http://.", file=sys.stderr)
+    base_url = (input(f"PocketBase URL [{suggested}]: ").strip() or suggested).rstrip("/")
+    if not base_url.startswith(("https://", "http://")):
+        print("Enter the complete PocketBase URL.", file=sys.stderr)
         return 1
     email = input("PocketBase superuser email: ").strip()
     password = getpass.getpass("PocketBase superuser password: ")
     if not email or not password:
         print("Email and password are required.", file=sys.stderr)
         return 1
-
     try:
         token = authenticate(base_url, email, password)
-        existing = api_get(base_url, token, "/api/collections/market_values")
-        if existing.ok:
-            verify_existing(existing.json())
-            print("No schema changes were needed.")
-            return 0
-        if existing.status_code != 404:
-            raise RuntimeError(f"Collection check failed: {response_message(existing)}")
-
-        users = api_get(base_url, token, "/api/collections/users")
-        if not users.ok:
-            raise RuntimeError(f"Could not find the users collection: {response_message(users)}")
-        create_collection(base_url, token, users.json()["id"])
+        configure_schema(base_url, token)
+        print("Slab Ledger market and business-finance schema is ready.")
         print("Superuser credentials were not saved.")
         return 0
-    except requests.RequestException as error:
-        print(f"Could not reach PocketBase: {error}", file=sys.stderr)
-        return 1
-    except RuntimeError as error:
+    except (requests.RequestException, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         return 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
