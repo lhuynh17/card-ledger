@@ -5,6 +5,7 @@
   const VIEW_KEY = "slabLedgerAppView";
   let preferenceId = "";
   let debtReminders = [];
+  let editingDebtId = "";
 
   const amount = (value) => Math.max(0, Number.parseFloat(value) || 0);
   const money = (value) => new Intl.NumberFormat("en-US", {
@@ -26,7 +27,7 @@
       .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
-      .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-settle{margin-top:8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-empty{color:var(--muted);font-size:11px}
+      .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-empty{color:var(--muted);font-size:11px}
       @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-card.capital-card,.debt-card{grid-column:auto}.tool-fields,.debt-layout,.debt-columns{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
     `;
     document.head.appendChild(style);
@@ -89,7 +90,9 @@
                 <div class="tool-field"><label for="debtAmount">Amount</label><input id="debtAmount" type="number" min="0" step="0.01" inputmode="decimal" required placeholder="0.00"></div>
                 <div class="tool-field full"><label for="debtNotes">Note (optional)</label><textarea id="debtNotes" placeholder="What the money was for"></textarea></div>
               </div>
-              <button class="capital-save" type="submit">Add reminder</button><span class="capital-status" id="debtStatus"></span>
+              <button class="capital-save" id="debtSaveButton" type="submit">Add reminder</button>
+              <button class="debt-cancel" id="debtCancelEdit" type="button" hidden>Cancel edit</button>
+              <span class="capital-status" id="debtStatus"></span>
             </form>
             <div class="debt-columns">
               <div class="debt-column"><h3>Owed to me <span id="owedToMeTotal">$0.00</span></h3><div class="debt-list" id="owedToMeList"></div></div>
@@ -125,6 +128,7 @@
     document.getElementById("capitalSave").addEventListener("click", saveCapital);
     document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("debtForm").addEventListener("submit", saveDebtReminder);
+    document.getElementById("debtCancelEdit").addEventListener("click", resetDebtForm);
 
     loadLocalCapital();
     showView(localStorage.getItem(VIEW_KEY) || "inventory");
@@ -267,9 +271,37 @@
         const settle = document.createElement("button"); settle.className = "debt-settle";
         settle.type = "button"; settle.textContent = "Mark settled";
         settle.addEventListener("click", () => settleDebtReminder(item));
-        row.append(head, detail, settle); list.appendChild(row);
+        const edit = document.createElement("button"); edit.className = "debt-edit";
+        edit.type = "button"; edit.textContent = "Edit";
+        edit.addEventListener("click", () => editDebtReminder(item));
+        const actions = document.createElement("div"); actions.className = "debt-row-actions";
+        actions.append(edit, settle);
+        row.append(head, detail, actions); list.appendChild(row);
       }
     }
+  }
+
+  function editDebtReminder(item) {
+    editingDebtId = item.id;
+    document.getElementById("debtDirection").value = item.direction;
+    document.getElementById("debtDate").value = String(item.reminder_date || "").slice(0, 10);
+    document.getElementById("debtPerson").value = item.person || "";
+    document.getElementById("debtAmount").value = item.amount || "";
+    document.getElementById("debtNotes").value = item.notes || "";
+    document.getElementById("debtSaveButton").textContent = "Save changes";
+    document.getElementById("debtCancelEdit").hidden = false;
+    document.getElementById("debtStatus").textContent = "Editing reminder";
+    document.getElementById("debtForm").scrollIntoView({ behavior:"smooth", block:"center" });
+    document.getElementById("debtPerson").focus({ preventScroll:true });
+  }
+
+  function resetDebtForm() {
+    editingDebtId = "";
+    document.getElementById("debtForm").reset();
+    document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("debtSaveButton").textContent = "Add reminder";
+    document.getElementById("debtCancelEdit").hidden = true;
+    document.getElementById("debtStatus").textContent = "";
   }
 
   async function saveDebtReminder(event) {
@@ -286,8 +318,9 @@
     }
     status.textContent = "Saving…";
     try {
-      const record = await pbRequest("/api/collections/debt_reminders/records", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+      const record = await pbRequest("/api/collections/debt_reminders/records" +
+        (editingDebtId ? "/" + editingDebtId : ""), {
+        method:editingDebtId ? "PATCH" : "POST", headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           owner:cloudSession.record.id,
           direction:document.getElementById("debtDirection").value,
@@ -298,10 +331,14 @@
           settled:false
         })
       });
-      debtReminders.unshift(record);
-      event.target.reset();
-      document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
-      status.textContent = "Reminder saved";
+      const wasEditing = Boolean(editingDebtId);
+      if (wasEditing) {
+        debtReminders = debtReminders.map((item) => item.id === record.id ? record : item);
+      } else {
+        debtReminders.unshift(record);
+      }
+      resetDebtForm();
+      status.textContent = wasEditing ? "Changes saved" : "Reminder saved";
       renderDebtReminders();
     } catch (error) {
       status.textContent = error.status === 404
