@@ -17,6 +17,8 @@ It prepares:
   loans, other income, and protected receipt/invoice uploads.
 - `app_preferences`: privately syncs the optional bank/cash buying-capital
   reminder; it is not included in ledger exports or tax estimates.
+- `debt_reminders`: privately syncs the **Owed to me** and **I owe** reminder
+  lists; settled reminders are retained but excluded from active totals.
 
 Every market and business record is protected by owner-based API rules:
 
@@ -31,7 +33,7 @@ Every market and business record is protected by owner-based API rules:
 4. Use **Business finances** for operating expenses and owner/capital activity.
    Each entry can include one receipt photo, screenshot, or PDF up to 10 MB.
 5. Use **Tools** for the personal buying-capital reminder and quick percentage
-   calculators.
+   calculators, plus informal money owed reminders.
 5. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 

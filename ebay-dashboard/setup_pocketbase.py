@@ -60,6 +60,16 @@ PREFERENCE_FIELDS = [
     {"name": "capital_note", "type": "text", "max": 2000},
 ]
 
+DEBT_FIELDS = [
+    {"name": "direction", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["owed_to_me", "i_owe"]},
+    {"name": "person", "type": "text", "required": True, "max": 500},
+    {"name": "amount", "type": "number", "required": True, "min": 0},
+    {"name": "reminder_date", "type": "date", "required": True},
+    {"name": "notes", "type": "text", "max": 2000},
+    {"name": "settled", "type": "bool"},
+]
+
 
 def configured_url() -> str:
     if ENV_FILE.exists():
@@ -193,6 +203,16 @@ def configure_schema(base_url: str, token: str):
             base_url, token, users_id, "app_preferences", PREFERENCE_FIELDS,
             ["CREATE UNIQUE INDEX `idx_app_preferences_owner` "
              "ON `app_preferences` (`owner`)"],
+        )
+
+    debts = collection(base_url, token, "debt_reminders")
+    if debts:
+        ensure_fields(base_url, token, debts, DEBT_FIELDS, "debt_reminders")
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "debt_reminders", DEBT_FIELDS,
+            ["CREATE INDEX `idx_debt_reminders_owner_date` "
+             "ON `debt_reminders` (`owner`, `reminder_date`)"],
         )
 
 

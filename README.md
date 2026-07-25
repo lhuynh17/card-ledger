@@ -12,7 +12,8 @@ The app tracks:
   protected receipt or invoice uploads;
 - tax-year estimates for gross receipts, COGS, selling costs, operating
   expenses, profit, and available capital;
-- a private bank/cash buying-capital reminder and quick percentage calculators;
+- a private bank/cash buying-capital reminder, money owed lists, and quick
+  percentage calculators;
 - CSV exports for inventory and annual business records.
 
 PocketBase setup instructions are in
