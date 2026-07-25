@@ -12,6 +12,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / "collector.env"
+SETUP_ENV_FILE = ROOT / "pocketbase-setup.env"
 TIMEOUT = 25
 
 MARKET_FIELDS = [
@@ -83,12 +84,22 @@ EXCEPTION_FIELDS = [
 ]
 
 
-def configured_url() -> str:
-    if ENV_FILE.exists():
-        for raw in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            if raw.strip().startswith("SLAB_POCKETBASE_URL="):
+def env_value(name: str) -> str:
+    for path in (SETUP_ENV_FILE, ENV_FILE):
+        if not path.exists():
+            continue
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            if raw.strip().startswith(name + "="):
                 return raw.split("=", 1)[1].strip().strip('"').strip("'")
-    return os.getenv("SLAB_POCKETBASE_URL", "")
+    return os.getenv(name, "")
+
+
+def save_nonsecret_defaults(base_url: str, email: str) -> None:
+    SETUP_ENV_FILE.write_text(
+        f"SLAB_POCKETBASE_URL={base_url}\n"
+        f"SLAB_POCKETBASE_SUPERUSER_EMAIL={email}\n",
+        encoding="utf-8",
+    )
 
 
 def response_message(response: requests.Response) -> str:
@@ -241,12 +252,16 @@ def configure_schema(base_url: str, token: str):
 
 
 def main() -> int:
-    suggested = configured_url()
+    suggested = env_value("SLAB_POCKETBASE_URL")
     base_url = (input(f"PocketBase URL [{suggested}]: ").strip() or suggested).rstrip("/")
     if not base_url.startswith(("https://", "http://")):
         print("Enter the complete PocketBase URL.", file=sys.stderr)
         return 1
-    email = input("PocketBase superuser email: ").strip()
+    suggested_email = env_value("SLAB_POCKETBASE_SUPERUSER_EMAIL")
+    email = (
+        input(f"PocketBase superuser email [{suggested_email}]: ").strip()
+        or suggested_email
+    )
     password = getpass.getpass("PocketBase superuser password: ")
     if not email or not password:
         print("Email and password are required.", file=sys.stderr)
@@ -254,8 +269,10 @@ def main() -> int:
     try:
         token = authenticate(base_url, email, password)
         configure_schema(base_url, token)
+        save_nonsecret_defaults(base_url, email)
         print("Slab Ledger market, business-finance, and tools schema is ready.")
-        print("Superuser credentials were not saved.")
+        print("PocketBase URL and superuser email were saved locally for next time.")
+        print("Superuser password was not saved.")
         return 0
     except (requests.RequestException, RuntimeError) as error:
         print(str(error), file=sys.stderr)

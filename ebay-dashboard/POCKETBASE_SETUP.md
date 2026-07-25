@@ -3,11 +3,14 @@
 After pulling this version, run the setup tool on either computer:
 
 - Windows: double-click `setup-pocketbase.bat`.
-- Mac: open Terminal in the `card-ledger` folder and run
-  `python3 ebay-dashboard/setup_pocketbase.py`.
+- Mac: double-click `setup-pocketbase-mac.command`. The first launch may require
+  right-clicking it and choosing **Open**.
 
 Enter the PocketBase URL and superuser credentials when prompted. The installer
-never saves those superuser credentials and never deletes existing records.
+never saves the password and never deletes existing records.
+After the first successful run, the non-secret URL and superuser email are saved
+only in the ignored local `pocketbase-setup.env` file. Future runs ask only for
+the password.
 
 It prepares:
 
