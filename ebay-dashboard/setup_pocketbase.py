@@ -70,6 +70,18 @@ DEBT_FIELDS = [
     {"name": "settled", "type": "bool"},
 ]
 
+EXCEPTION_FIELDS = [
+    {"name": "exception_date", "type": "date", "required": True},
+    {"name": "exception_type", "type": "select", "required": True,
+     "maxSelect": 1,
+     "values": ["personal_paid_business", "business_received_personal",
+                "personal_reimbursement", "other"]},
+    {"name": "amount", "type": "number", "min": 0},
+    {"name": "account_source", "type": "text", "max": 500},
+    {"name": "notes", "type": "text", "required": True, "max": 10000},
+    {"name": "reviewed", "type": "bool"},
+]
+
 
 def configured_url() -> str:
     if ENV_FILE.exists():
@@ -213,6 +225,18 @@ def configure_schema(base_url: str, token: str):
             base_url, token, users_id, "debt_reminders", DEBT_FIELDS,
             ["CREATE INDEX `idx_debt_reminders_owner_date` "
              "ON `debt_reminders` (`owner`, `reminder_date`)"],
+        )
+
+    exceptions = collection(base_url, token, "business_exceptions")
+    if exceptions:
+        ensure_fields(
+            base_url, token, exceptions, EXCEPTION_FIELDS, "business_exceptions"
+        )
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "business_exceptions", EXCEPTION_FIELDS,
+            ["CREATE INDEX `idx_business_exceptions_owner_date` "
+             "ON `business_exceptions` (`owner`, `exception_date`)"],
         )
 
 

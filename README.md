@@ -15,6 +15,7 @@ The app tracks:
 - a private bank/cash buying-capital reminder, money owed lists, and quick
   percentage calculators;
 - CSV exports for inventory and annual business records.
+- a year-end exceptions log for unusual personal/business account activity.
 
 PocketBase setup instructions are in
 [`ebay-dashboard/POCKETBASE_SETUP.md`](ebay-dashboard/POCKETBASE_SETUP.md).

@@ -2,6 +2,7 @@
   "use strict";
 
   let entries = [];
+  let exceptions = [];
   const cash = (value) => new Intl.NumberFormat("en-US", {
     style:"currency", currency:"USD", maximumFractionDigits:2
   }).format(Number(value) || 0);
@@ -11,6 +12,12 @@
     expense:"Business expense", contribution:"Owner contribution",
     draw:"Owner draw", other_income:"Other business income",
     loan_in:"Business loan received", loan_payment:"Loan principal payment"
+  };
+  const exceptionNames = {
+    personal_paid_business:"Business purchase paid from personal account",
+    business_received_personal:"Business payment received in personal account",
+    personal_reimbursement:"Personal/business reimbursement",
+    other:"Other exception"
   };
   const categories = [
     "Advertising","Card show / booth fees","Commissions and fees","Insurance",
@@ -24,7 +31,7 @@
     style.textContent = `
       .finance-section{margin-top:22px}.finance-note{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
       .finance-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}
-      .finance-toolbar select,.ledger-form input,.ledger-form select,.ledger-form textarea{box-sizing:border-box;min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}
+      .finance-toolbar select,.ledger-form input,.ledger-form select,.ledger-form textarea,.exception-form input,.exception-form select,.exception-form textarea{box-sizing:border-box;min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}
       .finance-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.finance-card{padding:13px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)}
       .finance-card span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.finance-card strong{display:block;margin-top:4px;font:700 20px var(--font-mono)}
       .finance-card small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.finance-card.featured{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 9%,var(--surface-2))}
@@ -33,7 +40,8 @@
       .ledger-actions{grid-column:1/-1;display:flex;gap:8px}.ledger-actions button,.ledger-export{min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px 12px;font-weight:750;cursor:pointer}.ledger-actions .primary{background:var(--accent);border-color:var(--accent);color:#fff}
       .ledger-message{grid-column:1/-1;min-height:17px;color:#ff7885;font-size:11px}.ledger-list{display:grid;gap:7px;max-height:430px;overflow:auto}.ledger-row{display:grid;grid-template-columns:86px 1fr auto auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}
       .ledger-row strong{font-size:12px}.ledger-row .amount{font:700 13px var(--font-mono);white-space:nowrap}.ledger-row-actions{display:flex;align-items:center;gap:6px}.receipt-open{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}.ledger-delete{border:0;background:transparent;color:#ff7885;cursor:pointer;font-weight:800}.tax-caption{margin-top:9px;color:var(--muted-2);font-size:10px;line-height:1.4}
-      @media(max-width:720px){.finance-cards{grid-template-columns:1fr 1fr}.ledger-layout{grid-template-columns:1fr}.ledger-form{grid-template-columns:1fr}.ledger-field.full{grid-column:1}.ledger-row{grid-template-columns:76px 1fr auto}.ledger-delete{grid-column:3}.finance-card strong{font-size:17px}}
+      .exception-box{margin-top:15px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.exception-box h3{margin:0 0 5px;font-size:15px}.exception-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:13px}.exception-field{display:grid;gap:5px}.exception-field.full{grid-column:1/-1}.exception-field label{font-size:11px;color:var(--muted);font-weight:700}.exception-field textarea{min-height:66px;resize:vertical}.exception-list{display:grid;gap:7px;margin-top:14px}.exception-row{display:grid;grid-template-columns:90px 1fr auto auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}.exception-row strong{display:block;font-size:12px}.exception-row .amount{font:700 13px var(--font-mono)}.exception-review{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}
+      @media(max-width:720px){.finance-cards{grid-template-columns:1fr 1fr}.ledger-layout{grid-template-columns:1fr}.ledger-form,.exception-form{grid-template-columns:1fr}.ledger-field.full,.exception-field.full{grid-column:1}.ledger-row,.exception-row{grid-template-columns:76px 1fr auto}.ledger-delete{grid-column:3}.finance-card strong{font-size:17px}}
     `;
     document.head.appendChild(style);
 
@@ -69,6 +77,19 @@
         </form></div>
         <div class="ledger-box"><h3>Entries for selected year</h3><div class="ledger-list" id="ledgerList"></div>
         <p class="tax-caption">Owner contributions, draws, and loan principal affect estimated capital but are not included in estimated business profit. Confirm tax treatment and your inventory accounting method with a qualified tax professional.</p></div>
+      </div>
+      <div class="exception-box"><h3>Exceptions log</h3>
+        <p class="finance-note">Document business money that moved through a personal account or another unusual situation. These reminders are included in the annual CSV but do not change financial totals automatically.</p>
+        <form id="exceptionForm" class="exception-form">
+          <div class="exception-field"><label for="exceptionType">Exception type</label><select id="exceptionType">${Object.entries(exceptionNames).map(([value,label]) => `<option value="${value}">${label}</option>`).join("")}</select></div>
+          <div class="exception-field"><label for="exceptionDate">Date</label><input id="exceptionDate" type="date" value="${today()}" required></div>
+          <div class="exception-field"><label for="exceptionAmount">Amount (optional)</label><input id="exceptionAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+          <div class="exception-field full"><label for="exceptionSource">Account, payment method, or source</label><input id="exceptionSource" type="text" placeholder="Personal checking, Venmo, specific card…"></div>
+          <div class="exception-field full"><label for="exceptionNotes">What happened and why?</label><textarea id="exceptionNotes" required placeholder="Explain what the transaction was for and why it used the unusual account"></textarea></div>
+          <div class="ledger-actions"><button class="primary" type="submit">Save exception note</button></div><div class="ledger-message" id="exceptionMessage"></div>
+        </form>
+        <div class="exception-list" id="exceptionList"></div>
+        <p class="tax-caption">When appropriate, also enter the actual income or expense in the main ledger. The exception note alone does not add it to profit or deductions.</p>
       </div>`;
     document.querySelector("section[aria-labelledby='invTitle']").insertAdjacentElement("afterend", section);
 
@@ -81,6 +102,7 @@
     year.addEventListener("change", renderFinance);
     document.getElementById("ledgerType").addEventListener("change", updateFormForType);
     document.getElementById("ledgerForm").addEventListener("submit", saveEntry);
+    document.getElementById("exceptionForm").addEventListener("submit", saveException);
     document.getElementById("ledgerExportBtn").addEventListener("click", exportYear);
     updateFormForType();
   }
@@ -100,6 +122,19 @@
     } catch (error) {
       document.getElementById("ledgerMessage").textContent =
         error.status === 404 ? "Run the PocketBase setup tool once to add the business ledger." : "Business entries could not be loaded.";
+    }
+  }
+
+  async function loadExceptions() {
+    if (!cloudSession?.token) { exceptions = []; renderExceptions(); return; }
+    try {
+      const data = await pbRequest("/api/collections/business_exceptions/records?perPage=500&sort=-exception_date");
+      exceptions = data?.items || [];
+      renderExceptions();
+    } catch (error) {
+      document.getElementById("exceptionMessage").textContent = error.status === 404
+        ? "Run the PocketBase setup tool once to add the exceptions log."
+        : "Exception notes could not be loaded.";
     }
   }
 
@@ -145,6 +180,7 @@
     document.getElementById("fExpenses").textContent = cash(result.expenses);
     document.getElementById("fProfit").textContent = cash(result.profit);
     document.getElementById("fCapital").textContent = cash(result.capital);
+    renderExceptions();
     const list = document.getElementById("ledgerList");
     list.textContent = "";
     if (!cloudSession?.token) {
@@ -181,6 +217,75 @@
       actions.appendChild(remove);
       row.append(date, detail, amount, actions); list.appendChild(row);
     }
+  }
+
+  function renderExceptions() {
+    const list = document.getElementById("exceptionList");
+    if (!list) return;
+    list.textContent = "";
+    if (!cloudSession?.token) {
+      list.innerHTML = "<div class='empty'>Sign in to sync and manage exception notes.</div>";
+      return;
+    }
+    const rows = exceptions.filter((item) =>
+      !item.reviewed && yearOf(item.exception_date) === selectedYear()
+    );
+    if (!rows.length) {
+      list.innerHTML = "<div class='empty'>No open exception notes for this year.</div>";
+      return;
+    }
+    for (const item of rows) {
+      const row = document.createElement("div"); row.className = "exception-row";
+      const date = document.createElement("span"); date.textContent = String(item.exception_date || "").slice(0, 10);
+      const detail = document.createElement("div");
+      const title = document.createElement("strong"); title.textContent = exceptionNames[item.exception_type] || "Exception";
+      const note = document.createElement("div"); note.textContent = [item.account_source, item.notes].filter(Boolean).join(" · ");
+      detail.append(title, note);
+      const value = document.createElement("span"); value.className = "amount"; value.textContent = item.amount ? cash(item.amount) : "—";
+      const review = document.createElement("button"); review.className = "exception-review"; review.type = "button"; review.textContent = "Mark reviewed";
+      review.addEventListener("click", () => reviewException(item));
+      row.append(date, detail, value, review); list.appendChild(row);
+    }
+  }
+
+  async function saveException(event) {
+    event.preventDefault();
+    const message = document.getElementById("exceptionMessage");
+    if (!cloudSession?.token) { message.textContent = "Sign in before saving an exception note."; return; }
+    message.textContent = "Saving…";
+    try {
+      const record = await pbRequest("/api/collections/business_exceptions/records", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          owner:cloudSession.record.id,
+          exception_date:document.getElementById("exceptionDate").value + " 12:00:00.000Z",
+          exception_type:document.getElementById("exceptionType").value,
+          amount:n(document.getElementById("exceptionAmount").value),
+          account_source:document.getElementById("exceptionSource").value.trim(),
+          notes:document.getElementById("exceptionNotes").value.trim(),
+          reviewed:false
+        })
+      });
+      exceptions.unshift(record); event.target.reset();
+      document.getElementById("exceptionDate").value = today();
+      message.textContent = "Exception note saved."; renderExceptions();
+    } catch (error) {
+      message.textContent = error.status === 404
+        ? "Run the PocketBase setup tool, then retry."
+        : "The exception note could not be saved.";
+    }
+  }
+
+  async function reviewException(item) {
+    if (!confirm("Mark this exception as reviewed? It will remain stored and included in its tax-year export.")) return;
+    try {
+      const updated = await pbRequest("/api/collections/business_exceptions/records/" + item.id, {
+        method:"PATCH", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ reviewed:true })
+      });
+      exceptions = exceptions.map((row) => row.id === updated.id ? updated : row);
+      renderExceptions();
+    } catch (_) { alert("The exception note could not be updated."); }
   }
 
   async function saveEntry(event) {
@@ -275,10 +380,10 @@
   function exportYear() {
     const year = selectedYear();
     const result = financials(year);
-    const rows = [["Date","Record type","Category","Description","Gross income","COGS","Selling costs","Expense paid","Business-use %","Estimated deductible expense","Owner/capital activity"]];
+    const rows = [["Date","Record type","Category","Description","Gross income","COGS","Selling costs","Expense paid","Business-use %","Estimated deductible expense","Owner/capital activity","Exception reminder amount","Reviewed"]];
     for (const card of result.sold) {
       rows.push([card.soldDate,"Card sale","Inventory sale",card.name,n(card.soldPrice),n(card.cost),
-        n(card.sellingFees) + n(card.shippingCost),0,"",0,0]);
+        n(card.sellingFees) + n(card.shippingCost),0,"",0,0,0,""]);
     }
     for (const entry of result.yearEntries) {
       const percent = entry.entry_type === "expense"
@@ -289,7 +394,13 @@
         entry.entry_type === "expense" ? n(entry.amount) : 0,
         entry.entry_type === "expense" ? percent : "",
         entry.entry_type === "expense" ? n(entry.amount) * percent / 100 : 0,
-        ["contribution","draw","loan_in","loan_payment"].includes(entry.entry_type) ? n(entry.amount) : 0]);
+        ["contribution","draw","loan_in","loan_payment"].includes(entry.entry_type) ? n(entry.amount) : 0,0,""]);
+    }
+    for (const item of exceptions.filter((row) => yearOf(row.exception_date) === year)) {
+      rows.push([String(item.exception_date).slice(0,10),"Exception reminder",
+        exceptionNames[item.exception_type] || item.exception_type,
+        [item.account_source,item.notes].filter(Boolean).join(" — "),
+        0,0,0,0,"",0,0,n(item.amount),item.reviewed ? "Yes" : "No"]);
     }
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     triggerDownload(new Blob(["\uFEFF" + csv], { type:"text/csv;charset=utf-8" }), `slab-ledger-business-${year}.csv`);
@@ -298,8 +409,8 @@
   install();
   const baseRender = render;
   render = function () { baseRender(); renderFinance(); };
-  window.addEventListener("slab-cloud-synced", loadEntries);
+  window.addEventListener("slab-cloud-synced", () => { loadEntries(); loadExceptions(); });
   window.addEventListener("slab-market-updated", renderFinance);
-  window.addEventListener("focus", loadEntries);
-  loadEntries(); renderFinance();
+  window.addEventListener("focus", () => { loadEntries(); loadExceptions(); });
+  loadEntries(); loadExceptions(); renderFinance();
 })();

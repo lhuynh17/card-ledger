@@ -19,6 +19,8 @@ It prepares:
   reminder; it is not included in ledger exports or tax estimates.
 - `debt_reminders`: privately syncs the **Owed to me** and **I owe** reminder
   lists; settled reminders are retained but excluded from active totals.
+- `business_exceptions`: stores year-end review notes for business money that
+  moved through a personal account or other unusual situations.
 
 Every market and business record is protected by owner-based API rules:
 
@@ -34,6 +36,9 @@ Every market and business record is protected by owner-based API rules:
    Each entry can include one receipt photo, screenshot, or PDF up to 10 MB.
 5. Use **Tools** for the personal buying-capital reminder and quick percentage
    calculators, plus informal money owed reminders.
+6. Use **Exceptions log** in Business Ledger to document unusual account
+   activity for year-end review. Exception notes do not change calculated
+   totals automatically.
 5. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 
