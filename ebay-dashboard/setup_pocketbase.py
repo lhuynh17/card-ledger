@@ -43,6 +43,10 @@ BUSINESS_FIELDS = [
     {"name": "vendor", "type": "text", "max": 500},
     {"name": "deductible_percent", "type": "number", "min": 0, "max": 100},
     {"name": "notes", "type": "text", "max": 10000},
+    {"name": "receipt", "type": "file", "maxSelect": 1,
+     "maxSize": 10485760, "protected": True,
+     "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/heic",
+                   "image/heif", "application/pdf"]},
 ]
 
 CARD_FINANCE_FIELDS = [

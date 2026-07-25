@@ -32,7 +32,7 @@
       .ledger-box h3{margin:0 0 12px;font-size:15px}.ledger-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ledger-field{display:grid;gap:5px}.ledger-field.full{grid-column:1/-1}.ledger-field label{font-size:11px;color:var(--muted);font-weight:700}.ledger-field textarea{min-height:66px;resize:vertical}
       .ledger-actions{grid-column:1/-1;display:flex;gap:8px}.ledger-actions button,.ledger-export{min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px 12px;font-weight:750;cursor:pointer}.ledger-actions .primary{background:var(--accent);border-color:var(--accent);color:#fff}
       .ledger-message{grid-column:1/-1;min-height:17px;color:#ff7885;font-size:11px}.ledger-list{display:grid;gap:7px;max-height:430px;overflow:auto}.ledger-row{display:grid;grid-template-columns:86px 1fr auto auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}
-      .ledger-row strong{font-size:12px}.ledger-row .amount{font:700 13px var(--font-mono);white-space:nowrap}.ledger-delete{border:0;background:transparent;color:#ff7885;cursor:pointer;font-weight:800}.tax-caption{margin-top:9px;color:var(--muted-2);font-size:10px;line-height:1.4}
+      .ledger-row strong{font-size:12px}.ledger-row .amount{font:700 13px var(--font-mono);white-space:nowrap}.ledger-row-actions{display:flex;align-items:center;gap:6px}.receipt-open{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}.ledger-delete{border:0;background:transparent;color:#ff7885;cursor:pointer;font-weight:800}.tax-caption{margin-top:9px;color:var(--muted-2);font-size:10px;line-height:1.4}
       @media(max-width:720px){.finance-cards{grid-template-columns:1fr 1fr}.ledger-layout{grid-template-columns:1fr}.ledger-form{grid-template-columns:1fr}.ledger-field.full{grid-column:1}.ledger-row{grid-template-columns:76px 1fr auto}.ledger-delete{grid-column:3}.finance-card strong{font-size:17px}}
     `;
     document.head.appendChild(style);
@@ -64,6 +64,7 @@
           <div class="ledger-field"><label for="ledgerVendor">Vendor / source</label><input id="ledgerVendor" type="text" placeholder="eBay, card show, office store…"></div>
           <div class="ledger-field"><label for="ledgerDeductible">Business-use %</label><input id="ledgerDeductible" type="number" min="0" max="100" step="1" value="100"></div>
           <div class="ledger-field full"><label for="ledgerNotes">Description / receipt note</label><textarea id="ledgerNotes" placeholder="What was purchased or why money entered/left the business"></textarea></div>
+          <div class="ledger-field full"><label for="ledgerReceipt">Receipt or invoice (optional)</label><input id="ledgerReceipt" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"><small>Photo, screenshot, or PDF · maximum 10 MB</small></div>
           <div class="ledger-actions"><button class="primary" type="submit">Save entry</button></div><div class="ledger-message" id="ledgerMessage"></div>
         </form></div>
         <div class="ledger-box"><h3>Entries for selected year</h3><div class="ledger-list" id="ledgerList"></div>
@@ -98,7 +99,7 @@
       renderFinance();
     } catch (error) {
       document.getElementById("ledgerMessage").textContent =
-        error.status === 404 ? "Run setup-pocketbase.bat once to add the business ledger." : "Business entries could not be loaded.";
+        error.status === 404 ? "Run the PocketBase setup tool once to add the business ledger." : "Business entries could not be loaded.";
     }
   }
 
@@ -163,9 +164,22 @@
       description.textContent = [entry.category, entry.vendor, entry.notes].filter(Boolean).join(" · ");
       detail.append(title, description);
       const amount = document.createElement("span"); amount.className = "amount"; amount.textContent = cash(entry.amount);
+      const actions = document.createElement("div"); actions.className = "ledger-row-actions";
+      if (entry.receipt) {
+        const receipt = document.createElement("button"); receipt.className = "receipt-open";
+        receipt.type = "button"; receipt.textContent = "Receipt";
+        receipt.addEventListener("click", () => openReceipt(entry));
+        actions.appendChild(receipt);
+      } else {
+        const attach = document.createElement("button"); attach.className = "receipt-open";
+        attach.type = "button"; attach.textContent = "Add receipt";
+        attach.addEventListener("click", () => attachReceipt(entry));
+        actions.appendChild(attach);
+      }
       const remove = document.createElement("button"); remove.className = "ledger-delete"; remove.type = "button"; remove.textContent = "Delete";
       remove.addEventListener("click", () => deleteEntry(entry));
-      row.append(date, detail, amount, remove); list.appendChild(row);
+      actions.appendChild(remove);
+      row.append(date, detail, amount, actions); list.appendChild(row);
     }
   }
 
@@ -178,23 +192,72 @@
     if (!amount) { message.textContent = "Enter an amount greater than zero."; return; }
     message.textContent = "Saving…";
     try {
+      const receipt = document.getElementById("ledgerReceipt").files[0];
+      if (receipt && receipt.size > 10 * 1024 * 1024) {
+        message.textContent = "The receipt must be 10 MB or smaller.";
+        return;
+      }
+      const form = new FormData();
+      form.set("owner", cloudSession.record.id);
+      form.set("entry_date", document.getElementById("ledgerDate").value + " 12:00:00.000Z");
+      form.set("entry_type", type);
+      form.set("category", type === "expense" ? document.getElementById("ledgerCategory").value : "");
+      form.set("amount", String(amount));
+      form.set("vendor", document.getElementById("ledgerVendor").value.trim());
+      form.set("deductible_percent", String(type === "expense" ? n(document.getElementById("ledgerDeductible").value) : 0));
+      form.set("notes", document.getElementById("ledgerNotes").value.trim());
+      if (receipt) form.set("receipt", receipt, receipt.name);
       const row = await pbRequest("/api/collections/business_entries/records", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          owner:cloudSession.record.id, entry_date:document.getElementById("ledgerDate").value + " 12:00:00.000Z",
-          entry_type:type, category:type === "expense" ? document.getElementById("ledgerCategory").value : "",
-          amount, vendor:document.getElementById("ledgerVendor").value.trim(),
-          deductible_percent:type === "expense" ? n(document.getElementById("ledgerDeductible").value) : 0,
-          notes:document.getElementById("ledgerNotes").value.trim()
-        })
+        method:"POST", body:form
       });
       entries.unshift(row); event.target.reset();
       document.getElementById("ledgerDate").value = today();
       document.getElementById("ledgerDeductible").value = "100";
       updateFormForType(); message.textContent = "Entry saved."; renderFinance();
     } catch (error) {
-      message.textContent = error.status === 404 ? "Run setup-pocketbase.bat once to add the business ledger." : (error.message || "Entry could not be saved.");
+      message.textContent = error.status === 404 ? "Run the PocketBase setup tool once to add the business ledger." : (error.message || "Entry could not be saved.");
     }
+  }
+
+  async function openReceipt(entry) {
+    const popup = window.open("", "_blank");
+    try {
+      const result = await pbRequest("/api/files/token", { method:"POST" });
+      const filename = Array.isArray(entry.receipt) ? entry.receipt[0] : entry.receipt;
+      const url = PB_URL + "/api/files/" + entry.collectionId + "/" + entry.id + "/" +
+        encodeURIComponent(filename) + "?token=" + encodeURIComponent(result.token);
+      if (popup) popup.location = url;
+      else window.open(url, "_blank", "noopener");
+    } catch (_) {
+      if (popup) popup.close();
+      alert("The receipt could not be opened. Please sign in again and retry.");
+    }
+  }
+
+  function attachReceipt(entry) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf";
+    input.addEventListener("change", async () => {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        alert("The receipt must be 10 MB or smaller.");
+        return;
+      }
+      const form = new FormData();
+      form.set("receipt", file, file.name);
+      try {
+        const updated = await pbRequest("/api/collections/business_entries/records/" + entry.id, {
+          method:"PATCH", body:form
+        });
+        entries = entries.map((row) => row.id === updated.id ? updated : row);
+        renderFinance();
+      } catch (_) {
+        alert("The receipt could not be uploaded.");
+      }
+    }, { once:true });
+    input.click();
   }
 
   async function deleteEntry(entry) {
