@@ -23,6 +23,7 @@
       .tool-field input,.tool-field select,.tool-field textarea{box-sizing:border-box;width:100%;min-height:43px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.tool-field textarea{min-height:65px;resize:vertical}
       .capital-total,.calculator-result{margin-top:13px;padding:13px;border-radius:10px;background:var(--surface-2)}.capital-total span,.calculator-result span{display:block;color:var(--muted);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.capital-total strong,.calculator-result strong{display:block;margin-top:3px;font:800 24px var(--font-mono)}
       .capital-save{margin-top:11px;min-height:42px;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:9px 14px;font-weight:800;cursor:pointer}.capital-status{margin-left:9px;color:var(--muted);font-size:11px}
+      .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-settle{margin-top:8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-empty{color:var(--muted);font-size:11px}
@@ -64,6 +65,7 @@
             <div class="tool-field"><label for="percentRate">Percent</label><input id="percentRate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70"></div>
           </div>
           <div class="calculator-result"><span>Calculated value</span><strong id="percentResult">$0.00</strong></div>
+          <button class="calculator-clear" id="percentClear" type="button">Clear form</button>
         </div>
         <div class="tool-card">
           <h2>What percent am I paying?</h2>
@@ -73,6 +75,7 @@
             <div class="tool-field"><label for="payingAmount">Price I would pay</label><input id="payingAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70.00"></div>
           </div>
           <div class="calculator-result"><span>You are paying</span><strong id="payingResult">0%</strong></div>
+          <button class="calculator-clear" id="payingClear" type="button">Clear form</button>
         </div>
         <div class="tool-card debt-card">
           <h2>Money owed reminders</h2>
@@ -107,6 +110,18 @@
       document.getElementById(id).addEventListener("input", updateCalculators));
     ["marketAmount","payingAmount"].forEach((id) =>
       document.getElementById(id).addEventListener("input", updateCalculators));
+    document.getElementById("percentClear").addEventListener("click", () => {
+      document.getElementById("percentAmount").value = "";
+      document.getElementById("percentRate").value = "";
+      updateCalculators();
+      document.getElementById("percentAmount").focus();
+    });
+    document.getElementById("payingClear").addEventListener("click", () => {
+      document.getElementById("marketAmount").value = "";
+      document.getElementById("payingAmount").value = "";
+      updateCalculators();
+      document.getElementById("marketAmount").focus();
+    });
     document.getElementById("capitalSave").addEventListener("click", saveCapital);
     document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("debtForm").addEventListener("submit", saveDebtReminder);
