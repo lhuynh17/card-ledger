@@ -54,6 +54,12 @@ CARD_FINANCE_FIELDS = [
     {"name": "shipping_cost", "type": "number", "min": 0},
 ]
 
+PREFERENCE_FIELDS = [
+    {"name": "bank_capital", "type": "number", "min": 0},
+    {"name": "cash_capital", "type": "number", "min": 0},
+    {"name": "capital_note", "type": "text", "max": 2000},
+]
+
 
 def configured_url() -> str:
     if ENV_FILE.exists():
@@ -179,6 +185,16 @@ def configure_schema(base_url: str, token: str):
              "ON `business_entries` (`owner`, `entry_date`)"],
         )
 
+    preferences = collection(base_url, token, "app_preferences")
+    if preferences:
+        ensure_fields(base_url, token, preferences, PREFERENCE_FIELDS, "app_preferences")
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "app_preferences", PREFERENCE_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_app_preferences_owner` "
+             "ON `app_preferences` (`owner`)"],
+        )
+
 
 def main() -> int:
     suggested = configured_url()
@@ -194,7 +210,7 @@ def main() -> int:
     try:
         token = authenticate(base_url, email, password)
         configure_schema(base_url, token)
-        print("Slab Ledger market and business-finance schema is ready.")
+        print("Slab Ledger market, business-finance, and tools schema is ready.")
         print("Superuser credentials were not saved.")
         return 0
     except (requests.RequestException, RuntimeError) as error:

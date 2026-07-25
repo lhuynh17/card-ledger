@@ -15,6 +15,8 @@ It prepares:
 - `market_values`: keeps manual comps, source, notes, update date, and history;
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
+- `app_preferences`: privately syncs the optional bank/cash buying-capital
+  reminder; it is not included in ledger exports or tax estimates.
 
 Every market and business record is protected by owner-based API rules:
 
@@ -28,6 +30,8 @@ Every market and business record is protected by owner-based API rules:
 3. When marking a card sold, enter platform fees and shipping cost.
 4. Use **Business finances** for operating expenses and owner/capital activity.
    Each entry can include one receipt photo, screenshot, or PDF up to 10 MB.
+5. Use **Tools** for the personal buying-capital reminder and quick percentage
+   calculators.
 5. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 
