@@ -5,6 +5,8 @@ A mobile-friendly inventory and business ledger for graded trading cards.
 The app tracks:
 
 - active and sold inventory, cost basis, sale proceeds, fees, and shipping;
+- PSA certificate autofill for card details and optional recent-sales estimates
+  through a private PocketBase proxy;
 - manual market values from up to three comparable sales, including links,
   source, notes, update date, and value history;
 - collection cost, market value, and unrealized gain or loss;

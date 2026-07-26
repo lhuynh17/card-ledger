@@ -15,7 +15,7 @@ two saved values without stopping for input; the only prompt is
 
 It prepares:
 
-- `cards`: adds `selling_fees` and `shipping_cost`;
+- `cards`: adds selling-cost fields and optional PSA sales-estimate fields;
 - `market_values`: keeps manual comps, source, notes, update date, and history;
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
@@ -34,6 +34,28 @@ Every market and business record is protected by owner-based API rules:
 
 - List/View/Update/Delete: `owner = @request.auth.id`
 - Create: `@request.body.owner = @request.auth.id`
+
+## Optional Parse.bot PSA lookup
+
+Slab Ledger can fill the card title, grade, and population from a PSA cert
+number. It can also calculate a clearly labeled estimate from up to three
+recent comparable sales. Parse.bot currently does not return a direct PSA price
+guide value.
+
+1. Create a Parse.bot account and API key.
+2. Copy `pb_hooks/slab_ledger_psa.pb.js` next to the PocketBase executable as
+   `pb_hooks/slab_ledger_psa.pb.js`.
+3. Set `PARSE_BOT_API_KEY` in the environment that starts PocketBase, then
+   restart PocketBase.
+4. Run the Slab Ledger PocketBase setup tool once to add the three optional
+   estimate fields to `cards`.
+5. Sign in to Slab Ledger. Scan a PSA QR or type a cert, then use **Fill from
+   PSA**. **Get estimate** uses one additional Parse.bot credit.
+
+The API key remains on the PocketBase server and is never sent to the browser.
+Both proxy routes require an authenticated `users` account. Parse.bot's free
+tier currently includes 100 successful calls per month at 5 requests/minute;
+confirm current limits on Parse.bot before relying on them.
 
 ## After setup
 

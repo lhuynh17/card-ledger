@@ -50,9 +50,12 @@ BUSINESS_FIELDS = [
                    "image/heif", "application/pdf"]},
 ]
 
-CARD_FINANCE_FIELDS = [
+CARD_EXTRA_FIELDS = [
     {"name": "selling_fees", "type": "number", "min": 0},
     {"name": "shipping_cost", "type": "number", "min": 0},
+    {"name": "psa_estimate", "type": "number", "min": 0},
+    {"name": "psa_estimate_updated", "type": "date"},
+    {"name": "psa_sales_count", "type": "number", "min": 0, "onlyInt": True},
 ]
 
 PREFERENCE_FIELDS = [
@@ -237,7 +240,7 @@ def configure_schema(base_url: str, token: str):
     cards = collection(base_url, token, "cards")
     if not cards:
         raise RuntimeError("The cards collection was not found.")
-    ensure_fields(base_url, token, cards, CARD_FINANCE_FIELDS, "cards")
+    ensure_fields(base_url, token, cards, CARD_EXTRA_FIELDS, "cards")
 
     market = collection(base_url, token, "market_values")
     if market:
