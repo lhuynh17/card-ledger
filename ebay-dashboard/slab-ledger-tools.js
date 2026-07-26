@@ -28,7 +28,7 @@
       .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
-      .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-empty{color:var(--muted);font-size:11px}
+      .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel,.debt-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.debt-empty{color:var(--muted);font-size:11px}
       @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.tool-card.capital-card,.debt-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.tool-fields,.debt-layout,.debt-columns{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
     `;
     document.head.appendChild(style);
@@ -277,8 +277,11 @@
         const edit = document.createElement("button"); edit.className = "debt-edit";
         edit.type = "button"; edit.textContent = "Edit";
         edit.addEventListener("click", () => editDebtReminder(item));
+        const remove = document.createElement("button"); remove.className = "debt-delete";
+        remove.type = "button"; remove.textContent = "Delete";
+        remove.addEventListener("click", () => deleteDebtReminder(item));
         const actions = document.createElement("div"); actions.className = "debt-row-actions";
-        actions.append(edit, settle);
+        actions.append(edit, settle, remove);
         row.append(head, detail, actions); list.appendChild(row);
       }
     }
@@ -361,6 +364,18 @@
       renderDebtReminders();
     } catch (_) {
       alert("The reminder could not be marked settled.");
+    }
+  }
+
+  async function deleteDebtReminder(item) {
+    if (!confirm(`Permanently delete the ${money(item.amount)} reminder for ${item.person}?`)) return;
+    try {
+      await pbRequest("/api/collections/debt_reminders/records/" + item.id, { method:"DELETE" });
+      debtReminders = debtReminders.filter((row) => row.id !== item.id);
+      if (editingDebtId === item.id) resetDebtForm();
+      renderDebtReminders();
+    } catch (_) {
+      alert("The reminder could not be deleted.");
     }
   }
 

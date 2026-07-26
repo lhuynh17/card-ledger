@@ -24,14 +24,14 @@
     style.textContent = `
       .grading-section{margin-top:28px;padding-top:2px}.grading-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:0 2px 11px;border-bottom:1px solid var(--line)}.grading-head::before{content:"03";display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:rgba(53,179,126,.14);color:#6fd5a4;font:800 11px var(--font-mono)}.grading-head h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.grading-head p{margin:2px 0 0;color:var(--muted);font-size:11px}
       .grading-new{position:relative;padding:17px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),rgba(14,20,32,.82));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.grading-new::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:#35b37e}.grading-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.grading-field{display:grid;gap:5px}.grading-field.wide{grid-column:span 2}.grading-field.full{grid-column:1/-1}.grading-field label{font-size:11px;color:var(--muted);font-weight:750}.grading-field input,.grading-field select,.grading-field textarea{box-sizing:border-box;width:100%;min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.grading-field textarea{min-height:62px;resize:vertical}
-      .grading-form-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.grading-button{min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:7px 11px;font-weight:800;cursor:pointer}.grading-button.primary{border-color:var(--accent);background:var(--accent);color:#fff}.grading-message{color:var(--muted);font-size:11px}
+      .grading-form-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}.grading-button{min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:7px 11px;font-weight:800;cursor:pointer}.grading-button.primary{border-color:var(--accent);background:var(--accent);color:#fff}.grading-button.danger,.sale-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.grading-message{color:var(--muted);font-size:11px}
       .grading-list{display:grid;gap:12px;margin-top:14px}.play-card{padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.play-top{display:flex;justify-content:space-between;gap:12px}.play-top h3{margin:0;font-size:15px}.play-status{display:inline-flex;margin-top:5px;padding:4px 7px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:10px;font-weight:800}
       .play-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}.play-metric{padding:9px;border-radius:9px;background:var(--surface-2)}.play-metric span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.05em}.play-metric strong{display:block;margin-top:3px;font:750 14px var(--font-mono)}.positive{color:#4cba78!important}.negative{color:#ff7885!important}
       .play-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}.play-notes{margin-top:9px;color:var(--muted);font-size:11px}.play-card-lines{display:grid;gap:8px;margin-top:12px}.grading-card-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}.grading-card-head{display:flex;justify-content:space-between;gap:8px}.grading-card-head strong{font-size:12px}.grading-card-stats{margin-top:4px;color:var(--muted);font-size:10px}.grading-card-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-      .play-sales{margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}.play-sale{display:grid;grid-template-columns:85px 1fr auto;gap:8px;padding:5px 0;font-size:10px}.play-sale strong{font-family:var(--font-mono)}
+      .play-sales{margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}.play-sale{display:grid;grid-template-columns:85px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:5px 0;font-size:10px}.play-sale strong{font-family:var(--font-mono)}.sale-delete{border:1px solid rgba(255,120,133,.35);border-radius:6px;background:transparent;padding:4px 6px;font-size:9px;font-weight:800;cursor:pointer}
       .grading-modal{position:fixed;inset:0;z-index:1300;display:none;place-items:center;padding:14px;background:rgba(2,5,11,.8)}.grading-modal.open{display:grid}.grading-modal-card{width:min(640px,100%);max-height:92vh;overflow:auto;padding:18px;border:1px solid var(--line);border-radius:15px;background:var(--surface);box-shadow:0 22px 80px #0008}.grading-modal-card h3{margin:0 0 13px}.grading-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
       @media(max-width:760px){.grading-form{grid-template-columns:1fr 1fr}.grading-field.wide{grid-column:1/-1}.play-metrics{grid-template-columns:1fr 1fr}.play-sale{grid-template-columns:70px 1fr auto}}
-      @media(max-width:460px){.grading-form{grid-template-columns:1fr}.grading-field.wide,.grading-field.full{grid-column:1}.play-top{display:block}}
+      @media(max-width:460px){.grading-form{grid-template-columns:1fr}.grading-field.wide,.grading-field.full{grid-column:1}.play-top{display:block}.play-sale{grid-template-columns:1fr auto}.play-sale>span:first-child{grid-column:1/-1;color:var(--muted)}.sale-delete{grid-column:1/-1;justify-self:end}}
     `;
     document.head.appendChild(style);
 
@@ -135,9 +135,9 @@
     box.append(name, strong); return box;
   }
 
-  function button(label, primary, action) {
+  function button(label, primary, action, danger = false) {
     const result = document.createElement("button"); result.type = "button";
-    result.className = "grading-button" + (primary ? " primary" : "");
+    result.className = "grading-button" + (primary ? " primary" : "") + (danger ? " danger" : "");
     result.textContent = label; result.addEventListener("click", action); return result;
   }
 
@@ -166,7 +166,11 @@
         metric("Different cards", math.cardResults.length)
       );
       const actions = document.createElement("div"); actions.className = "play-actions";
-      actions.append(button("Add card", true, () => openCard(play)), button("Edit play", false, () => editPlay(play)));
+      actions.append(
+        button("Add card", true, () => openCard(play)),
+        button("Edit play", false, () => editPlay(play)),
+        button("Delete play", false, () => deletePlay(play), true)
+      );
       article.append(top, metrics, actions);
       if (play.notes) { const notes = document.createElement("div"); notes.className = "play-notes"; notes.textContent = play.notes; article.appendChild(notes); }
       const lines = document.createElement("div"); lines.className = "play-card-lines";
@@ -180,7 +184,11 @@
         const stats = document.createElement("div"); stats.className = "grading-card-stats";
         stats.textContent = `${item.quantity} submitted · ${whole(item.card.tens_count)} tens · ${item.sold} sold · ${item.remaining} remaining · realized ${cash(item.realized)}`;
         const cardActions = document.createElement("div"); cardActions.className = "grading-card-actions";
-        cardActions.append(button("Add sale", true, () => openSale(play, item.card)), button("Edit card / results", false, () => openCard(play, item.card)));
+        cardActions.append(
+          button("Add sale", true, () => openSale(play, item.card)),
+          button("Edit card / results", false, () => openCard(play, item.card)),
+          button("Delete card", false, () => deleteCard(item.card), true)
+        );
         row.append(head, stats, cardActions);
         if (item.card.notes) { const note = document.createElement("div"); note.className = "play-notes"; note.textContent = item.card.notes; row.appendChild(note); }
         if (item.cardSales.length) {
@@ -190,7 +198,10 @@
             const saleDate = document.createElement("span"); saleDate.textContent = String(sale.sale_date || "").slice(0, 10);
             const detail = document.createElement("span"); detail.textContent = `${whole(sale.quantity)} sold${sale.notes ? " · " + sale.notes : ""}`;
             const value = document.createElement("strong"); value.textContent = cash(n(sale.gross_amount) - n(sale.fees) - n(sale.shipping));
-            saleRow.append(saleDate, detail, value); saleList.appendChild(saleRow);
+            const removeSale = document.createElement("button"); removeSale.className = "sale-delete";
+            removeSale.type = "button"; removeSale.textContent = "Delete";
+            removeSale.addEventListener("click", () => deleteSale(sale));
+            saleRow.append(saleDate, detail, value, removeSale); saleList.appendChild(saleRow);
           }
           row.appendChild(saleList);
         }
@@ -238,6 +249,19 @@
     document.getElementById("playCancel").hidden = true;
   }
 
+  async function deletePlay(play) {
+    if (!confirm(`Permanently delete "${play.play_name}" and every card and sale inside it?`)) return;
+    try {
+      await pbRequest("/api/collections/grading_plays/records/" + play.id, { method:"DELETE" });
+      const cardIds = new Set(cards.filter((card) => card.play === play.id).map((card) => card.id));
+      plays = plays.filter((item) => item.id !== play.id);
+      cards = cards.filter((card) => card.play !== play.id);
+      sales = sales.filter((sale) => sale.play !== play.id && !cardIds.has(sale.card));
+      if (editingPlayId === play.id) resetPlayForm();
+      render();
+    } catch (_) { alert("The grading play could not be deleted."); }
+  }
+
   function openCard(play, card = null) {
     activePlayId = play.id; editingCardId = card?.id || "";
     document.getElementById("gradingCardTitle").textContent = (card ? "Edit card · " : "Add card · ") + play.play_name;
@@ -281,6 +305,21 @@
     } catch (error) { message.textContent = error.status === 404 ? "Run the PocketBase setup tool, then retry." : "The card could not be saved."; }
   }
 
+  async function deleteCard(card) {
+    const cardSales = sales.filter((sale) => sale.card === card.id);
+    const warning = cardSales.length
+      ? `Permanently delete "${card.card_name}" and its ${cardSales.length} sale record(s)?`
+      : `Permanently delete "${card.card_name}" from this play?`;
+    if (!confirm(warning)) return;
+    try {
+      await pbRequest("/api/collections/grading_play_cards/records/" + card.id, { method:"DELETE" });
+      cards = cards.filter((item) => item.id !== card.id);
+      sales = sales.filter((sale) => sale.card !== card.id);
+      if (editingCardId === card.id) closeCard();
+      render();
+    } catch (_) { alert("The grading card could not be deleted."); }
+  }
+
   function openSale(play, card) {
     activePlayId = play.id; activeCardId = card.id;
     document.getElementById("gradingSaleTitle").textContent = "Add sale · " + card.card_name;
@@ -316,6 +355,15 @@
       });
       sales.unshift(record); closeSale(); render();
     } catch (error) { message.textContent = error.status === 404 ? "Run the PocketBase setup tool, then retry." : "The sale could not be saved."; }
+  }
+
+  async function deleteSale(sale) {
+    if (!confirm(`Permanently delete this ${whole(sale.quantity)}-card sale record?`)) return;
+    try {
+      await pbRequest("/api/collections/grading_play_sales/records/" + sale.id, { method:"DELETE" });
+      sales = sales.filter((item) => item.id !== sale.id);
+      render();
+    } catch (_) { alert("The grading sale could not be deleted."); }
   }
 
   install();

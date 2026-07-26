@@ -42,10 +42,10 @@
       .ledger-actions{grid-column:1/-1;display:flex;gap:8px}.ledger-actions button,.ledger-export{min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px 12px;font-weight:750;cursor:pointer}.ledger-actions .primary{background:var(--accent);border-color:var(--accent);color:#fff}
       .ledger-message{grid-column:1/-1;min-height:17px;color:#ff7885;font-size:11px}.ledger-list{display:grid;gap:7px;max-width:100%;max-height:430px;overflow-x:hidden;overflow-y:auto}.ledger-row{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto;gap:9px;align-items:center;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}
       .ledger-row>div,.exception-row>div{overflow-wrap:anywhere}.ledger-row strong{font-size:12px}.ledger-row .amount{font:700 13px var(--font-mono);white-space:nowrap}.ledger-row-actions{display:flex;align-items:center;gap:6px}.receipt-open{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}.ledger-delete{border:0;background:transparent;color:#ff7885;cursor:pointer;font-weight:800}.tax-caption{margin-top:9px;color:var(--muted-2);font-size:10px;line-height:1.4;overflow-wrap:anywhere}
-      .exception-box{max-width:100%;margin-top:15px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}.exception-box h3{margin:0 0 5px;font-size:15px}.exception-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:13px}.exception-field{display:grid;gap:5px}.exception-field.full{grid-column:1/-1}.exception-field label{font-size:11px;color:var(--muted);font-weight:700}.exception-field textarea{min-height:66px;resize:vertical}.exception-list{display:grid;gap:7px;max-width:100%;margin-top:14px}.exception-row{display:grid;grid-template-columns:90px minmax(0,1fr) auto auto;gap:9px;align-items:center;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}.exception-row strong{display:block;font-size:12px}.exception-row .amount{font:700 13px var(--font-mono)}.exception-review{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}
+      .exception-box{max-width:100%;margin-top:15px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}.exception-box h3{margin:0 0 5px;font-size:15px}.exception-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:13px}.exception-field{display:grid;gap:5px}.exception-field.full{grid-column:1/-1}.exception-field label{font-size:11px;color:var(--muted);font-weight:700}.exception-field textarea{min-height:66px;resize:vertical}.exception-list{display:grid;gap:7px;max-width:100%;margin-top:14px}.exception-row{display:grid;grid-template-columns:90px minmax(0,1fr) auto auto;gap:9px;align-items:center;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}.exception-row strong{display:block;font-size:12px}.exception-row .amount{font:700 13px var(--font-mono)}.exception-actions{display:flex;flex-wrap:wrap;gap:6px}.exception-review,.exception-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}.exception-delete{border-color:rgba(255,120,133,.35);color:#ff7885}
       .exception-box{margin-top:0;padding:16px;border-color:rgba(233,185,73,.28);border-top:3px solid #e9b949;background:linear-gradient(145deg,var(--surface),rgba(35,28,12,.22));box-shadow:0 10px 28px rgba(0,0,0,.14)}
-      @media(max-width:720px){.finance-section{margin-inline:auto}.finance-section .panel-head{flex-direction:column;align-items:stretch}.finance-section .ledger-export{width:100%}.finance-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.ledger-layout{grid-template-columns:minmax(0,1fr)}.ledger-form,.exception-form{grid-template-columns:minmax(0,1fr)}.ledger-field.full,.exception-field.full{grid-column:1}.ledger-row,.exception-row{grid-template-columns:72px minmax(0,1fr) auto}.ledger-row-actions,.exception-review{grid-column:1/-1;justify-self:end}.finance-card strong{font-size:17px}}
-      @media(max-width:460px){.finance-cards{grid-template-columns:minmax(0,1fr)}.finance-card{text-align:center}.ledger-box,.exception-box{padding:12px}.ledger-row,.exception-row{grid-template-columns:1fr auto}.ledger-row>span:first-child,.exception-row>span:first-child{grid-column:1/-1;color:var(--muted)}.ledger-row-actions,.exception-review{grid-column:1/-1;width:100%;justify-content:flex-end}.exception-review{justify-self:stretch}.ledger-actions button{width:100%}}
+      @media(max-width:720px){.finance-section{margin-inline:auto}.finance-section .panel-head{flex-direction:column;align-items:stretch}.finance-section .ledger-export{width:100%}.finance-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.ledger-layout{grid-template-columns:minmax(0,1fr)}.ledger-form,.exception-form{grid-template-columns:minmax(0,1fr)}.ledger-field.full,.exception-field.full{grid-column:1}.ledger-row,.exception-row{grid-template-columns:72px minmax(0,1fr) auto}.ledger-row-actions,.exception-actions{grid-column:1/-1;justify-self:end}.finance-card strong{font-size:17px}}
+      @media(max-width:460px){.finance-cards{grid-template-columns:minmax(0,1fr)}.finance-card{text-align:center}.ledger-box,.exception-box{padding:12px}.ledger-row,.exception-row{grid-template-columns:1fr auto}.ledger-row>span:first-child,.exception-row>span:first-child{grid-column:1/-1;color:var(--muted)}.ledger-row-actions,.exception-actions{grid-column:1/-1;width:100%;justify-content:flex-end}.ledger-actions button{width:100%}}
     `;
     document.head.appendChild(style);
 
@@ -251,7 +251,11 @@
       const value = document.createElement("span"); value.className = "amount"; value.textContent = item.amount ? cash(item.amount) : "—";
       const review = document.createElement("button"); review.className = "exception-review"; review.type = "button"; review.textContent = "Mark reviewed";
       review.addEventListener("click", () => reviewException(item));
-      row.append(date, detail, value, review); list.appendChild(row);
+      const remove = document.createElement("button"); remove.className = "exception-delete"; remove.type = "button"; remove.textContent = "Delete";
+      remove.addEventListener("click", () => deleteException(item));
+      const actions = document.createElement("div"); actions.className = "exception-actions";
+      actions.append(review, remove);
+      row.append(date, detail, value, actions); list.appendChild(row);
     }
   }
 
@@ -293,6 +297,15 @@
       exceptions = exceptions.map((row) => row.id === updated.id ? updated : row);
       renderExceptions();
     } catch (_) { alert("The exception note could not be updated."); }
+  }
+
+  async function deleteException(item) {
+    if (!confirm("Permanently delete this exception note?")) return;
+    try {
+      await pbRequest("/api/collections/business_exceptions/records/" + item.id, { method:"DELETE" });
+      exceptions = exceptions.filter((row) => row.id !== item.id);
+      renderExceptions();
+    } catch (_) { alert("The exception note could not be deleted."); }
   }
 
   async function saveEntry(event) {
