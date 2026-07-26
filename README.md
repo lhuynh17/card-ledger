@@ -11,7 +11,10 @@ The app tracks:
   fallback;
 - one-tap PSA recent-sale comparables or manual market values from one to three
   sales, including links, source, notes, update date, and value history;
-- collection cost, market value, and unrealized gain or loss;
+- collection cost, market value, unrealized gain or loss, and a current-value
+  acquisition timeline;
+- an owner profile with a synced display name and protected business
+  logo/profile picture;
 - business expenses, owner contributions and draws, loans, other income, and
   protected receipt or invoice uploads, with post-save corrections;
 - tax-year estimates for gross receipts, COGS, selling costs, operating

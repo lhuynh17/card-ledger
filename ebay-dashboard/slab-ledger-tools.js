@@ -152,20 +152,24 @@
   }
 
   function updateCapitalTotal() {
-    document.getElementById("capitalTotal").textContent = money(
+    const total = document.getElementById("capitalTotal");
+    total.textContent = money(
       amount(document.getElementById("capitalBank").value) +
       amount(document.getElementById("capitalCash").value)
     );
+    total.className = "money-positive";
   }
 
   function updateCalculators() {
     const base = amount(document.getElementById("percentAmount").value);
     const rate = amount(document.getElementById("percentRate").value);
     document.getElementById("percentResult").textContent = money(base * rate / 100);
+    document.getElementById("percentResult").className = "money-positive";
     const market = amount(document.getElementById("marketAmount").value);
     const paying = amount(document.getElementById("payingAmount").value);
     document.getElementById("payingResult").textContent =
       market > 0 ? (paying / market * 100).toFixed(1).replace(/\.0$/, "") + "%" : "0%";
+    document.getElementById("payingResult").className = "money-positive";
   }
 
   function capitalData() {
@@ -251,9 +255,11 @@
     ];
     for (const [direction, listId, totalId] of directions) {
       const rows = debtReminders.filter((item) => item.direction === direction);
-      document.getElementById(totalId).textContent = money(
+      const total = document.getElementById(totalId);
+      total.textContent = money(
         rows.reduce((sum, item) => sum + amount(item.amount), 0)
       );
+      total.className = direction === "i_owe" ? "money-negative" : "money-positive";
       const list = document.getElementById(listId);
       list.textContent = "";
       if (!rows.length) {
@@ -267,7 +273,9 @@
         const row = document.createElement("div"); row.className = "debt-row";
         const head = document.createElement("div"); head.className = "debt-row-head";
         const person = document.createElement("strong"); person.textContent = item.person;
-        const value = document.createElement("span"); value.className = "debt-amount"; value.textContent = money(item.amount);
+        const value = document.createElement("span");
+        value.className = "debt-amount " + (direction === "i_owe" ? "money-negative" : "money-positive");
+        value.textContent = money(item.amount);
         head.append(person, value);
         const detail = document.createElement("div"); detail.className = "debt-detail";
         detail.textContent = [String(item.reminder_date || "").slice(0, 10), item.notes].filter(Boolean).join(" · ");

@@ -160,8 +160,8 @@
       const metrics = document.createElement("div"); metrics.className = "play-metrics";
       metrics.append(
         metric("Cards submitted", math.quantity), metric("PSA 10s", `${math.tens} / ${math.quantity}`),
-        metric("Total invested", cash(math.invested)), metric("Units remaining", math.remaining),
-        metric("Net sales", cash(math.net)), metric("Realized P/L", cash(math.realized), math.realized),
+        metric("Total invested", cash(math.invested), math.invested), metric("Units remaining", math.remaining),
+        metric("Net sales", cash(math.net), math.net), metric("Realized P/L", cash(math.realized), math.realized),
         metric(math.remaining ? "Cash position" : "Final play P/L", cash(math.cashPosition), math.cashPosition),
         metric("Different cards", math.cardResults.length)
       );
@@ -179,7 +179,7 @@
         const row = document.createElement("div"); row.className = "grading-card-row";
         const head = document.createElement("div"); head.className = "grading-card-head";
         const name = document.createElement("strong"); name.textContent = item.card.card_name;
-        const cost = document.createElement("strong"); cost.textContent = `${cash(item.unitCost)} each`;
+        const cost = document.createElement("strong"); cost.className = "positive"; cost.textContent = `${cash(item.unitCost)} each`;
         head.append(name, cost);
         const stats = document.createElement("div"); stats.className = "grading-card-stats";
         stats.textContent = `${item.quantity} submitted · ${whole(item.card.tens_count)} tens · ${item.sold} sold · ${item.remaining} remaining · realized ${cash(item.realized)}`;
@@ -197,7 +197,7 @@
             const saleRow = document.createElement("div"); saleRow.className = "play-sale";
             const saleDate = document.createElement("span"); saleDate.textContent = String(sale.sale_date || "").slice(0, 10);
             const detail = document.createElement("span"); detail.textContent = `${whole(sale.quantity)} sold${sale.notes ? " · " + sale.notes : ""}`;
-            const value = document.createElement("strong"); value.textContent = cash(n(sale.gross_amount) - n(sale.fees) - n(sale.shipping));
+            const value = document.createElement("strong"); value.className = "positive"; value.textContent = cash(n(sale.gross_amount) - n(sale.fees) - n(sale.shipping));
             const removeSale = document.createElement("button"); removeSale.className = "sale-delete";
             removeSale.type = "button"; removeSale.textContent = "Delete";
             removeSale.addEventListener("click", () => deleteSale(sale));
