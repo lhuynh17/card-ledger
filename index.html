@@ -196,11 +196,26 @@ section{
 
 /* ============ 4. FORM GRID ============ */
 .form-grid{
-  display:grid; grid-template-columns: 1fr 1fr;
-  gap: 18px 22px; margin-top: 26px;
+  display:grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items:start; gap: 18px 22px; margin-top: 26px;
 }
-.field{ display:flex; flex-direction:column; }
+.field{ display:flex; min-width:0; flex-direction:column; }
 .field.full{ grid-column: 1 / -1; }
+.form-grid > .field > label{
+  display:flex;
+  min-height:36px;
+  align-items:flex-end;
+  line-height:1.25;
+}
+.form-grid > .field > input,
+.form-grid > .field > select,
+.form-grid > .field > .input-wrap{ min-height:53px; }
+.form-grid > .field > .input-wrap > input{ height:100%; }
+.form-grid > .field > small{
+  display:block;
+  margin-top:7px;
+  line-height:1.35;
+}
 label{
   display:block;
   font-size: 14px; font-weight: 500;
@@ -591,6 +606,10 @@ select option{ background: var(--surface-2); color: var(--text); }
   .action-btn .t2{ font-size:11px; }
   .action-btn .ico, .action-btn .ico svg{ width:20px; height:20px; }
   .form-grid{ gap:12px 12px; margin-top:18px; }
+  .form-grid > .field > label{ min-height:32px; }
+  .form-grid > .field > input,
+  .form-grid > .field > select,
+  .form-grid > .field > .input-wrap{ min-height:45px; }
   input[type="text"], input[type="number"], input[type="date"], select, textarea{ padding:11px 12px; font-size:14px; }
   #cardCost, #cardNotes{ height:45px; min-height:45px; }
   .input-wrap input[type="text"]{ padding-right: 84px; }
