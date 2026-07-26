@@ -40,9 +40,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- ZXing: trusted open-source QR / barcode reader (runs locally) -->
-<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script
+  src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"
+  integrity="sha384-BzBxP10ZE72aitqj5UMmUsbKFliP/DZqA8Wq+BNNhlIJDGoEd1tpkMYXOg9+n6sB"
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"></script>
 <!-- ExcelJS: builds real .xlsx files (with embedded photos) in the browser -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"
+  integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"></script>
 
 <style>
 /* ============ 1. DESIGN TOKENS ============ */
@@ -847,6 +855,7 @@ let editingId = null; // id of the card currently being edited inline, or null
 let cloudSession = null;
 let syncInProgress = false;
 let syncTimer = null;
+let cloudFileToken = { value:"", expiresAt:0 };
 
 try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
 
@@ -871,6 +880,20 @@ async function pbRequest(path, options = {}) {
     throw error;
   }
   return data;
+}
+
+async function protectedFileToken() {
+  const now = Date.now();
+  if (cloudFileToken.value && cloudFileToken.expiresAt > now) {
+    return cloudFileToken.value;
+  }
+  const result = await pbRequest("/api/files/token", { method:"POST" });
+  cloudFileToken = {
+    value:result.token,
+    // PocketBase file tokens are short lived; refresh before the normal expiry.
+    expiresAt:now + 90_000
+  };
+  return cloudFileToken.value;
 }
 
 function cloudFields(card) {
@@ -908,12 +931,17 @@ function blobDataUrl(blob) {
 async function remotePhotoData(record, existing) {
   if (!record.photo) return "";
   if (existing?._photoFile === record.photo && existing.photo) return existing.photo;
-  const url = PB_URL + "/api/files/" + record.collectionId + "/" + record.id + "/" + encodeURIComponent(record.photo);
   try {
+    const token = await protectedFileToken();
+    const url = PB_URL + "/api/files/" + record.collectionId + "/" + record.id + "/" +
+      encodeURIComponent(record.photo) + "?token=" + encodeURIComponent(token);
     const response = await fetch(url, { headers: cloudSession?.token ? { Authorization:cloudSession.token } : {} });
     if (!response.ok) throw new Error("photo");
     return await blobDataUrl(await response.blob());
-  } catch (e) { return url; }
+  } catch (e) {
+    // Keep an already-cached copy if the short-lived file request fails.
+    return existing?.photo || "";
+  }
 }
 
 async function remoteToLocal(record, existing = null) {
@@ -2285,6 +2313,7 @@ $('syncBtn').addEventListener('click', () => {
 $('logoutBtn').addEventListener('click', () => {
   if (!confirm('Sign out of cloud sync on this device? Your local inventory will remain here.')) return;
   cloudSession = null;
+  cloudFileToken = { value:"", expiresAt:0 };
   localStorage.removeItem(PB_AUTH_KEY);
   sessionStorage.removeItem('slabLedgerOfflineChosen');
   setSyncStatus('Sign in to sync');

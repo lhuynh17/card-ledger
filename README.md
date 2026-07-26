@@ -26,6 +26,10 @@ PocketBase setup instructions are in
 The scraper is optional; manual market tracking and the business ledger work
 without it.
 
+The setup tool also audits existing collection ownership rules before repairing
+them and protects inventory photos with PocketBase short-lived file tokens. It
+stops instead of applying rules when existing records could be locked out.
+
 Slab Ledger is a recordkeeping aid, not accounting or tax advice. Keep original
 receipts and statements, and confirm tax classifications with a qualified
 professional.
