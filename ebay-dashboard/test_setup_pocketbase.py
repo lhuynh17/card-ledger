@@ -1,7 +1,7 @@
 import importlib.util
 import pathlib
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 MODULE_PATH = pathlib.Path(__file__).with_name("setup_pocketbase.py")
@@ -20,6 +20,46 @@ class PocketBaseSecurityTests(unittest.TestCase):
             "maxSelect": 1,
         }
         self.rules = SETUP.owner_security_rules()
+
+    @patch.object(SETUP.requests, "post")
+    def test_superuser_password_auth_without_mfa(self, post):
+        response = Mock(ok=True, content=b"{}", status_code=200)
+        response.json.return_value = {"token": "password-token"}
+        post.return_value = response
+
+        token = SETUP.authenticate(
+            "https://example.test", "admin@example.test", "password"
+        )
+
+        self.assertEqual(token, "password-token")
+        self.assertEqual(post.call_count, 1)
+
+    @patch.object(SETUP.getpass, "getpass", return_value="123456")
+    @patch.object(SETUP.requests, "post")
+    def test_superuser_mfa_requests_and_verifies_otp(self, post, getpass):
+        password_response = Mock(ok=False, content=b"{}", status_code=401)
+        password_response.json.return_value = {"mfaId": "mfa-session"}
+        otp_request = Mock(ok=True, content=b"{}", status_code=200)
+        otp_request.json.return_value = {"otpId": "otp-request"}
+        otp_auth = Mock(ok=True, content=b"{}", status_code=200)
+        otp_auth.json.return_value = {"token": "mfa-token"}
+        post.side_effect = [password_response, otp_request, otp_auth]
+
+        token = SETUP.authenticate(
+            "https://example.test", "admin@example.test", "password"
+        )
+
+        self.assertEqual(token, "mfa-token")
+        self.assertEqual(post.call_count, 3)
+        self.assertEqual(
+            post.call_args_list[2].kwargs["json"],
+            {
+                "otpId": "otp-request",
+                "password": "123456",
+                "mfaId": "mfa-session",
+            },
+        )
+        getpass.assert_called_once()
 
     @patch.object(SETUP.requests, "get")
     @patch.object(SETUP, "request")
