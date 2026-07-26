@@ -196,6 +196,16 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(logo["maxSelect"], 1)
         self.assertLessEqual(logo["maxSize"], 2 * 1024 * 1024)
 
+    def test_grading_item_photo_is_single_and_protected(self):
+        photo = next(
+            field for field in SETUP.GRADING_ITEM_FIELDS
+            if field["name"] == "photo"
+        )
+
+        self.assertTrue(photo["protected"])
+        self.assertEqual(photo["maxSelect"], 1)
+        self.assertLessEqual(photo["maxSize"], 10 * 1024 * 1024)
+
 
 if __name__ == "__main__":
     unittest.main()

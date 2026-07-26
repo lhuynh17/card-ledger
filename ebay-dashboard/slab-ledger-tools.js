@@ -3,9 +3,11 @@
 
   const STORAGE_KEY = "slabLedgerBuyingCapital";
   const VIEW_KEY = "slabLedgerAppView";
+  const THEME_KEY = "slabLedgerTheme";
   let preferenceId = "";
   let debtReminders = [];
   let editingDebtId = "";
+  let calculatorMode = "portion";
 
   const amount = (value) => Math.max(0, Number.parseFloat(value) || 0);
   const money = (value) => new Intl.NumberFormat("en-US", {
@@ -18,18 +20,20 @@
       .app-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:1180px;margin:14px auto 2px;padding:0 22px}
       .app-nav button{min-height:44px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--muted);font:750 13px var(--font-sans);cursor:pointer}
       .app-nav button.active{border-color:var(--accent);background:var(--accent);color:#fff}
-      .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-group-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:0 2px 11px;border-bottom:1px solid var(--line)}.tool-group-label:first-child{margin-top:0}.tool-group-number{display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:var(--accent-soft);color:#9db8ff;font:800 11px var(--font-mono)}.tool-group-label h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.tool-group-label p{margin:2px 0 0;color:var(--muted);font-size:11px}.tool-card{position:relative;padding:18px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),rgba(14,20,32,.82));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.tool-card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--tool-tone,#4B7BE5)}
+      .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-group-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:0 2px 11px;border-bottom:1px solid var(--line)}.tool-group-label:first-child{margin-top:0}.tool-group-number{display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:var(--accent-soft);color:#9db8ff;font:800 11px var(--font-mono)}.tool-group-label h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.tool-group-label p{margin:2px 0 0;color:var(--muted);font-size:11px}.tool-card{position:relative;padding:18px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),var(--surface-end));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.tool-card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--tool-tone,#4B7BE5)}
       .tool-card.tone-green{--tool-tone:#35b37e}.tool-card.tone-blue{--tool-tone:#4b7be5}.tool-card.tone-violet{--tool-tone:#9b7bea}.tool-card.tone-amber{--tool-tone:#e9b949}
-      .tool-card.capital-card{grid-column:1/-1}.tool-card h2{margin:0 0 5px;font-size:16px}.tool-card p{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
+      .tool-card h2{margin:0 0 5px;font-size:16px}.tool-card p{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
       .tool-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px}.tool-field{display:grid;min-width:0;grid-template-rows:minmax(28px,auto) auto;align-content:start;gap:5px}.tool-field.full{grid-column:1/-1}.tool-field label{display:flex;min-height:28px;align-items:flex-end;font-size:11px;line-height:1.2;color:var(--muted);font-weight:750}
       .tool-field input,.tool-field select,.tool-field textarea{box-sizing:border-box;width:100%;min-height:43px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.tool-field textarea{min-height:65px;resize:vertical}
       .capital-total,.calculator-result{margin-top:13px;padding:13px;border-radius:10px;background:var(--surface-2)}.capital-total span,.calculator-result span{display:block;color:var(--muted);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.capital-total strong,.calculator-result strong{display:block;margin-top:3px;font:800 24px var(--font-mono)}
       .capital-save{margin-top:11px;min-height:42px;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:9px 14px;font-weight:800;cursor:pointer}.capital-status{margin-left:9px;color:var(--muted);font-size:11px}
       .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
+      .calculator-mode,.theme-options{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.calculator-mode button,.theme-options button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:800;cursor:pointer}.calculator-mode button.active,.theme-options button.active{background:var(--accent);color:#fff}.theme-card{grid-column:1/-1}.theme-card-body{display:flex;align-items:center;justify-content:space-between;gap:18px}.theme-card-body>div:first-child{max-width:620px}.theme-options{width:min(300px,100%);flex:0 0 auto;margin:0}
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel,.debt-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.debt-empty{color:var(--muted);font-size:11px}
-      @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.tool-card.capital-card,.debt-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.tool-fields,.debt-layout,.debt-columns{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
+      @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.debt-card,.theme-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.debt-layout,.debt-columns{grid-template-columns:1fr}.theme-card-body{display:block}.theme-options{margin-top:12px;width:100%}}
+      @media(max-width:430px){.tool-fields{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
     `;
     document.head.appendChild(style);
 
@@ -50,7 +54,7 @@
       <div class="tools-grid">
         <div class="tool-group-label"><span class="tool-group-number">01</span><div><h2>Buying & deal math</h2><p>Quick numbers for decisions at shows, shops, and online.</p></div></div>
         <div class="tool-card capital-card tone-green">
-          <h2>Inventory buying capital</h2>
+          <h2>Capital</h2>
           <p>A personal reminder of what you currently have available to spend. It is not included in exports, profit, or tax calculations.</p>
           <div class="tool-fields">
             <div class="tool-field"><label for="capitalBank">Available in bank</label><input id="capitalBank" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
@@ -61,26 +65,30 @@
           <button class="capital-save" id="capitalSave" type="button">Save reminder</button><span class="capital-status" id="capitalStatus"></span>
         </div>
         <div class="tool-card tone-blue">
-          <h2>Percentage of an amount</h2>
-          <p>Enter an amount and a percentage to calculate that portion.</p>
-          <div class="tool-fields">
-            <div class="tool-field"><label for="percentAmount">Amount</label><input id="percentAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="100.00"></div>
-            <div class="tool-field"><label for="percentRate">Percent</label><input id="percentRate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70"></div>
+          <h2>Percentage calculator</h2>
+          <p>Switch between finding a percentage of an amount and comparing two amounts.</p>
+          <div class="calculator-mode" role="group" aria-label="Percentage calculation">
+            <button class="active" type="button" data-calculator-mode="portion">Percent of amount</button>
+            <button type="button" data-calculator-mode="ratio">What percent?</button>
           </div>
-          <div class="calculator-result"><span>Calculated value</span><strong id="percentResult">$0.00</strong></div>
-          <button class="calculator-clear" id="percentClear" type="button">Clear form</button>
-        </div>
-        <div class="tool-card tone-violet">
-          <h2>What percent am I paying?</h2>
-          <p>Compare your purchase price with the asking or market value.</p>
           <div class="tool-fields">
-            <div class="tool-field"><label for="marketAmount">Asking / market value</label><input id="marketAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="100.00"></div>
-            <div class="tool-field"><label for="payingAmount">Price I would pay</label><input id="payingAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70.00"></div>
+            <div class="tool-field"><label id="calculatorFirstLabel" for="calculatorFirst">Amount</label><input id="calculatorFirst" type="number" min="0" step="0.01" inputmode="decimal" placeholder="100.00"></div>
+            <div class="tool-field"><label id="calculatorSecondLabel" for="calculatorSecond">Percent</label><input id="calculatorSecond" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70"></div>
           </div>
-          <div class="calculator-result"><span>You are paying</span><strong id="payingResult">0%</strong></div>
-          <button class="calculator-clear" id="payingClear" type="button">Clear form</button>
+          <div class="calculator-result"><span id="calculatorResultLabel">Calculated value</span><strong id="calculatorResult">$0.00</strong></div>
+          <button class="calculator-clear" id="calculatorClear" type="button">Clear form</button>
         </div>
-        <div class="tool-group-label"><span class="tool-group-number">02</span><div><h2>People & balances</h2><p>Private reminders for short-term money shared with other vendors.</p></div></div>
+        <div class="tool-group-label"><span class="tool-group-number">02</span><div><h2>Appearance</h2><p>Choose the theme that is easiest for you to use.</p></div></div>
+        <div class="tool-card theme-card tone-violet">
+          <div class="theme-card-body">
+            <div><h2>App theme</h2><p>Use a light or dark appearance. Your choice is remembered on this device.</p></div>
+            <div class="theme-options" role="group" aria-label="App theme">
+              <button type="button" data-theme-choice="light">Light</button>
+              <button type="button" data-theme-choice="dark">Dark</button>
+            </div>
+          </div>
+        </div>
+        <div class="tool-group-label"><span class="tool-group-number">03</span><div><h2>Balances</h2><p>Private reminders for short-term money shared with other vendors.</p></div></div>
         <div class="tool-card debt-card tone-amber">
           <h2>Money owed reminders</h2>
           <p>Keep track of informal vendor-to-vendor loans. These reminders are private and are not included in tax calculations or exports.</p>
@@ -112,28 +120,20 @@
       button.addEventListener("click", () => showView(button.dataset.view)));
     ["capitalBank","capitalCash"].forEach((id) =>
       document.getElementById(id).addEventListener("input", updateCapitalTotal));
-    ["percentAmount","percentRate"].forEach((id) =>
-      document.getElementById(id).addEventListener("input", updateCalculators));
-    ["marketAmount","payingAmount"].forEach((id) =>
-      document.getElementById(id).addEventListener("input", updateCalculators));
-    document.getElementById("percentClear").addEventListener("click", () => {
-      document.getElementById("percentAmount").value = "";
-      document.getElementById("percentRate").value = "";
-      updateCalculators();
-      document.getElementById("percentAmount").focus();
-    });
-    document.getElementById("payingClear").addEventListener("click", () => {
-      document.getElementById("marketAmount").value = "";
-      document.getElementById("payingAmount").value = "";
-      updateCalculators();
-      document.getElementById("marketAmount").focus();
-    });
+    ["calculatorFirst","calculatorSecond"].forEach((id) =>
+      document.getElementById(id).addEventListener("input", updateCalculator));
+    document.querySelectorAll("[data-calculator-mode]").forEach((button) =>
+      button.addEventListener("click", () => setCalculatorMode(button.dataset.calculatorMode)));
+    document.getElementById("calculatorClear").addEventListener("click", clearCalculator);
+    document.querySelectorAll("[data-theme-choice]").forEach((button) =>
+      button.addEventListener("click", () => applyTheme(button.dataset.themeChoice)));
     document.getElementById("capitalSave").addEventListener("click", saveCapital);
     document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("debtForm").addEventListener("submit", saveDebtReminder);
     document.getElementById("debtCancelEdit").addEventListener("click", resetDebtForm);
 
     loadLocalCapital();
+    applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
     showView(localStorage.getItem(VIEW_KEY) || "inventory");
   }
 
@@ -160,16 +160,61 @@
     total.className = "money-positive";
   }
 
-  function updateCalculators() {
-    const base = amount(document.getElementById("percentAmount").value);
-    const rate = amount(document.getElementById("percentRate").value);
-    document.getElementById("percentResult").textContent = money(base * rate / 100);
-    document.getElementById("percentResult").className = "money-positive";
-    const market = amount(document.getElementById("marketAmount").value);
-    const paying = amount(document.getElementById("payingAmount").value);
-    document.getElementById("payingResult").textContent =
-      market > 0 ? (paying / market * 100).toFixed(1).replace(/\.0$/, "") + "%" : "0%";
-    document.getElementById("payingResult").className = "money-positive";
+  function applyTheme(theme) {
+    const selected = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = selected;
+    localStorage.setItem(THEME_KEY, selected);
+    document.querySelectorAll("[data-theme-choice]").forEach((button) => {
+      const active = button.dataset.themeChoice === selected;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const meta = document.getElementById("themeColorMeta");
+    if (meta) meta.content = selected === "light" ? "#F3F6FA" : "#060A13";
+  }
+
+  function setCalculatorMode(mode) {
+    calculatorMode = mode === "ratio" ? "ratio" : "portion";
+    document.querySelectorAll("[data-calculator-mode]").forEach((button) => {
+      const active = button.dataset.calculatorMode === calculatorMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const first = document.getElementById("calculatorFirst");
+    const second = document.getElementById("calculatorSecond");
+    if (calculatorMode === "portion") {
+      document.getElementById("calculatorFirstLabel").textContent = "Amount";
+      document.getElementById("calculatorSecondLabel").textContent = "Percent";
+      document.getElementById("calculatorResultLabel").textContent = "Calculated value";
+      first.placeholder = "100.00";
+      second.placeholder = "70";
+    } else {
+      document.getElementById("calculatorFirstLabel").textContent = "Part amount";
+      document.getElementById("calculatorSecondLabel").textContent = "Total amount";
+      document.getElementById("calculatorResultLabel").textContent = "Part is";
+      first.placeholder = "70.00";
+      second.placeholder = "100.00";
+    }
+    clearCalculator(false);
+  }
+
+  function clearCalculator(focus = true) {
+    document.getElementById("calculatorFirst").value = "";
+    document.getElementById("calculatorSecond").value = "";
+    updateCalculator();
+    if (focus) document.getElementById("calculatorFirst").focus();
+  }
+
+  function updateCalculator() {
+    const first = amount(document.getElementById("calculatorFirst").value);
+    const second = amount(document.getElementById("calculatorSecond").value);
+    const result = document.getElementById("calculatorResult");
+    result.textContent = calculatorMode === "portion"
+      ? money(first * second / 100)
+      : second > 0
+        ? (first / second * 100).toFixed(1).replace(/\.0$/, "") + "%"
+        : "0%";
+    result.className = "money-positive";
   }
 
   function capitalData() {

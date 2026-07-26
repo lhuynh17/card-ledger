@@ -19,12 +19,12 @@ The app tracks:
   protected receipt or invoice uploads, with post-save corrections;
 - tax-year estimates for gross receipts, COGS, selling costs, operating
   expenses, profit, and available capital;
-- a private bank/cash buying-capital reminder, money owed lists, and quick
-  percentage calculators;
+- a compact Capital reminder, private balance lists, one switchable percentage
+  calculator, and a persistent light/dark theme;
 - CSV exports for inventory and annual business records.
 - a year-end exceptions log for unusual personal/business account activity.
-- grading-play tracking for batch costs, PSA 10 results, sales, and play-level
-  profit or loss.
+- a simple grading tracker with optional raw-card photos, quantities, per-card
+  raw and grading costs, and live estimated all-in totals.
 
 PocketBase setup instructions are in
 [`ebay-dashboard/POCKETBASE_SETUP.md`](ebay-dashboard/POCKETBASE_SETUP.md).

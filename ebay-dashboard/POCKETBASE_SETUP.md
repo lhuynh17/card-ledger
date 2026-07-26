@@ -37,10 +37,15 @@ It prepares:
   lists; settled reminders are retained but excluded from active totals.
 - `business_exceptions`: stores year-end review notes for business money that
   moved through a personal account or other unusual situations.
+- `grading_items`: privately stores the simplified grading tracker, including
+  quantity, raw-card cost, grading cost, notes, and an optional protected photo.
 - `grading_plays`: stores submission-level status and notes.
 - `grading_play_cards`: stores multiple card lines, quantities, costs, and
   grading results inside each play.
 - `grading_play_sales`: stores any number of sales against each grading play.
+
+The three older `grading_play_*` collections are retained so upgrading does
+not delete any grading data created by earlier Slab Ledger versions.
 
 Every inventory, market, and business record is protected by owner-based API
 rules:
