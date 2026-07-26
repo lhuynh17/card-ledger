@@ -309,14 +309,20 @@ select option{ background: var(--surface-2); color: var(--text); }
 #scannerWrap{ display:none; margin-top: 18px; }
 #scannerWrap.active{ display:block; }
 #video{
-  width:100%; max-width:520px; aspect-ratio: 4 / 3;
+  width:100%; aspect-ratio: 4 / 3;
   background:#000; border-radius: var(--radius-sm);
-  object-fit: cover; display:block; margin-inline:auto;
+  object-fit: cover; display:block;
 }
-.scan-frame{ position: relative; }
+.scan-frame{
+  position:relative; width:min(100%, 520px); margin-inline:auto;
+  overflow:hidden; border-radius:var(--radius-sm);
+}
 .scan-frame::after{
-  content:""; position:absolute; left:10%; right:10%; top:37%; height:26%;
-  border: 2px solid var(--accent); border-radius: 8px; pointer-events:none;
+  content:""; position:absolute; left:50%; top:50%;
+  width:min(58%, 260px); aspect-ratio:1;
+  transform:translate(-50%, -50%);
+  border:2px solid var(--accent); border-radius:12px; pointer-events:none;
+  box-shadow:0 0 0 999px rgba(0,0,0,.16);
 }
 .scan-tip{
   max-width:520px; margin:10px auto 0; color:var(--muted);
