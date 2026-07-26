@@ -332,16 +332,22 @@ def configure_schema(base_url: str, token: str):
 
 def main() -> int:
     suggested = env_value("SLAB_POCKETBASE_URL")
-    base_url = (input(f"PocketBase URL [{suggested}]: ").strip() or suggested).rstrip("/")
+    if suggested:
+        base_url = suggested.rstrip("/")
+        print(f"PocketBase URL: {base_url}")
+    else:
+        base_url = input("PocketBase URL: ").strip().rstrip("/")
     if not base_url.startswith(("https://", "http://")):
         print("Enter the complete PocketBase URL.", file=sys.stderr)
         return 1
     suggested_email = env_value("SLAB_POCKETBASE_SUPERUSER_EMAIL")
-    email = (
-        input(f"PocketBase superuser email [{suggested_email}]: ").strip()
-        or suggested_email
-    )
-    password = getpass.getpass("PocketBase superuser password: ")
+    if suggested_email:
+        email = suggested_email
+        print(f"PocketBase superuser email: {email}")
+    else:
+        email = input("PocketBase superuser email: ").strip()
+    print("Enter only your PocketBase superuser password below.")
+    password = getpass.getpass("Superuser password (hidden): ")
     if not email or not password:
         print("Email and password are required.", file=sys.stderr)
         return 1

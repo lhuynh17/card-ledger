@@ -9,8 +9,9 @@ After pulling this version, run the setup tool on either computer:
 Enter the PocketBase URL and superuser credentials when prompted. The installer
 never saves the password and never deletes existing records.
 After the first successful run, the non-secret URL and superuser email are saved
-only in the ignored local `pocketbase-setup.env` file. Future runs ask only for
-the password.
+only in the ignored local `pocketbase-setup.env` file. Future runs display those
+two saved values without stopping for input; the only prompt is
+`Superuser password (hidden)`.
 
 It prepares:
 
