@@ -45,6 +45,42 @@ routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
   });
 }, $apis.requireAuth("users"));
 
+// Relay only PSA-hosted public images. This avoids browser CORS failures while
+// preventing this route from being used to reach the NAS or private network.
+routerAdd("GET", "/api/slab-ledger/psa-image", (e) => {
+  const rawUrl = e.request.url.query().get("url");
+  const match = String(rawUrl || "").match(/^https:\/\/([a-z0-9.-]+)(?:[\/?#]|$)/i);
+  if (!match) {
+    return e.json(400, { message: "Invalid PSA image address." });
+  }
+  const hostname = match[1].toLowerCase();
+  const allowedHost = hostname == "psacard.com" ||
+    hostname.endsWith(".psacard.com") ||
+    hostname == "collectors.com" ||
+    hostname.endsWith(".collectors.com") ||
+    hostname == "cloudfront.net" ||
+    hostname.endsWith(".cloudfront.net");
+  if (!allowedHost) {
+    return e.json(400, { message: "That image host is not allowed." });
+  }
+
+  const response = $http.send({
+    url: rawUrl,
+    method: "GET",
+    headers: { "Accept": "image/jpeg,image/png,image/webp,image/*" },
+    timeout: 25,
+  });
+  const contentTypes = response.headers["Content-Type"] || response.headers["content-type"] || [];
+  const contentType = String(contentTypes[0] || "image/jpeg").split(";")[0];
+  if (response.statusCode != 200 || !contentType.startsWith("image/")) {
+    return e.json(502, { message: "The PSA image is temporarily unavailable." });
+  }
+  if (!response.body || response.body.length > 10485760) {
+    return e.json(413, { message: "The PSA image is too large to import." });
+  }
+  return e.blob(200, contentType, response.body);
+}, $apis.requireAuth("users"));
+
 routerAdd("GET", "/api/slab-ledger/psa/{cert}/sales", (e) => {
   const cert = e.request.pathValue("cert");
   if (!/^\d{8,10}$/.test(cert)) {

@@ -156,6 +156,7 @@ section{
 .action-grid{
   display:grid; grid-template-columns: 1fr 1fr; gap:16px;
 }
+.action-grid.scan-first{ grid-template-columns:1fr; }
 .action-btn{
   display:flex; align-items:center; gap:16px;
   width:100%; text-align:left; cursor:pointer;
@@ -332,6 +333,46 @@ select option{ background: var(--surface-2); color: var(--text); }
 .status.ok{ color: var(--ok); }
 .status.err{ color: var(--accent); }
 .status:empty{ display:none; }
+.lookup-intro{ margin:0 0 16px; color:var(--muted); line-height:1.5; }
+.manual-cert-toggle{
+  display:block; margin:14px auto 0; border:0; background:transparent;
+  color:var(--muted); text-decoration:underline; text-underline-offset:3px;
+  cursor:pointer; font:500 14px var(--font-body);
+}
+.manual-cert-toggle:hover{ color:var(--text); }
+.cert-entry,.lookup-fallback,.add-details{ display:none; }
+.cert-entry.open,.lookup-fallback.open,.add-details.open{ display:block; }
+.cert-entry{ max-width:560px; margin:16px auto 0; }
+.cert-entry-row{ display:grid; grid-template-columns:1fr auto; gap:10px; }
+.cert-entry-row button,.fallback-actions button{
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--surface-2); color:var(--text); padding:0 18px;
+  font-weight:600; cursor:pointer;
+}
+.cert-entry-row button:hover,.fallback-actions button:hover{ background:var(--field); }
+.lookup-fallback{
+  margin-top:18px; padding:18px; border:1px solid rgba(240,43,61,.34);
+  border-radius:var(--radius-sm); background:rgba(240,43,61,.05);
+}
+.lookup-fallback h3{ margin:0 0 5px; font-size:16px; }
+.lookup-fallback p{ margin:0; color:var(--muted); line-height:1.45; }
+.fallback-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+.fallback-actions button{ min-height:42px; }
+.fallback-actions .primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+.add-details{ margin-top:22px; }
+.lookup-summary{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  margin-bottom:14px; padding:13px 15px; border:1px solid var(--accent-line);
+  border-radius:var(--radius-sm); background:var(--accent-soft);
+}
+.lookup-summary strong{ display:block; }
+.lookup-summary span{ display:block; margin-top:2px; color:var(--muted); font-size:13px; }
+.lookup-summary button{
+  flex:none; border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  color:var(--text); padding:8px 11px; cursor:pointer;
+}
+.psa-photo-note{ margin:8px 0 0; color:var(--muted); font-size:13px; }
+.psa-photo-note.ok{ color:var(--ok); }
 
 /* ---- Search box ---- */
 .search-wrap{ position:relative; width: min(300px, 42vw); }
@@ -609,10 +650,14 @@ select option{ background: var(--surface-2); color: var(--text); }
 .cloud-actions button{ min-height:44px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); color:var(--text); font-weight:650; cursor:pointer; }
 .cloud-actions .primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
 .cloud-message{ min-height:20px; margin-top:12px; color:#ff7885; font-size:13px; }
-.photo-lightbox{ position:fixed; inset:0; z-index:10001; display:none; align-items:center; justify-content:center; padding:24px; background:rgba(0,0,0,.9); }
+.photo-lightbox{ position:fixed; inset:0; z-index:10001; display:none; flex-direction:column; align-items:center; justify-content:center; padding:24px; background:rgba(0,0,0,.9); }
 .photo-lightbox.open{ display:flex; }
-.photo-lightbox img{ display:block; max-width:min(92vw,900px); max-height:88vh; object-fit:contain; border-radius:12px; box-shadow:0 20px 70px rgba(0,0,0,.65); }
-.photo-lightbox button{ position:absolute; top:max(16px,env(safe-area-inset-top)); right:18px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.28); background:rgba(10,14,23,.8); color:#fff; font-size:28px; line-height:1; cursor:pointer; }
+.photo-lightbox img{ display:block; max-width:min(92vw,900px); max-height:80vh; object-fit:contain; border-radius:12px; box-shadow:0 20px 70px rgba(0,0,0,.65); }
+#photoLightboxClose{ position:absolute; top:max(16px,env(safe-area-inset-top)); right:18px; width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,.28); background:rgba(10,14,23,.8); color:#fff; font-size:28px; line-height:1; cursor:pointer; }
+.photo-side-toggle{ display:none; gap:8px; margin-top:14px; padding:5px; border:1px solid rgba(255,255,255,.2); border-radius:11px; background:rgba(10,14,23,.85); }
+.photo-side-toggle.open{ display:flex; }
+.photo-side-toggle button{ min-width:88px; padding:9px 16px; border:0; border-radius:7px; background:transparent; color:#b9c0ce; cursor:pointer; font-weight:650; }
+.photo-side-toggle button.active{ background:var(--accent); color:#fff; }
 @media(max-width:560px){ .app-header{ align-items:flex-start; } .header-actions{ flex-direction:column; align-items:flex-end; gap:6px; } .sync-btn{ padding:6px 9px; } }
 </style>
 </head>
@@ -652,6 +697,10 @@ select option{ background: var(--surface-2); color: var(--text); }
 <div class="photo-lightbox" id="photoLightbox" role="dialog" aria-modal="true" aria-label="Slab photo preview">
   <button type="button" id="photoLightboxClose" aria-label="Close photo preview">&times;</button>
   <img id="photoLightboxImage" alt="Enlarged slab photo">
+  <div class="photo-side-toggle" id="photoSideToggle" aria-label="Choose slab side">
+    <button type="button" id="photoFrontBtn" class="active">Front</button>
+    <button type="button" id="photoBackBtn">Back</button>
+  </div>
 </div>
 
 <!-- ================= ADD NEW ITEM ================= -->
@@ -663,18 +712,20 @@ select option{ background: var(--surface-2); color: var(--text); }
     </div>
   </div>
 
-  <div class="action-grid">
-    <!-- PRIMARY: live QR scanner -->
+  <p class="lookup-intro">Scan the PSA label and Slab Ledger will automatically retrieve the card details and available PSA images.</p>
+  <div class="action-grid scan-first">
     <button type="button" class="action-btn primary" id="scanBtn">
       <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M20 14v.01M14 20v.01M20 20v.01M17 17v.01"/></svg></span>
-      <span class="txt"><span class="t1">Scan QR (Live Camera)</span><span class="t2">Scan the QR code on the slab label</span></span>
+      <span class="txt"><span class="t1">Scan PSA label</span><span class="t2">Use your phone camera with the QR code or barcode</span></span>
     </button>
-
-    <!-- MANUAL LOOKUP: opens PSA's own public cert page in a new tab -->
-    <button type="button" class="action-btn" id="lookupBtn">
-      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
-      <span class="txt"><span class="t1">Open cert page</span><span class="t2">Look up name &amp; grade</span></span>
-    </button>
+  </div>
+  <button type="button" class="manual-cert-toggle" id="manualCertToggle">Enter a cert number instead</button>
+  <div class="cert-entry" id="certEntry">
+    <label for="certNumber">PSA cert number</label>
+    <div class="cert-entry-row">
+      <input type="text" id="certNumber" inputmode="numeric" autocomplete="off" placeholder="8–10 digits">
+      <button type="button" id="typedCertLookupBtn">Look up</button>
+    </div>
   </div>
 
   <!-- Live camera view (hidden until Scan is tapped) -->
@@ -683,11 +734,22 @@ select option{ background: var(--surface-2); color: var(--text); }
     <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
   </div>
 
-  <div class="soft-divider"></div>
-
   <p class="status" id="scanStatus" role="status"></p>
+  <div class="lookup-fallback" id="lookupFallback">
+    <h3>PSA details could not be filled automatically</h3>
+    <p>You can open the public PSA cert page and enter the details the same way you did before.</p>
+    <div class="fallback-actions">
+      <button type="button" class="primary" id="manualEntryBtn">Enter details manually</button>
+      <button type="button" id="lookupBtn">Open PSA cert page</button>
+      <button type="button" id="tryLookupAgainBtn">Try again</button>
+    </div>
+  </div>
 
-  <!-- Form fields -->
+  <div class="add-details" id="addDetails">
+    <div class="lookup-summary" id="lookupSummary">
+      <div><strong id="lookupSummaryTitle">PSA details ready</strong><span id="lookupSummaryText">Review the filled fields and add anything else you need.</span></div>
+      <button type="button" id="startOverBtn">Start over</button>
+    </div>
   <div class="form-grid">
     <div class="field">
       <label for="cardCompany">Grading company</label>
@@ -697,13 +759,7 @@ select option{ background: var(--surface-2); color: var(--text); }
       </select>
     </div>
 
-    <div class="field">
-      <label for="certNumber">Cert number</label>
-      <div class="input-wrap">
-        <input type="text" id="certNumber" autocomplete="off">
-        <button type="button" class="btn-paste inset" id="psaLookupBtn">Fill from PSA</button>
-      </div>
-    </div>
+    <div class="field"><label>Cert number</label><input type="text" id="certDisplay" readonly></div>
 
     <div class="field full">
       <label for="cardName">Card name</label>
@@ -772,6 +828,7 @@ select option{ background: var(--surface-2); color: var(--text); }
         <img id="photoPreview" alt="Slab photo preview">
         <button type="button" id="clearPhotoBtn">Remove photo</button>
       </div>
+      <p class="psa-photo-note" id="psaPhotoNote"></p>
     </div>
 
     <button type="button" class="btn-add" id="addBtn">
@@ -779,6 +836,7 @@ select option{ background: var(--surface-2); color: var(--text); }
       Add to inventory
     </button>
     <button type="button" class="btn-reset-form" id="resetFormBtn">Clear form</button>
+  </div>
   </div>
 </section>
 
@@ -928,26 +986,28 @@ function blobDataUrl(blob) {
   });
 }
 
-async function remotePhotoData(record, existing) {
-  if (!record.photo) return "";
-  if (existing?._photoFile === record.photo && existing.photo) return existing.photo;
+async function remotePhotoData(record, existing, field = "photo", localField = "photo") {
+  if (!record[field]) return "";
+  const cacheField = field === "photo" ? "_photoFile" : "_backPhotoFile";
+  if (existing?.[cacheField] === record[field] && existing[localField]) return existing[localField];
   try {
     const token = await protectedFileToken();
     const url = PB_URL + "/api/files/" + record.collectionId + "/" + record.id + "/" +
-      encodeURIComponent(record.photo) + "?token=" + encodeURIComponent(token);
+      encodeURIComponent(record[field]) + "?token=" + encodeURIComponent(token);
     const response = await fetch(url, { headers: cloudSession?.token ? { Authorization:cloudSession.token } : {} });
     if (!response.ok) throw new Error("photo");
     return await blobDataUrl(await response.blob());
   } catch (e) {
     // Keep an already-cached copy if the short-lived file request fails.
-    return existing?.photo || "";
+    return existing?.[localField] || "";
   }
 }
 
 async function remoteToLocal(record, existing = null) {
   return {
     ...(existing || {}), remoteId:record.id, _remoteUpdated:remoteStamp(record),
-    _photoFile:record.photo || "", _dirty:false, _deleted:false,
+    _photoFile:record.photo || "", _backPhotoFile:record.photo_back || "",
+    _dirty:false, _deleted:false,
     company:record.company || "PSA", cert:record.cert || "", name:record.name || "",
     grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
     psaEstimate:record.psa_estimate || 0,
@@ -956,7 +1016,9 @@ async function remoteToLocal(record, existing = null) {
     notes:record.notes || "", sold:Boolean(record.sold), soldPrice:record.sold_price || 0,
     soldDate:record.sold_date || "", saleNotes:record.sale_notes || "",
     sellingFees:record.selling_fees || 0, shippingCost:record.shipping_cost || 0,
-    added:record.added || "", photo:await remotePhotoData(record, existing)
+    added:record.added || "",
+    photo:await remotePhotoData(record, existing, "photo", "photo"),
+    backPhoto:await remotePhotoData(record, existing, "photo_back", "backPhoto")
   };
 }
 
@@ -966,7 +1028,7 @@ function remoteStamp(record) {
     record.notes, record.sold, record.sold_price, record.sold_date, record.sale_notes,
     record.selling_fees, record.shipping_cost, record.psa_estimate,
     record.psa_estimate_updated, record.psa_sales_count,
-    record.added, record.photo
+    record.added, record.photo, record.photo_back
   ]);
 }
 
@@ -980,11 +1042,17 @@ async function saveCardToCloud(card) {
       form.append("photo", dataUrlBlob(card.photo), "slab.jpg");
     } else if (!card.photo) form.append("photo", "");
   }
+  if (!card.remoteId || card._backPhotoDirty) {
+    if (String(card.backPhoto || "").startsWith("data:")) {
+      form.append("photo_back", dataUrlBlob(card.backPhoto), "slab-back.jpg");
+    } else if (!card.backPhoto) form.append("photo_back", "");
+  }
   const record = await pbRequest("/api/collections/cards/records" + (card.remoteId ? "/" + card.remoteId : ""), {
     method:card.remoteId ? "PATCH" : "POST", body:form
   });
   card.remoteId = record.id; card._remoteUpdated = remoteStamp(record);
-  card._photoFile = record.photo || ""; card._dirty = false; card._photoDirty = false;
+  card._photoFile = record.photo || ""; card._backPhotoFile = record.photo_back || "";
+  card._dirty = false; card._photoDirty = false; card._backPhotoDirty = false;
   return card;
 }
 
@@ -1018,7 +1086,10 @@ async function syncCloud() {
       if (!card.remoteId) {
         const match = remoteByKey.get(cardMatchKey(card));
         if (match) await dbPut(await remoteToLocal(match, card));
-        else await dbPut(await saveCardToCloud({ ...card, _dirty:true, _photoDirty:Boolean(card.photo) }));
+        else await dbPut(await saveCardToCloud({
+          ...card, _dirty:true, _photoDirty:Boolean(card.photo),
+          _backPhotoDirty:Boolean(card.backPhoto)
+        }));
       } else if (card._dirty) {
         await dbPut(await saveCardToCloud(card));
       }
@@ -1398,6 +1469,7 @@ async function saveCardUpdate(updated) {
   const previous = inventory.find((c) => c.id === updated.id);
   updated._dirty = true;
   if ((previous?.photo || "") !== (updated.photo || "")) updated._photoDirty = true;
+  if ((previous?.backPhoto || "") !== (updated.backPhoto || "")) updated._backPhotoDirty = true;
   await dbPut(updated);
   const idx = inventory.findIndex((c) => c.id === updated.id);
   if (idx >= 0) inventory[idx] = updated;
@@ -1428,9 +1500,21 @@ function updateSummary() {
   }
 }
 
-function openPhotoPreview(src, name) {
+let lightboxPhotos = { front:"", back:"", name:"" };
+function showPhotoSide(side) {
+  const src = side === "back" ? lightboxPhotos.back : lightboxPhotos.front;
+  if (!src) return;
   $("photoLightboxImage").src = src;
-  $("photoLightboxImage").alt = name ? "Slab photo for " + name : "Enlarged slab photo";
+  $("photoLightboxImage").alt = (side === "back" ? "Back" : "Front") +
+    (lightboxPhotos.name ? " of slab for " + lightboxPhotos.name : " slab photo");
+  $("photoFrontBtn").classList.toggle("active", side === "front");
+  $("photoBackBtn").classList.toggle("active", side === "back");
+}
+
+function openPhotoPreview(front, name, back = "") {
+  lightboxPhotos = { front, back, name:name || "" };
+  showPhotoSide("front");
+  $("photoSideToggle").classList.toggle("open", Boolean(back));
   $("photoLightbox").classList.add("open");
   document.body.style.overflow = "hidden";
   $("photoLightboxClose").focus();
@@ -1439,6 +1523,8 @@ function openPhotoPreview(src, name) {
 function closePhotoPreview() {
   $("photoLightbox").classList.remove("open");
   $("photoLightboxImage").removeAttribute("src");
+  $("photoSideToggle").classList.remove("open");
+  lightboxPhotos = { front:"", back:"", name:"" };
   document.body.style.overflow = "";
 }
 
@@ -1499,10 +1585,10 @@ function render() {
       thumb.src = card.photo; thumb.alt = "Slab photo";
       thumb.tabIndex = 0; thumb.setAttribute("role", "button");
       thumb.title = "View larger photo";
-      thumb.addEventListener("click", () => openPhotoPreview(card.photo, card.name));
+      thumb.addEventListener("click", () => openPhotoPreview(card.photo, card.name, card.backPhoto));
       thumb.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault(); openPhotoPreview(card.photo, card.name);
+          event.preventDefault(); openPhotoPreview(card.photo, card.name, card.backPhoto);
         }
       });
     }
@@ -1830,6 +1916,7 @@ function buildEditForm(card) {
 
 // ---- C. ADDING A CARD --------------------------------------------------
 let pendingPhoto = "";   // downscaled slab photo (data URL) for the next card
+let pendingBackPhoto = "";
 let pendingPsaEstimate = 0;
 let pendingPsaEstimateUpdated = "";
 let pendingPsaSalesCount = 0;
@@ -1855,8 +1942,10 @@ $("addBtn").addEventListener("click", async () => {
                  psaEstimateUpdated:pendingPsaEstimateUpdated,
                  psaSalesCount:pendingPsaSalesCount, sold:false,
                  soldPrice:"", soldDate:"", saleNotes:"", photo: pendingPhoto,
+                 backPhoto:pendingBackPhoto,
                  added: new Date().toLocaleDateString(), _dirty:true,
-                 _photoDirty:Boolean(pendingPhoto) };
+                 _photoDirty:Boolean(pendingPhoto),
+                 _backPhotoDirty:Boolean(pendingBackPhoto) };
 
   try {
     // Save to IndexedDB first; it returns the new id, which we keep in memory.
@@ -1876,8 +1965,7 @@ $("addBtn").addEventListener("click", async () => {
   $("cardPop").value = ""; $("cardCost").value = ""; $("cardNotes").value = "";
   clearPsaEstimate();
   populateGradeSelect($("cardGrade"), currentCompany(), "10");
-  clearPendingPhoto();
-  scanStatus.textContent = ""; scanStatus.className = "status";
+  resetAddForm();
 });
 
 // Rebuild the grade dropdown whenever the grading company changes.
@@ -1898,10 +1986,18 @@ function resetAddForm() {
   $("cardNotes").value = "";
   populateGradeSelect($("cardGrade"), "PSA", "10");
   clearPendingPhoto();
+  pendingBackPhoto = "";
   lastCertUrl = "";
   lastCertNumber = "";
   scanStatus.textContent = "";
   scanStatus.className = "status";
+  $("certDisplay").value = "";
+  $("certEntry").classList.remove("open");
+  $("lookupFallback").classList.remove("open");
+  $("addDetails").classList.remove("open");
+  $("manualCertToggle").hidden = false;
+  $("psaPhotoNote").textContent = "";
+  $("psaPhotoNote").className = "psa-photo-note";
 }
 $("resetFormBtn").addEventListener("click", resetAddForm);
 
@@ -1998,8 +2094,9 @@ async function lookupPsaDetails() {
     scanStatus.textContent = "Sign in to Slab Ledger before using PSA lookup.";
     return;
   }
-  const button = $("psaLookupBtn");
-  button.disabled = true;
+  const buttons = [$("typedCertLookupBtn"), $("tryLookupAgainBtn")];
+  buttons.forEach((button) => button.disabled = true);
+  $("lookupFallback").classList.remove("open");
   scanStatus.className = "status";
   scanStatus.textContent = "Loading PSA certification details…";
   try {
@@ -2009,14 +2106,48 @@ async function lookupPsaDetails() {
     if (grade) $("cardGrade").value = grade;
     else if (/AUTHENTIC/i.test(details.grade)) $("cardGrade").value = "AUTHENTIC";
     if (details.population) $("cardPop").value = details.population;
+    $("certDisplay").value = cert;
+    pendingPhoto = "";
+    pendingBackPhoto = "";
+    const imageResults = await Promise.allSettled([
+      importPsaPhoto(details.front_image_url),
+      importPsaPhoto(details.back_image_url)
+    ]);
+    if (imageResults[0].status === "fulfilled") pendingPhoto = imageResults[0].value;
+    if (imageResults[1].status === "fulfilled") pendingBackPhoto = imageResults[1].value;
+    updatePendingPhotoPreview();
+    const imageCount = Number(Boolean(pendingPhoto)) + Number(Boolean(pendingBackPhoto));
+    $("psaPhotoNote").textContent = imageCount === 2
+      ? "PSA front and back scans were added. The front will appear in inventory."
+      : (imageCount === 1
+        ? "The available PSA scan was added. You can replace it with your own photo."
+        : "PSA did not provide usable scans. You can take or upload your own photo below.");
+    $("psaPhotoNote").className = "psa-photo-note" + (imageCount ? " ok" : "");
+    $("addDetails").classList.add("open");
+    $("manualCertToggle").hidden = true;
+    $("lookupSummaryTitle").textContent = "PSA details ready";
+    $("lookupSummaryText").textContent = "Review the autofilled fields and add any optional details.";
     scanStatus.className = "status ok";
-    scanStatus.textContent = "PSA details filled. Review them before adding the card.";
+    scanStatus.textContent = "PSA lookup complete.";
   } catch (error) {
     scanStatus.className = "status err";
     scanStatus.textContent = error.message || "PSA details could not be loaded.";
+    $("lookupFallback").classList.add("open");
+    $("certEntry").classList.add("open");
   } finally {
-    button.disabled = false;
+    buttons.forEach((button) => button.disabled = false);
   }
+}
+
+async function importPsaPhoto(url) {
+  if (!url || !/^https:\/\//i.test(url)) throw new Error("No PSA image");
+  const headers = cloudSession?.token ? { Authorization:cloudSession.token } : {};
+  const response = await fetch(PB_URL + "/api/slab-ledger/psa-image?url=" +
+    encodeURIComponent(url), { headers });
+  if (!response.ok) throw new Error("PSA image unavailable");
+  const blob = await response.blob();
+  if (!String(blob.type || "").startsWith("image/")) throw new Error("Invalid PSA image");
+  return shrinkImage(blob, 1200, 0.78);
 }
 
 async function lookupPsaEstimate() {
@@ -2053,9 +2184,29 @@ async function lookupPsaEstimate() {
   }
 }
 
-$("psaLookupBtn").addEventListener("click", lookupPsaDetails);
 $("psaEstimateBtn").addEventListener("click", lookupPsaEstimate);
 $("certNumber").addEventListener("input", clearPsaEstimate);
+
+$("manualCertToggle").addEventListener("click", () => {
+  $("certEntry").classList.toggle("open");
+  if ($("certEntry").classList.contains("open")) $("certNumber").focus();
+});
+$("typedCertLookupBtn").addEventListener("click", lookupPsaDetails);
+$("certNumber").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); lookupPsaDetails(); }
+});
+$("tryLookupAgainBtn").addEventListener("click", lookupPsaDetails);
+$("manualEntryBtn").addEventListener("click", () => {
+  const cert = $("certNumber").value.trim();
+  $("certDisplay").value = cert;
+  $("addDetails").classList.add("open");
+  $("lookupFallback").classList.remove("open");
+  $("manualCertToggle").hidden = true;
+  $("lookupSummaryTitle").textContent = "Manual entry";
+  $("lookupSummaryText").textContent = "Copy the details from the PSA cert page into the fields below.";
+  $("cardName").focus();
+});
+$("startOverBtn").addEventListener("click", resetAddForm);
 
 // ---- Open cert page (manual lookup helper) -------------------------------
 // Opens the grading company's own public cert page in a NEW TAB so YOU can
@@ -2148,8 +2299,10 @@ $("slabPhotoInput").addEventListener("change", async (event) => {
   if (!file) return;
   try {
     pendingPhoto = await shrinkImage(file, 800, 0.7); // max 800px, JPEG q0.7
-    $("photoPreview").src = pendingPhoto;
-    $("photoPreviewWrap").classList.add("active");
+    updatePendingPhotoPreview();
+    $("psaPhotoNote").textContent = pendingBackPhoto
+      ? "Your photo will be used as the front. The PSA back scan is still attached."
+      : "Your photo will be used in inventory.";
   } catch (e) {
     alert("Couldn't process that photo. Try again.");
   } finally {
@@ -2161,6 +2314,15 @@ $("clearPhotoBtn").addEventListener("click", clearPendingPhoto);
 
 function clearPendingPhoto() {
   pendingPhoto = "";
+  updatePendingPhotoPreview();
+}
+
+function updatePendingPhotoPreview() {
+  if (pendingPhoto) {
+    $("photoPreview").src = pendingPhoto;
+    $("photoPreviewWrap").classList.add("active");
+    return;
+  }
   $("photoPreview").removeAttribute("src");
   $("photoPreviewWrap").classList.remove("active");
 }
@@ -2192,7 +2354,7 @@ function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') +
 $("exportBtn").addEventListener("click", () => {
   if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
-  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Market Value", "PSA Sales Estimate", "PSA Estimate Date", "PSA Sales Count", "Notes", "Status", "Sold Price", "Selling Fees", "Shipping Cost", "Net Proceeds", "Profit", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
+  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Market Value", "PSA Sales Estimate", "PSA Estimate Date", "PSA Sales Count", "Notes", "Status", "Sold Price", "Selling Fees", "Shipping Cost", "Net Proceeds", "Profit", "Sold Date", "Sale Notes", "Date Added", "Has Front Photo", "Has Back Photo"];
   const rows = inventory.map((c) =>
     [c.company || "PSA", c.cert, c.name, c.grade, c.pop, money(c.cost),
      money(window.slabMarketByCard?.get(String(c.remoteId || c.id))?.marketValue),
@@ -2202,7 +2364,8 @@ $("exportBtn").addEventListener("click", () => {
      c.sold ? money(c.sellingFees) : "", c.sold ? money(c.shippingCost) : "",
      c.sold ? money(numberValue(c.soldPrice) - numberValue(c.sellingFees) - numberValue(c.shippingCost)) : "",
      c.sold ? money(numberValue(c.soldPrice) - numberValue(c.sellingFees) - numberValue(c.shippingCost) - numberValue(c.cost)) : "",
-     c.soldDate, c.saleNotes, c.added, c.photo ? "Yes" : ""].map(csvCell).join(","));
+     c.soldDate, c.saleNotes, c.added, c.photo ? "Yes" : "",
+     c.backPhoto ? "Yes" : ""].map(csvCell).join(","));
   const csv = header.map(csvCell).join(",") + "\r\n" + rows.join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -2226,7 +2389,7 @@ $("exportXlsxBtn").addEventListener("click", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Inventory");
 
-    // Column layout (Photo is the last column, index 15)
+    // Front and back images are exported in separate final columns.
     ws.columns = [
       { header: "Company",     key: "company", width: 10 },
       { header: "Cert Number", key: "cert",  width: 16 },
@@ -2243,7 +2406,8 @@ $("exportXlsxBtn").addEventListener("click", async () => {
       { header: "Sold Date",   key: "soldDate", width: 14 },
       { header: "Sale Notes",  key: "saleNotes", width: 30 },
       { header: "Date Added",  key: "added", width: 14 },
-      { header: "Photo",       key: "photo", width: 20 },
+      { header: "Front Photo", key: "photo", width: 20 },
+      { header: "Back Photo",  key: "backPhoto", width: 20 },
     ];
     ws.getRow(1).font = { bold: true };
 
@@ -2267,6 +2431,15 @@ $("exportXlsxBtn").addEventListener("click", async () => {
         ws.getRow(rowNumber).height = 82;               // make room to see it
         ws.addImage(imageId, {
           tl: { col: 15, row: rowNumber - 1 },          // top-left of Photo cell
+          ext: { width: 110, height: 100 },
+        });
+      }
+      if (c.backPhoto) {
+        const base64 = c.backPhoto.split(",")[1];
+        const imageId = wb.addImage({ base64, extension: "jpeg" });
+        ws.getRow(rowNumber).height = 82;
+        ws.addImage(imageId, {
+          tl: { col: 16, row: rowNumber - 1 },
           ext: { width: 110, height: 100 },
         });
       }
@@ -2294,6 +2467,8 @@ function triggerDownload(blob, filename) {
 }
 
 $("photoLightboxClose").addEventListener("click", closePhotoPreview);
+$("photoFrontBtn").addEventListener("click", () => showPhotoSide("front"));
+$("photoBackBtn").addEventListener("click", () => showPhotoSide("back"));
 $("photoLightbox").addEventListener("click", (event) => {
   if (event.target === $("photoLightbox")) closePhotoPreview();
 });

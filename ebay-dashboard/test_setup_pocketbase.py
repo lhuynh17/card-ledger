@@ -123,6 +123,29 @@ class PocketBaseSecurityTests(unittest.TestCase):
 
         request.assert_not_called()
 
+    @patch.object(SETUP, "request")
+    def test_front_and_back_card_photos_are_protected(self, request):
+        collection = {
+            "id": "cards_collection",
+            "name": "cards",
+            "fields": [
+                self.owner,
+                {"name": "photo", "type": "file", "protected": True},
+                {"name": "photo_back", "type": "file", "protected": False},
+            ],
+        }
+        request.return_value = {}
+
+        SETUP.protect_card_photo("https://example.test", "token", collection)
+
+        fields = request.call_args.args[4]["fields"]
+        photos = {
+            field["name"]: field for field in fields
+            if field["name"] in ("photo", "photo_back")
+        }
+        self.assertTrue(photos["photo"]["protected"])
+        self.assertTrue(photos["photo_back"]["protected"])
+
 
 if __name__ == "__main__":
     unittest.main()
