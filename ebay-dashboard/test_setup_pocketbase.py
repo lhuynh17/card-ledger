@@ -34,6 +34,18 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(token, "password-token")
         self.assertEqual(post.call_count, 1)
 
+    def test_response_message_includes_validation_details(self):
+        response = Mock()
+        response.json.return_value = {
+            "message": "Failed to create collection.",
+            "data": {"indexes": {"message": "Invalid index expression."}},
+        }
+
+        message = SETUP.response_message(response)
+
+        self.assertIn("Failed to create collection.", message)
+        self.assertIn("Invalid index expression.", message)
+
     @patch.object(SETUP.getpass, "getpass", return_value="123456")
     @patch.object(SETUP.requests, "post")
     def test_superuser_mfa_requests_and_verifies_otp(self, post, getpass):
