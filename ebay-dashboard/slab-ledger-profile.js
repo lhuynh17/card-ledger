@@ -49,14 +49,14 @@
   }
 
   function installUi() {
-    const brandText = document.querySelector(".brand > div:last-child");
+    const brand = document.querySelector(".brand");
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "owner-chip";
     chip.id = "ownerChip";
     chip.innerHTML = `<span class="owner-avatar" id="ownerAvatar"><span>SL</span></span>
       <span><strong id="ownerName">Collection owner</strong><small id="ownerStatus">Tap to edit profile</small></span>`;
-    brandText.appendChild(chip);
+    brand.appendChild(chip);
 
     const style = document.createElement("style");
     style.textContent = `
