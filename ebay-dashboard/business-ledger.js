@@ -191,6 +191,12 @@
     document.getElementById("fExpenses").textContent = cash(result.expenses);
     document.getElementById("fProfit").textContent = cash(result.profit);
     document.getElementById("fCapital").textContent = cash(result.capital);
+    [["fGross",result.gross],["fCogs",-result.cogs],["fSelling",-result.selling],
+      ["fExpenses",-result.expenses],["fProfit",result.profit],["fCapital",result.capital]]
+      .forEach(([id, value]) => {
+        document.getElementById(id).classList.toggle("money-positive", value >= 0);
+        document.getElementById(id).classList.toggle("money-negative", value < 0);
+      });
     renderExceptions();
     const list = document.getElementById("ledgerList");
     list.textContent = "";
@@ -210,7 +216,10 @@
       const description = document.createElement("div");
       description.textContent = [entry.category, entry.vendor, entry.notes].filter(Boolean).join(" · ");
       detail.append(title, description);
-      const amount = document.createElement("span"); amount.className = "amount"; amount.textContent = cash(entry.amount);
+      const amount = document.createElement("span");
+      const outgoing = ["expense","draw","loan_payment"].includes(entry.entry_type);
+      amount.className = "amount " + (outgoing ? "money-negative" : "money-positive");
+      amount.textContent = cash(entry.amount);
       const actions = document.createElement("div"); actions.className = "ledger-row-actions";
       if (entry.receipt) {
         const receipt = document.createElement("button"); receipt.className = "receipt-open";
@@ -256,7 +265,7 @@
       const title = document.createElement("strong"); title.textContent = exceptionNames[item.exception_type] || "Exception";
       const note = document.createElement("div"); note.textContent = [item.account_source, item.notes].filter(Boolean).join(" · ");
       detail.append(title, note);
-      const value = document.createElement("span"); value.className = "amount"; value.textContent = item.amount ? cash(item.amount) : "—";
+      const value = document.createElement("span"); value.className = "amount money-positive"; value.textContent = item.amount ? cash(item.amount) : "—";
       const review = document.createElement("button"); review.className = "exception-review"; review.type = "button"; review.textContent = "Mark reviewed";
       review.addEventListener("click", () => reviewException(item));
       const edit = document.createElement("button"); edit.className = "exception-edit"; edit.type = "button"; edit.textContent = "Edit";

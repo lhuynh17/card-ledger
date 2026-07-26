@@ -67,6 +67,10 @@ PREFERENCE_FIELDS = [
     {"name": "bank_capital", "type": "number", "min": 0},
     {"name": "cash_capital", "type": "number", "min": 0},
     {"name": "capital_note", "type": "text", "max": 2000},
+    {"name": "display_name", "type": "text", "max": 120},
+    {"name": "profile_logo", "type": "file", "maxSelect": 1,
+     "maxSize": 2097152, "protected": True,
+     "mimeTypes": ["image/jpeg", "image/png", "image/webp"]},
 ]
 
 DEBT_FIELDS = [

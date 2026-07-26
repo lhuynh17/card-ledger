@@ -186,6 +186,16 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertTrue(photos["photo"]["protected"])
         self.assertTrue(photos["photo_back"]["protected"])
 
+    def test_profile_logo_field_is_small_and_protected(self):
+        logo = next(
+            field for field in SETUP.PREFERENCE_FIELDS
+            if field["name"] == "profile_logo"
+        )
+
+        self.assertTrue(logo["protected"])
+        self.assertEqual(logo["maxSelect"], 1)
+        self.assertLessEqual(logo["maxSize"], 2 * 1024 * 1024)
+
 
 if __name__ == "__main__":
     unittest.main()
