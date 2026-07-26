@@ -6,7 +6,7 @@ if ! python3 -c "import requests" >/dev/null 2>&1; then
   python3 -m pip install --user requests || {
     echo
     echo "The required package could not be installed."
-    read -n 1 -s -r -p "Press any key to close."
+    read -n 1 -s -r -p "Press any key to finish. You can then close this Terminal window."
     echo
     exit 1
   }
@@ -14,5 +14,5 @@ fi
 
 python3 setup_pocketbase.py
 echo
-read -n 1 -s -r -p "Press any key to close."
+read -n 1 -s -r -p "Press any key to finish. You can then close this Terminal window."
 echo
