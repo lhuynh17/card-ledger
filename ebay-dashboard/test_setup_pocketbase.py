@@ -208,6 +208,15 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(logo["maxSelect"], 1)
         self.assertLessEqual(logo["maxSize"], 2 * 1024 * 1024)
 
+    def test_parse_credit_tracking_fields_are_private_preferences(self):
+        fields = {
+            field["name"]: field for field in SETUP.PREFERENCE_FIELDS
+        }
+
+        self.assertEqual(fields["parse_credits_month"]["max"], 7)
+        self.assertTrue(fields["parse_credits_used"]["onlyInt"])
+        self.assertEqual(fields["parse_credits_used"]["min"], 0)
+
     def test_grading_item_photo_is_single_and_protected(self):
         photo = next(
             field for field in SETUP.GRADING_ITEM_FIELDS

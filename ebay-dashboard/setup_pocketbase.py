@@ -71,6 +71,9 @@ PREFERENCE_FIELDS = [
     {"name": "profile_logo", "type": "file", "maxSelect": 1,
      "maxSize": 2097152, "protected": True,
      "mimeTypes": ["image/jpeg", "image/png", "image/webp"]},
+    {"name": "parse_credits_month", "type": "text", "max": 7},
+    {"name": "parse_credits_used", "type": "number", "min": 0,
+     "onlyInt": True},
 ]
 
 DEBT_FIELDS = [

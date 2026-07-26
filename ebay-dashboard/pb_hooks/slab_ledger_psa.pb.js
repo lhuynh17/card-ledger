@@ -1,6 +1,92 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 // Keep PARSE_BOT_API_KEY on the PocketBase server. Never place it in index.html.
+function parseCreditLimit() {
+  const configured = parseInt($os.getenv("PARSE_BOT_MONTHLY_CREDITS") || "200", 10);
+  return configured > 0 ? configured : 200;
+}
+
+function parseCreditState(e, increment) {
+  const month = new Date().toISOString().slice(0, 7);
+  const limit = parseCreditLimit();
+  let record;
+  try {
+    record = $app.findFirstRecordByFilter(
+      "app_preferences",
+      "owner = {:owner}",
+      { owner: e.auth.id }
+    );
+  } catch (_) {
+    record = new Record($app.findCollectionByNameOrId("app_preferences"));
+    record.set("owner", e.auth.id);
+  }
+  let used = record.getString("parse_credits_month") == month
+    ? record.getInt("parse_credits_used")
+    : 0;
+  if (increment) used += 1;
+  used = Math.max(0, used);
+  record.set("parse_credits_month", month);
+  record.set("parse_credits_used", used);
+  $app.save(record);
+  return {
+    month: month,
+    limit: limit,
+    used: used,
+    remaining: Math.max(0, limit - used),
+    tracking: "slab_ledger_calls",
+  };
+}
+
+function safeParseCreditState(e, increment) {
+  try {
+    return parseCreditState(e, increment);
+  } catch (_) {
+    return null;
+  }
+}
+
+routerAdd("GET", "/api/slab-ledger/psa-credits", (e) => {
+  const credits = safeParseCreditState(e, false);
+  if (!credits) {
+    return e.json(503, {
+      message: "Run the PocketBase setup tool to enable Parse.bot credit tracking.",
+    });
+  }
+  return e.json(200, credits);
+}, $apis.requireAuth("users"));
+
+routerAdd("POST", "/api/slab-ledger/psa-credits", (e) => {
+  const input = new DynamicModel({ remaining: -1 });
+  e.bindBody(input);
+  const limit = parseCreditLimit();
+  const remaining = Math.floor(Number(input.remaining));
+  if (!Number.isFinite(remaining) || remaining < 0 || remaining > limit) {
+    throw new BadRequestError("Enter a remaining credit balance from 0 to " + limit + ".");
+  }
+  const month = new Date().toISOString().slice(0, 7);
+  let record;
+  try {
+    record = $app.findFirstRecordByFilter(
+      "app_preferences",
+      "owner = {:owner}",
+      { owner: e.auth.id }
+    );
+  } catch (_) {
+    record = new Record($app.findCollectionByNameOrId("app_preferences"));
+    record.set("owner", e.auth.id);
+  }
+  record.set("parse_credits_month", month);
+  record.set("parse_credits_used", limit - remaining);
+  $app.save(record);
+  return e.json(200, {
+    month: month,
+    limit: limit,
+    used: limit - remaining,
+    remaining: remaining,
+    tracking: "slab_ledger_calls",
+  });
+}, $apis.requireAuth("users"));
+
 routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
   const cert = e.request.pathValue("cert");
   if (!/^\d{8,10}$/.test(cert)) {
@@ -42,6 +128,7 @@ routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
     spec_id: String(details.spec_id || ""),
     front_image_url: details.front_image_url || null,
     back_image_url: details.back_image_url || null,
+    credits: safeParseCreditState(e, true),
   });
 }, $apis.requireAuth("users"));
 
@@ -127,5 +214,6 @@ routerAdd("GET", "/api/slab-ledger/psa/{cert}/sales", (e) => {
     sales_count: sales.length,
     sales: sales,
     method: "median_recent_sales",
+    credits: safeParseCreditState(e, true),
   });
 }, $apis.requireAuth("users"));
