@@ -219,6 +219,7 @@ textarea{ resize:vertical; min-height: 54px; }
 #cardCost, #cardNotes{ height:53px; }
 #cardNotes{ min-height:53px; resize:none; }
 #certNumber{ font-family: var(--font-mono); letter-spacing:.06em; }
+input[readonly]{ color:var(--muted); cursor:default; }
 select{
   appearance:none; -webkit-appearance:none; cursor:pointer;
   background-image:
@@ -248,7 +249,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 
 /* Paste button embedded INSIDE the input box (name & pop fields) */
 .input-wrap{ position:relative; }
-.input-wrap input[type="text"]{ padding-right: 92px; }   /* room for the button */
+.input-wrap input[type="text"],.input-wrap input[type="number"]{ padding-right: 118px; }
 .btn-paste.inset{
   position:absolute; top:50%; right:6px; transform:translateY(-50%);
   height:calc(100% - 12px); padding:0 12px; gap:6px;
@@ -690,7 +691,10 @@ select option{ background: var(--surface-2); color: var(--text); }
 
     <div class="field">
       <label for="certNumber">Cert number</label>
-      <input type="text" id="certNumber" autocomplete="off">
+      <div class="input-wrap">
+        <input type="text" id="certNumber" autocomplete="off">
+        <button type="button" class="btn-paste inset" id="psaLookupBtn">Fill from PSA</button>
+      </div>
     </div>
 
     <div class="field full">
@@ -728,6 +732,14 @@ select option{ background: var(--surface-2); color: var(--text); }
         <button type="button" class="btn-paste inset" id="pastePopBtn" title="Paste copied text">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>Paste
         </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="psaEstimate">PSA sales estimate <span style="color:var(--muted-2)">(optional)</span></label>
+      <div class="input-wrap">
+        <input type="number" id="psaEstimate" inputmode="decimal" min="0" step="0.01" readonly>
+        <button type="button" class="btn-paste inset" id="psaEstimateBtn">Get estimate</button>
       </div>
     </div>
 
@@ -868,7 +880,10 @@ function cloudFields(card) {
     notes: card.notes || "", sold: Boolean(card.sold),
     sold_price: numberValue(card.soldPrice), sold_date: card.soldDate || "",
     sale_notes: card.saleNotes || "", selling_fees: numberValue(card.sellingFees),
-    shipping_cost: numberValue(card.shippingCost), added: card.added || ""
+    shipping_cost: numberValue(card.shippingCost), added: card.added || "",
+    psa_estimate: numberValue(card.psaEstimate),
+    psa_estimate_updated: card.psaEstimateUpdated || "",
+    psa_sales_count: numberValue(card.psaSalesCount)
   };
 }
 
@@ -907,6 +922,9 @@ async function remoteToLocal(record, existing = null) {
     _photoFile:record.photo || "", _dirty:false, _deleted:false,
     company:record.company || "PSA", cert:record.cert || "", name:record.name || "",
     grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
+    psaEstimate:record.psa_estimate || 0,
+    psaEstimateUpdated:record.psa_estimate_updated || "",
+    psaSalesCount:record.psa_sales_count || 0,
     notes:record.notes || "", sold:Boolean(record.sold), soldPrice:record.sold_price || 0,
     soldDate:record.sold_date || "", saleNotes:record.sale_notes || "",
     sellingFees:record.selling_fees || 0, shippingCost:record.shipping_cost || 0,
@@ -918,7 +936,8 @@ function remoteStamp(record) {
   return record.updated || JSON.stringify([
     record.company, record.cert, record.name, record.grade, record.pop, record.cost,
     record.notes, record.sold, record.sold_price, record.sold_date, record.sale_notes,
-    record.selling_fees, record.shipping_cost,
+    record.selling_fees, record.shipping_cost, record.psa_estimate,
+    record.psa_estimate_updated, record.psa_sales_count,
     record.added, record.photo
   ]);
 }
@@ -1489,6 +1508,9 @@ function render() {
     if (card.grade) metaParts.push(gradeDisplay(co, card.grade));
     if (card.added) metaParts.push(card.added);
     if (numberValue(card.cost)) metaParts.push("Cost " + money(card.cost));
+    if (numberValue(card.psaEstimate)) {
+      metaParts.push("PSA sales estimate " + money(card.psaEstimate));
+    }
     if (!card.sold) {
       const marketRecord = window.slabMarketByCard?.get(String(card.remoteId || card.id));
       if (numberValue(marketRecord?.marketValue)) {
@@ -1685,6 +1707,7 @@ function buildEditForm(card) {
   const nameI  = field("Card name", card.name, false);
   const gradeI = gradeField(companyI.value, card.grade);
   const popI   = field("Pop", card.pop, true);
+  const psaEstimateI = field("PSA sales estimate", card.psaEstimate, true);
   const costI  = field("Cost", card.cost, true);
   const notesI = noteField(card.notes, "Quick note");
   let soldPriceI = null, soldDateI = null, sellingFeesI = null, shippingCostI = null, saleNotesI = null;
@@ -1756,6 +1779,7 @@ function buildEditForm(card) {
     const updated = { ...card, company: companyI.value, cert,
       name: nameI.value.trim(), grade: gradeI.value.trim(),
       pop: popI.value.trim(), cost: numberValue(costI.value), notes: notesI.value.trim(),
+      psaEstimate:numberValue(psaEstimateI.value),
       soldPrice: soldPriceI ? numberValue(soldPriceI.value) : card.soldPrice,
       soldDate: soldDateI ? soldDateI.value : card.soldDate,
       sellingFees: sellingFeesI ? numberValue(sellingFeesI.value) : card.sellingFees,
@@ -1778,6 +1802,9 @@ function buildEditForm(card) {
 
 // ---- C. ADDING A CARD --------------------------------------------------
 let pendingPhoto = "";   // downscaled slab photo (data URL) for the next card
+let pendingPsaEstimate = 0;
+let pendingPsaEstimateUpdated = "";
+let pendingPsaSalesCount = 0;
 
 $("addBtn").addEventListener("click", async () => {
   const company = currentCompany();
@@ -1795,7 +1822,10 @@ $("addBtn").addEventListener("click", async () => {
     if (!ok) return;
   }
 
-  const card = { company, cert, name, grade, pop, cost, notes, sold:false,
+  const card = { company, cert, name, grade, pop, cost, notes,
+                 psaEstimate:pendingPsaEstimate,
+                 psaEstimateUpdated:pendingPsaEstimateUpdated,
+                 psaSalesCount:pendingPsaSalesCount, sold:false,
                  soldPrice:"", soldDate:"", saleNotes:"", photo: pendingPhoto,
                  added: new Date().toLocaleDateString(), _dirty:true,
                  _photoDirty:Boolean(pendingPhoto) };
@@ -1816,6 +1846,7 @@ $("addBtn").addEventListener("click", async () => {
   // Reset the form for the next card (keep the company selection)
   $("certNumber").value = ""; $("cardName").value = "";
   $("cardPop").value = ""; $("cardCost").value = ""; $("cardNotes").value = "";
+  clearPsaEstimate();
   populateGradeSelect($("cardGrade"), currentCompany(), "10");
   clearPendingPhoto();
   scanStatus.textContent = ""; scanStatus.className = "status";
@@ -1834,6 +1865,7 @@ function resetAddForm() {
   $("certNumber").value = "";
   $("cardName").value = "";
   $("cardPop").value = "";
+  clearPsaEstimate();
   $("cardCost").value = "";
   $("cardNotes").value = "";
   populateGradeSelect($("cardGrade"), "PSA", "10");
@@ -1883,8 +1915,8 @@ async function startLiveScan() {
           $("certNumber").value = digits[0];
           lastCertNumber = digits[0];
           scanStatus.className = "status ok";
-          scanStatus.textContent = "QR read — cert #" + digits[0] +
-            ". Now tap “Open cert page” to read the name & grade, then type them in.";
+          scanStatus.textContent = "QR read — cert #" + digits[0] + ". Loading PSA details…";
+          lookupPsaDetails();
         } else {
           scanStatus.className = "status ok";
           scanStatus.textContent = "Code read, but no cert number inside it. Type the cert below.";
@@ -1913,6 +1945,89 @@ $("cancelScanBtn").addEventListener("click", () => {
   stopLiveScan();
   if (!$("certNumber").value) { scanStatus.className = "status"; scanStatus.textContent = "Camera stopped."; }
 });
+
+function clearPsaEstimate() {
+  pendingPsaEstimate = 0;
+  pendingPsaEstimateUpdated = "";
+  pendingPsaSalesCount = 0;
+  $("psaEstimate").value = "";
+}
+
+async function lookupPsaDetails() {
+  const cert = $("certNumber").value.trim();
+  if (currentCompany() !== "PSA") {
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Automatic certification lookup is currently available for PSA only.";
+    return;
+  }
+  if (!COMPANIES.PSA.certOk(cert)) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Enter an 8–10 digit PSA certification number.";
+    return;
+  }
+  if (!cloudSession?.token) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Sign in to Slab Ledger before using PSA lookup.";
+    return;
+  }
+  const button = $("psaLookupBtn");
+  button.disabled = true;
+  scanStatus.className = "status";
+  scanStatus.textContent = "Loading PSA certification details…";
+  try {
+    const details = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(cert));
+    if (details.card_title) $("cardName").value = details.card_title;
+    const grade = gradeNumber(details.grade);
+    if (grade) $("cardGrade").value = grade;
+    else if (/AUTHENTIC/i.test(details.grade)) $("cardGrade").value = "AUTHENTIC";
+    if (details.population) $("cardPop").value = details.population;
+    scanStatus.className = "status ok";
+    scanStatus.textContent = "PSA details filled. Review them before adding the card.";
+  } catch (error) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = error.message || "PSA details could not be loaded.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function lookupPsaEstimate() {
+  const cert = $("certNumber").value.trim();
+  if (currentCompany() !== "PSA" || !COMPANIES.PSA.certOk(cert)) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Enter a valid PSA certification number first.";
+    return;
+  }
+  if (!cloudSession?.token) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = "Sign in to Slab Ledger before using PSA sales lookup.";
+    return;
+  }
+  const button = $("psaEstimateBtn");
+  button.disabled = true;
+  scanStatus.className = "status";
+  scanStatus.textContent = "Loading up to three recent comparable sales…";
+  try {
+    const result = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(cert) + "/sales");
+    if (!numberValue(result.estimate)) throw new Error("No recent comparable sales were available.");
+    pendingPsaEstimate = numberValue(result.estimate);
+    pendingPsaEstimateUpdated = new Date().toISOString();
+    pendingPsaSalesCount = numberValue(result.sales_count);
+    $("psaEstimate").value = pendingPsaEstimate.toFixed(2);
+    scanStatus.className = "status ok";
+    scanStatus.textContent = "Sales estimate filled from " + pendingPsaSalesCount +
+      " recent comparable sale" + (pendingPsaSalesCount === 1 ? "" : "s") + ".";
+  } catch (error) {
+    scanStatus.className = "status err";
+    scanStatus.textContent = error.message || "Recent PSA sales could not be loaded.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("psaLookupBtn").addEventListener("click", lookupPsaDetails);
+$("psaEstimateBtn").addEventListener("click", lookupPsaEstimate);
+$("certNumber").addEventListener("input", clearPsaEstimate);
 
 // ---- Open cert page (manual lookup helper) -------------------------------
 // Opens the grading company's own public cert page in a NEW TAB so YOU can
@@ -2049,10 +2164,12 @@ function csvCell(value) { return '"' + String(value ?? "").replace(/"/g, '""') +
 $("exportBtn").addEventListener("click", () => {
   if (inventory.length === 0) { alert("Nothing to export yet — add a card first."); return; }
 
-  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Market Value", "Notes", "Status", "Sold Price", "Selling Fees", "Shipping Cost", "Net Proceeds", "Profit", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
+  const header = ["Company", "Cert Number", "Card Name", "Grade", "Pop", "Cost", "Market Value", "PSA Sales Estimate", "PSA Estimate Date", "PSA Sales Count", "Notes", "Status", "Sold Price", "Selling Fees", "Shipping Cost", "Net Proceeds", "Profit", "Sold Date", "Sale Notes", "Date Added", "Has Photo"];
   const rows = inventory.map((c) =>
     [c.company || "PSA", c.cert, c.name, c.grade, c.pop, money(c.cost),
-     money(window.slabMarketByCard?.get(String(c.remoteId || c.id))?.marketValue), c.notes,
+     money(window.slabMarketByCard?.get(String(c.remoteId || c.id))?.marketValue),
+     numberValue(c.psaEstimate) ? money(c.psaEstimate) : "",
+     String(c.psaEstimateUpdated || "").slice(0, 10), c.psaSalesCount || "", c.notes,
      c.sold ? "Sold" : "Inventory", c.sold ? money(c.soldPrice) : "",
      c.sold ? money(c.sellingFees) : "", c.sold ? money(c.shippingCost) : "",
      c.sold ? money(numberValue(c.soldPrice) - numberValue(c.sellingFees) - numberValue(c.shippingCost)) : "",
@@ -2081,7 +2198,7 @@ $("exportXlsxBtn").addEventListener("click", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Inventory");
 
-    // Column layout (Photo is the last column, index 12)
+    // Column layout (Photo is the last column, index 15)
     ws.columns = [
       { header: "Company",     key: "company", width: 10 },
       { header: "Cert Number", key: "cert",  width: 16 },
@@ -2089,6 +2206,9 @@ $("exportXlsxBtn").addEventListener("click", async () => {
       { header: "Grade",       key: "grade", width: 12 },
       { header: "Pop",         key: "pop",   width: 10 },
       { header: "Cost",        key: "cost",  width: 12 },
+      { header: "PSA Sales Estimate", key: "psaEstimate", width: 18 },
+      { header: "PSA Estimate Date", key: "psaEstimateUpdated", width: 18 },
+      { header: "PSA Sales Count", key: "psaSalesCount", width: 16 },
       { header: "Notes",       key: "notes", width: 30 },
       { header: "Status",      key: "status", width: 12 },
       { header: "Sold Price",  key: "soldPrice", width: 12 },
@@ -2101,11 +2221,15 @@ $("exportXlsxBtn").addEventListener("click", async () => {
 
     inventory.forEach((c, i) => {
       const row = ws.addRow({ company: c.company || "PSA", cert: c.cert, name: c.name,
-                  grade: c.grade, pop: c.pop, cost: numberValue(c.cost), notes: c.notes,
+                  grade: c.grade, pop: c.pop, cost: numberValue(c.cost),
+                  psaEstimate:numberValue(c.psaEstimate) || "",
+                  psaEstimateUpdated:String(c.psaEstimateUpdated || "").slice(0, 10),
+                  psaSalesCount:c.psaSalesCount || "", notes: c.notes,
                   status: c.sold ? "Sold" : "Inventory", soldPrice: c.sold ? numberValue(c.soldPrice) : "",
                   soldDate: c.soldDate, saleNotes: c.saleNotes, added: c.added });
       row.getCell(6).numFmt = '$#,##0.00';
-      if (c.sold) row.getCell(9).numFmt = '$#,##0.00';
+      row.getCell(7).numFmt = '$#,##0.00';
+      if (c.sold) row.getCell(12).numFmt = '$#,##0.00';
       const rowNumber = i + 2; // row 1 is the header
 
       if (c.photo) {
@@ -2114,7 +2238,7 @@ $("exportXlsxBtn").addEventListener("click", async () => {
         const imageId = wb.addImage({ base64, extension: "jpeg" });
         ws.getRow(rowNumber).height = 82;               // make room to see it
         ws.addImage(imageId, {
-          tl: { col: 12, row: rowNumber - 1 },          // top-left of Photo cell
+          tl: { col: 15, row: rowNumber - 1 },          // top-left of Photo cell
           ext: { width: 110, height: 100 },
         });
       }
@@ -2236,7 +2360,7 @@ async function init() {
 init();
 </script>
 <script src="ebay-dashboard/slab-ledger-market.js?v=business-ledger-1"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-6"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-7"></script>
 <script src="ebay-dashboard/slab-ledger-tools.js?v=tools-6"></script>
 <script src="ebay-dashboard/grading-plays.js?v=grading-plays-3"></script>
 </body>
