@@ -51,6 +51,10 @@ BUSINESS_FIELDS = [
 ]
 
 CARD_EXTRA_FIELDS = [
+    {"name": "photo_back", "type": "file", "maxSelect": 1,
+     "maxSize": 10485760, "protected": True,
+     "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/heic",
+                   "image/heif"]},
     {"name": "selling_fees", "type": "number", "min": 0},
     {"name": "shipping_cost", "type": "number", "min": 0},
     {"name": "psa_estimate", "type": "number", "min": 0},
@@ -304,24 +308,25 @@ def secure_existing_owner_collection(base_url: str, token: str, current: dict,
 
 def protect_card_photo(base_url: str, token: str, cards: dict) -> dict:
     fields = cards.get("fields", [])
-    photo = next(
-        (field for field in fields if field.get("name") == "photo"),
-        None,
-    )
+    photo_fields = [
+        field for field in fields
+        if field.get("name") in ("photo", "photo_back")
+    ]
+    photo = next((field for field in photo_fields if field.get("name") == "photo"), None)
     if not photo:
         print("cards.photo was not found; photo protection was skipped.")
         return cards
-    if photo.get("type") != "file":
+    if any(field.get("type") != "file" for field in photo_fields):
         raise RuntimeError(
-            "cards.photo exists but is not a file field. "
+            "A cards photo field exists but is not a file field. "
             "Photo protection was not changed."
         )
-    if photo.get("protected") is True:
-        print("cards.photo is already protected.")
+    if all(field.get("protected") is True for field in photo_fields):
+        print("cards photo fields are already protected.")
         return cards
     protected_fields = [
         ({**field, "protected": True}
-         if field.get("name") == "photo" else field)
+         if field.get("name") in ("photo", "photo_back") else field)
         for field in fields
     ]
     updated = request(
@@ -329,7 +334,7 @@ def protect_card_photo(base_url: str, token: str, cards: dict) -> dict:
         "/api/collections/" + cards["id"],
         {"fields": protected_fields},
     )
-    print("cards.photo is now protected by short-lived file tokens.")
+    print("cards photo fields are now protected by short-lived file tokens.")
     return updated
 
 

@@ -5,8 +5,9 @@ A mobile-friendly inventory and business ledger for graded trading cards.
 The app tracks:
 
 - active and sold inventory, cost basis, sale proceeds, fees, and shipping;
-- PSA certificate autofill for card details and optional recent-sales estimates
-  through a private PocketBase proxy;
+- scan-first PSA certificate autofill for card details, protected front/back
+  slab images, and optional recent-sales estimates through private PocketBase
+  routes, with a guided manual fallback;
 - manual market values from up to three comparable sales, including links,
   source, notes, update date, and value history;
 - collection cost, market value, and unrealized gain or loss;
@@ -27,7 +28,8 @@ The scraper is optional; manual market tracking and the business ledger work
 without it.
 
 The setup tool also audits existing collection ownership rules before repairing
-them and protects inventory photos with PocketBase short-lived file tokens. It
+them and protects front/back inventory photos with PocketBase short-lived file
+tokens. It
 stops instead of applying rules when existing records could be locked out.
 
 Slab Ledger is a recordkeeping aid, not accounting or tax advice. Keep original

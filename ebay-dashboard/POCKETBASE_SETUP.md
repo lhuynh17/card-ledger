@@ -21,9 +21,9 @@ out.
 
 It prepares:
 
-- `cards`: adds selling-cost fields and optional PSA sales-estimate fields,
-  verifies owner-only API rules, and protects inventory photos with short-lived
-  file tokens;
+- `cards`: adds selling-cost fields, optional PSA sales-estimate fields, and a
+  protected back-photo field; verifies owner-only API rules; and protects both
+  inventory photos with short-lived file tokens;
 - `market_values`: keeps manual comps, source, notes, update date, and history;
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
@@ -46,10 +46,10 @@ rules:
 
 ## Optional Parse.bot PSA lookup
 
-Slab Ledger can fill the card title, grade, and population from a PSA cert
-number. It can also calculate a clearly labeled estimate from up to three
-recent comparable sales. Parse.bot currently does not return a direct PSA price
-guide value.
+Slab Ledger can fill the card title, grade, population, and available PSA
+front/back scans from a PSA cert number. It can also calculate a clearly
+labeled estimate from up to three recent comparable sales. Parse.bot currently
+does not return a direct PSA price guide value.
 
 1. Create a Parse.bot account and API key.
 2. Copy `pb_hooks/slab_ledger_psa.pb.js` next to the PocketBase executable as
@@ -57,13 +57,17 @@ guide value.
 3. Set `PARSE_BOT_API_KEY` in the environment that starts PocketBase, then
    restart PocketBase. If PocketBase is launched from another directory, start
    it with `--hooksDir=/path/to/pb_hooks`.
-4. Run the Slab Ledger PocketBase setup tool once to add the three optional
-   estimate fields to `cards`.
-5. Sign in to Slab Ledger. Scan a PSA QR or type a cert, then use **Fill from
-   PSA**. **Get estimate** uses one additional Parse.bot credit.
+4. Run the Slab Ledger PocketBase setup tool once. This adds the optional
+   estimate fields and protected `photo_back` field to `cards`.
+5. Sign in to Slab Ledger and tap **Scan PSA label**. A successful QR or
+   barcode scan automatically starts the PSA lookup. You can also choose
+   **Enter a cert number instead**. **Get estimate** uses one additional
+   Parse.bot credit.
 
 The API key remains on the PocketBase server and is never sent to the browser.
-Both proxy routes require an authenticated `users` account. Parse.bot currently
+All PSA routes require an authenticated `users` account. The image relay accepts
+only HTTPS images hosted by PSA or its public image CDN; it cannot request NAS
+or private-network addresses. Parse.bot currently
 advertises 200 free credits and a 5 requests/minute limit, while some individual
 marketplace tables still display an older allowance. Use the signed-in usage
 page as the source of truth for your account.
