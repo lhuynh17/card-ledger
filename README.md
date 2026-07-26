@@ -8,8 +8,8 @@ The app tracks:
 - scan-first PSA certificate autofill for card details, protected front/back
   slab images, and optional recent-sales estimates through private PocketBase
   routes, with a guided manual fallback;
-- manual market values from up to three comparable sales, including links,
-  source, notes, update date, and value history;
+- one-tap PSA recent-sale comparables or manual market values from one to three
+  sales, including links, source, notes, update date, and value history;
 - collection cost, market value, and unrealized gain or loss;
 - business expenses, owner contributions and draws, loans, other income, and
   protected receipt or invoice uploads, with post-save corrections;

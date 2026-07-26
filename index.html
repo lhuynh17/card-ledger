@@ -39,7 +39,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- ZXing: trusted open-source QR / barcode reader (runs locally) -->
+<!-- ZXing: trusted open-source QR reader (runs locally) -->
 <script
   src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"
   integrity="sha384-BzBxP10ZE72aitqj5UMmUsbKFliP/DZqA8Wq+BNNhlIJDGoEd1tpkMYXOg9+n6sB"
@@ -720,7 +720,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   <div class="action-grid scan-first">
     <button type="button" class="action-btn primary" id="scanBtn">
       <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M20 14v.01M14 20v.01M20 20v.01M17 17v.01"/></svg></span>
-      <span class="txt"><span class="t1">Scan PSA label</span><span class="t2">Use your phone camera with the QR code or barcode</span></span>
+      <span class="txt"><span class="t1">Scan PSA QR code</span><span class="t2">Point your phone camera at the square QR code</span></span>
     </button>
   </div>
   <button type="button" class="manual-cert-toggle" id="manualCertToggle">Enter a cert number instead</button>
@@ -735,7 +735,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   <!-- Live camera view (hidden until Scan is tapped) -->
   <div id="scannerWrap">
     <div class="scan-frame"><video id="video" muted playsinline></video></div>
-    <p class="scan-tip">For a barcode, hold the slab sideways so the entire long barcode fits inside the wide box. Move closer until the bars look sharp.</p>
+    <p class="scan-tip">Center the square PSA QR code inside the box and hold the slab steady.</p>
     <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
   </div>
 
@@ -2031,7 +2031,7 @@ function resetAddForm() {
 $("resetFormBtn").addEventListener("click", resetAddForm);
 
 // ---- D. LIVE QR SCANNER (primary path) ----------------------------------
-// A live camera feed continuously scans for a QR/barcode. This is far
+// A live camera feed continuously scans for a QR code. This is far
 // more reliable than a single still photo: the phone autofocuses and
 // ZXing re-checks many frames per second until it locks on. The moment
 // it reads the code, we grab the cert number and stop the camera.
@@ -2046,21 +2046,11 @@ async function startLiveScan() {
 
   $("scannerWrap").classList.add("active");
   scanStatus.className = "status";
-  scanStatus.textContent = "Starting camera… point it at the QR code or long barcode on the label.";
+  scanStatus.textContent = "Starting camera… point it at the square QR code on the PSA label.";
 
   try {
     const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.CODE_93,
-      ZXing.BarcodeFormat.ITF,
-      ZXing.BarcodeFormat.CODABAR,
-      ZXing.BarcodeFormat.UPC_A,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.DATA_MATRIX
-    ]);
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
     codeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
 
