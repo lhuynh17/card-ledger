@@ -24,9 +24,10 @@ out.
 
 It prepares:
 
-- `cards`: adds selling-cost fields, optional PSA sales-estimate fields, and a
-  protected back-photo field; verifies owner-only API rules; and protects both
-  inventory photos with short-lived file tokens;
+- `cards`: adds selling-cost fields, optional PSA sales-estimate fields,
+  editable eBay search keywords, and a protected back-photo field; verifies
+  owner-only API rules; and protects both inventory photos with short-lived
+  file tokens;
 - `market_values`: keeps manual comps, source, notes, update date, and history;
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
