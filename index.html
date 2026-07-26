@@ -101,7 +101,7 @@ body{
   display:flex; align-items:center; justify-content:space-between;
   padding: 8px 4px 28px;
 }
-.brand{ display:flex; align-items:center; gap:16px; }
+.brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; }
 .brand .logo{
   width:52px; height:52px; flex:0 0 auto;
   border:2px solid var(--accent); border-radius:12px;
@@ -119,7 +119,7 @@ body{
   font-size: 14px; color: var(--muted); margin-top:4px;
 }
 .owner-chip{
-  display:inline-flex; align-items:center; gap:9px; margin-top:10px;
+  display:flex; flex:1 0 100%; align-items:center; gap:11px; margin-top:18px;
   border:0; background:transparent; color:var(--text); text-align:left; cursor:pointer;
 }
 .owner-avatar{
@@ -2734,7 +2734,7 @@ async function init() {
 init();
 </script>
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-10"></script>
-<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-1"></script>
+<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-2"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-8"></script>
 <script src="ebay-dashboard/slab-ledger-tools.js?v=tools-7"></script>
