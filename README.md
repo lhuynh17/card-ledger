@@ -16,6 +16,8 @@ The app tracks:
   percentage calculators;
 - CSV exports for inventory and annual business records.
 - a year-end exceptions log for unusual personal/business account activity.
+- grading-play tracking for batch costs, PSA 10 results, sales, and play-level
+  profit or loss.
 
 PocketBase setup instructions are in
 [`ebay-dashboard/POCKETBASE_SETUP.md`](ebay-dashboard/POCKETBASE_SETUP.md).

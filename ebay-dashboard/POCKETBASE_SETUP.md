@@ -24,6 +24,10 @@ It prepares:
   lists; settled reminders are retained but excluded from active totals.
 - `business_exceptions`: stores year-end review notes for business money that
   moved through a personal account or other unusual situations.
+- `grading_plays`: stores submission-level status and notes.
+- `grading_play_cards`: stores multiple card lines, quantities, costs, and
+  grading results inside each play.
+- `grading_play_sales`: stores any number of sales against each grading play.
 
 Every market and business record is protected by owner-based API rules:
 
@@ -42,6 +46,7 @@ Every market and business record is protected by owner-based API rules:
 6. Use **Exceptions log** in Business Ledger to document unusual account
    activity for year-end review. Exception notes do not change calculated
    totals automatically.
+7. Use **Grading plays** in Tools to measure batch grading results and sales.
 5. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 

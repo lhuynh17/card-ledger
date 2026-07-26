@@ -83,6 +83,47 @@ EXCEPTION_FIELDS = [
     {"name": "reviewed", "type": "bool"},
 ]
 
+GRADING_PLAY_FIELDS = [
+    {"name": "play_name", "type": "text", "required": True, "max": 1000},
+    {"name": "submitted_date", "type": "date"},
+    {"name": "status", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["planning", "submitted", "returned", "selling", "complete"]},
+    {"name": "notes", "type": "text", "max": 5000},
+]
+
+
+def grading_card_fields(play_collection_id: str):
+    return [
+        {"name": "play", "type": "relation", "required": True,
+         "collectionId": play_collection_id, "maxSelect": 1,
+         "cascadeDelete": True},
+        {"name": "card_name", "type": "text", "required": True, "max": 1000},
+        {"name": "quantity", "type": "number", "required": True, "min": 1,
+         "onlyInt": True},
+        {"name": "raw_cost_each", "type": "number", "min": 0},
+        {"name": "grading_cost_each", "type": "number", "min": 0},
+        {"name": "tens_count", "type": "number", "min": 0, "onlyInt": True},
+        {"name": "notes", "type": "text", "max": 2000},
+    ]
+
+
+def grading_sale_fields(play_collection_id: str, card_collection_id: str):
+    return [
+        {"name": "play", "type": "relation", "required": True,
+         "collectionId": play_collection_id, "maxSelect": 1,
+         "cascadeDelete": True},
+        {"name": "card", "type": "relation", "required": True,
+         "collectionId": card_collection_id, "maxSelect": 1,
+         "cascadeDelete": True},
+        {"name": "sale_date", "type": "date", "required": True},
+        {"name": "quantity", "type": "number", "required": True, "min": 1,
+         "onlyInt": True},
+        {"name": "gross_amount", "type": "number", "required": True, "min": 0},
+        {"name": "fees", "type": "number", "min": 0},
+        {"name": "shipping", "type": "number", "min": 0},
+        {"name": "notes", "type": "text", "max": 2000},
+    ]
+
 
 def env_value(name: str) -> str:
     for path in (SETUP_ENV_FILE, ENV_FILE):
@@ -248,6 +289,44 @@ def configure_schema(base_url: str, token: str):
             base_url, token, users_id, "business_exceptions", EXCEPTION_FIELDS,
             ["CREATE INDEX `idx_business_exceptions_owner_date` "
              "ON `business_exceptions` (`owner`, `exception_date`)"],
+        )
+
+    plays = collection(base_url, token, "grading_plays")
+    if plays:
+        plays = ensure_fields(
+            base_url, token, plays, GRADING_PLAY_FIELDS, "grading_plays"
+        )
+    else:
+        plays = create_owner_collection(
+            base_url, token, users_id, "grading_plays", GRADING_PLAY_FIELDS,
+            ["CREATE INDEX `idx_grading_plays_owner_date` "
+             "ON `grading_plays` (`owner`, `submitted_date`)"],
+        )
+
+    card_fields = grading_card_fields(plays["id"])
+    grading_cards = collection(base_url, token, "grading_play_cards")
+    if grading_cards:
+        grading_cards = ensure_fields(
+            base_url, token, grading_cards, card_fields, "grading_play_cards"
+        )
+    else:
+        grading_cards = create_owner_collection(
+            base_url, token, users_id, "grading_play_cards", card_fields,
+            ["CREATE INDEX `idx_grading_play_cards_owner_play` "
+             "ON `grading_play_cards` (`owner`, `play`)"],
+        )
+
+    sale_fields = grading_sale_fields(plays["id"], grading_cards["id"])
+    grading_sales = collection(base_url, token, "grading_play_sales")
+    if grading_sales:
+        ensure_fields(
+            base_url, token, grading_sales, sale_fields, "grading_play_sales"
+        )
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "grading_play_sales", sale_fields,
+            ["CREATE INDEX `idx_grading_play_sales_owner_play` "
+             "ON `grading_play_sales` (`owner`, `play`)"],
         )
 
 
