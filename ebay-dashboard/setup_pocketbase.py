@@ -171,7 +171,9 @@ def save_nonsecret_defaults(base_url: str, email: str) -> None:
 def response_message(response: requests.Response) -> str:
     try:
         data = response.json()
-        return data.get("message") or json.dumps(data)
+        message = data.get("message") or "PocketBase rejected the request."
+        details = data.get("data")
+        return f"{message} Details: {json.dumps(details)}" if details else message
     except ValueError:
         return response.text[:500]
 
@@ -489,8 +491,8 @@ def configure_schema(base_url: str, token: str):
     else:
         create_owner_collection(
             base_url, token, users_id, "grading_items", GRADING_ITEM_FIELDS,
-            ["CREATE INDEX `idx_grading_items_owner_created` "
-             "ON `grading_items` (`owner`, `created`)"],
+            ["CREATE INDEX `idx_grading_items_owner` "
+             "ON `grading_items` (`owner`)"],
         )
 
     plays = collection(base_url, token, "grading_plays")
