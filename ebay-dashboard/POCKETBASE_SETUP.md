@@ -32,7 +32,8 @@ It prepares:
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
 - `app_preferences`: privately syncs the optional bank/cash buying-capital
-  reminder; it is not included in ledger exports or tax estimates.
+  reminder and Slab Ledger's successful Parse.bot call count; neither is
+  included in ledger exports or tax estimates.
 - `debt_reminders`: privately syncs the **Owed to me** and **I owe** reminder
   lists; settled reminders are retained but excluded from active totals.
 - `business_exceptions`: stores year-end review notes for business money that
@@ -81,6 +82,14 @@ advertises 200 free credits and a 5 requests/minute limit, while some individual
 marketplace tables still display an older allowance. Use the signed-in usage
 page as the source of truth for your account.
 
+The compact header badge tracks successful Parse.bot calls made through Slab
+Ledger and resets each calendar month. It uses 200 monthly credits by default.
+If your allowance changes, set `PARSE_BOT_MONTHLY_CREDITS` in the PocketBase
+container environment. Parse.bot does not currently document an account
+balance endpoint, so calls made outside Slab Ledger are not included
+automatically. Click the badge to match it to the current remaining balance
+shown in your Parse.bot account whenever needed.
+
 ## Recommended PocketBase launch restrictions
 
 For the GitHub Pages app, add this launch option to restrict cross-origin
@@ -106,8 +115,9 @@ MFA and IP restriction options before exposing any additional network path.
 6. Use **Exceptions log** in Business Ledger to document unusual account
    activity for year-end review. Exception notes do not change calculated
    totals automatically.
-7. Use **Grading plays** in Tools to measure batch grading results and sales.
-5. Keep receipts, invoices, bank statements, and annual exports with your tax
+7. Use the **Grading tracker** in Tools to record raw cards, quantities, photos,
+   and estimated all-in grading costs.
+8. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 
 The Windows scraper is optional and is not required for manual market values or

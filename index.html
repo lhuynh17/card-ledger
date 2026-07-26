@@ -162,6 +162,15 @@ body{
 .owner-chip strong{ display:block; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
 .owner-chip small{ display:block; color:var(--muted); font-size:10px; }
 .owner-chip:hover small{ color:#AFC6FF; }
+.parse-credit-chip{
+  display:inline-flex; align-items:center; gap:7px; min-height:34px;
+  padding:7px 11px; border:1px solid rgba(233,185,73,.38);
+  border-radius:999px; background:linear-gradient(135deg,rgba(233,185,73,.14),rgba(75,123,229,.1));
+  color:var(--gold); box-shadow:0 8px 22px rgba(0,0,0,.14);
+  font:650 11px var(--font-body); white-space:nowrap; cursor:pointer;
+}
+.parse-credit-chip svg{ width:15px; height:15px; flex:0 0 auto; }
+.parse-credit-chip strong{ color:var(--text); font:700 11px var(--font-mono); }
 /* ---- Panels ---- */
 section{
   background: linear-gradient(180deg, var(--surface) 0%, var(--surface-end) 100%);
@@ -762,6 +771,10 @@ select option{ background: var(--surface-2); color: var(--text); }
   <div class="header-actions">
     <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
     <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
+    <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to match the balance shown in your Parse.bot account.">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <strong id="parseCreditText">Credits unavailable</strong>
+    </button>
   </div>
 </header>
 
@@ -1011,6 +1024,8 @@ let cloudSession = null;
 let syncInProgress = false;
 let syncTimer = null;
 let cloudFileToken = { value:"", expiresAt:0 };
+let parseCreditRefreshAt = 0;
+let parseCreditMonthlyLimit = 200;
 
 try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
 
@@ -1021,7 +1036,62 @@ function setSyncStatus(text, state = "") {
   button.className = "sync-btn" + (state ? " " + state : "");
   const logout = document.getElementById("logoutBtn");
   if (logout) logout.hidden = !cloudSession?.token;
+  if (cloudSession?.token) refreshParseCredits();
+  else {
+    const credits = document.getElementById("parseCreditChip");
+    if (credits) credits.hidden = true;
+  }
 }
+
+function updateParseCreditBadge(credits) {
+  if (!credits || !Number.isFinite(Number(credits.remaining))) return;
+  const remaining = Math.max(0, Number(credits.remaining));
+  parseCreditMonthlyLimit = Math.max(1, Number(credits.limit) || 200);
+  const chip = document.getElementById("parseCreditChip");
+  const text = document.getElementById("parseCreditText");
+  if (!chip || !text) return;
+  text.textContent = remaining + (remaining === 1 ? " Credit Left" : " Credits Left");
+  chip.title = `Slab Ledger tracked ${Number(credits.used) || 0} successful Parse.bot call${Number(credits.used) === 1 ? "" : "s"} this month out of ${Number(credits.limit) || 200}. Click to match the balance shown in your Parse.bot account.`;
+  chip.hidden = false;
+}
+window.updateParseCreditBadge = updateParseCreditBadge;
+
+async function refreshParseCredits(force = false) {
+  if (!cloudSession?.token) return;
+  const now = Date.now();
+  if (!force && now - parseCreditRefreshAt < 60000) return;
+  parseCreditRefreshAt = now;
+  try {
+    updateParseCreditBadge(await pbRequest("/api/slab-ledger/psa-credits"));
+  } catch (_) {
+    const chip = document.getElementById("parseCreditChip");
+    if (chip) chip.hidden = true;
+  }
+}
+
+document.getElementById("parseCreditChip").addEventListener("click", async () => {
+  const shown = document.getElementById("parseCreditText").textContent;
+  const current = Number.parseInt(shown, 10);
+  const answer = prompt(
+    "Enter the credits remaining shown in your Parse.bot account. Slab Ledger will count down from that number.",
+    Number.isFinite(current) ? String(current) : ""
+  );
+  if (answer === null) return;
+  const remaining = Number(answer);
+  if (!Number.isInteger(remaining) || remaining < 0 || remaining > parseCreditMonthlyLimit) {
+    alert("Enter a whole number from 0 to " + parseCreditMonthlyLimit + ".");
+    return;
+  }
+  try {
+    updateParseCreditBadge(await pbRequest("/api/slab-ledger/psa-credits", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ remaining })
+    }));
+  } catch (error) {
+    alert(error.message || "The Parse.bot credit balance could not be updated.");
+  }
+});
 
 async function pbRequest(path, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -2285,6 +2355,7 @@ async function lookupPsaDetails() {
   scanStatus.textContent = "Loading PSA certification details…";
   try {
     const details = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(cert));
+    updateParseCreditBadge(details.credits);
     if (details.card_title) $("cardName").value = details.card_title;
     $("ebaySearch").value = structuredEbayKeywords(details);
     const grade = gradeNumber(details.grade);
@@ -2353,6 +2424,7 @@ async function lookupPsaEstimate() {
   scanStatus.textContent = "Loading up to three recent comparable sales…";
   try {
     const result = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(cert) + "/sales");
+    updateParseCreditBadge(result.credits);
     if (!numberValue(result.estimate)) throw new Error("No recent comparable sales were available.");
     pendingPsaEstimate = numberValue(result.estimate);
     pendingPsaEstimateUpdated = new Date().toISOString();
@@ -2753,11 +2825,11 @@ async function init() {
 }
 init();
 </script>
-<script src="ebay-dashboard/slab-ledger-market.js?v=market-10"></script>
+<script src="ebay-dashboard/slab-ledger-market.js?v=market-11"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-2"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-9"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-8"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-9"></script>
 <script src="ebay-dashboard/grading-plays.js?v=grading-items-1"></script>
 </body>
 </html>

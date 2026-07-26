@@ -134,6 +134,7 @@
       message.textContent = "Loading up to three recent PSA comparable sales…";
       try {
         const result = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(card.cert) + "/sales");
+        window.updateParseCreditBadge?.(result.credits);
         const sales = Array.isArray(result?.sales) ? result.sales.filter((sale) => Number(sale.price) > 0).slice(0, 3) : [];
         if (!sales.length) throw new Error("PSA did not return recent comparable sales for this card.");
         const urlInputs = [...document.querySelectorAll(".comp-url")];
