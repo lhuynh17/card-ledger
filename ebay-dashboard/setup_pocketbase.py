@@ -231,6 +231,108 @@ def ensure_fields(base_url: str, token: str, current: dict,
     return updated
 
 
+def owner_security_rules() -> dict:
+    rule = '@request.auth.id != "" && owner = @request.auth.id'
+    return {
+        "listRule": rule,
+        "viewRule": rule,
+        "createRule": (
+            '@request.auth.id != "" && '
+            '@request.body.owner = @request.auth.id'
+        ),
+        "updateRule": rule,
+        "deleteRule": rule,
+    }
+
+
+def has_unowned_records(base_url: str, token: str, collection_name: str) -> bool:
+    response = requests.get(
+        base_url + f"/api/collections/{collection_name}/records",
+        headers={"Authorization": token, "Accept": "application/json"},
+        params={"perPage": 1, "filter": 'owner = ""'},
+        timeout=TIMEOUT,
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"Could not audit {collection_name} ownership: "
+            f"{response_message(response)}"
+        )
+    return bool(response.json().get("items"))
+
+
+def secure_existing_owner_collection(base_url: str, token: str, current: dict,
+                                     users_id: str, label: str) -> dict:
+    owner = next(
+        (field for field in current.get("fields", [])
+         if field.get("name") == "owner"),
+        None,
+    )
+    if not owner:
+        raise RuntimeError(
+            f"{label} has no owner field. No security rules were changed. "
+            "Assign owners to existing records before continuing."
+        )
+    if (owner.get("type") != "relation"
+            or owner.get("collectionId") != users_id
+            or owner.get("maxSelect") != 1):
+        raise RuntimeError(
+            f"{label}.owner is not a single relation to users. "
+            "No security rules were changed."
+        )
+    if has_unowned_records(base_url, token, label):
+        raise RuntimeError(
+            f"{label} contains records without an owner. "
+            "No security rules were changed."
+        )
+
+    expected = owner_security_rules()
+    changes = {
+        key:value for key, value in expected.items()
+        if current.get(key) != value
+    }
+    if not changes:
+        print(f"{label} owner-only API rules verified.")
+        return current
+    updated = request(
+        base_url, token, "PATCH",
+        "/api/collections/" + current["id"],
+        changes,
+    )
+    print(f"{label} owner-only API rules repaired.")
+    return updated
+
+
+def protect_card_photo(base_url: str, token: str, cards: dict) -> dict:
+    fields = cards.get("fields", [])
+    photo = next(
+        (field for field in fields if field.get("name") == "photo"),
+        None,
+    )
+    if not photo:
+        print("cards.photo was not found; photo protection was skipped.")
+        return cards
+    if photo.get("type") != "file":
+        raise RuntimeError(
+            "cards.photo exists but is not a file field. "
+            "Photo protection was not changed."
+        )
+    if photo.get("protected") is True:
+        print("cards.photo is already protected.")
+        return cards
+    protected_fields = [
+        ({**field, "protected": True}
+         if field.get("name") == "photo" else field)
+        for field in fields
+    ]
+    updated = request(
+        base_url, token, "PATCH",
+        "/api/collections/" + cards["id"],
+        {"fields": protected_fields},
+    )
+    print("cards.photo is now protected by short-lived file tokens.")
+    return updated
+
+
 def configure_schema(base_url: str, token: str):
     users = collection(base_url, token, "users")
     if not users:
@@ -240,11 +342,20 @@ def configure_schema(base_url: str, token: str):
     cards = collection(base_url, token, "cards")
     if not cards:
         raise RuntimeError("The cards collection was not found.")
-    ensure_fields(base_url, token, cards, CARD_EXTRA_FIELDS, "cards")
+    cards = ensure_fields(base_url, token, cards, CARD_EXTRA_FIELDS, "cards")
+    cards = secure_existing_owner_collection(
+        base_url, token, cards, users_id, "cards"
+    )
+    protect_card_photo(base_url, token, cards)
 
     market = collection(base_url, token, "market_values")
     if market:
-        ensure_fields(base_url, token, market, MARKET_FIELDS, "market_values")
+        market = ensure_fields(
+            base_url, token, market, MARKET_FIELDS, "market_values"
+        )
+        secure_existing_owner_collection(
+            base_url, token, market, users_id, "market_values"
+        )
     else:
         create_owner_collection(
             base_url, token, users_id, "market_values", MARKET_FIELDS,
@@ -254,7 +365,12 @@ def configure_schema(base_url: str, token: str):
 
     business = collection(base_url, token, "business_entries")
     if business:
-        ensure_fields(base_url, token, business, BUSINESS_FIELDS, "business_entries")
+        business = ensure_fields(
+            base_url, token, business, BUSINESS_FIELDS, "business_entries"
+        )
+        secure_existing_owner_collection(
+            base_url, token, business, users_id, "business_entries"
+        )
     else:
         create_owner_collection(
             base_url, token, users_id, "business_entries", BUSINESS_FIELDS,
@@ -264,7 +380,12 @@ def configure_schema(base_url: str, token: str):
 
     preferences = collection(base_url, token, "app_preferences")
     if preferences:
-        ensure_fields(base_url, token, preferences, PREFERENCE_FIELDS, "app_preferences")
+        preferences = ensure_fields(
+            base_url, token, preferences, PREFERENCE_FIELDS, "app_preferences"
+        )
+        secure_existing_owner_collection(
+            base_url, token, preferences, users_id, "app_preferences"
+        )
     else:
         create_owner_collection(
             base_url, token, users_id, "app_preferences", PREFERENCE_FIELDS,
@@ -274,7 +395,12 @@ def configure_schema(base_url: str, token: str):
 
     debts = collection(base_url, token, "debt_reminders")
     if debts:
-        ensure_fields(base_url, token, debts, DEBT_FIELDS, "debt_reminders")
+        debts = ensure_fields(
+            base_url, token, debts, DEBT_FIELDS, "debt_reminders"
+        )
+        secure_existing_owner_collection(
+            base_url, token, debts, users_id, "debt_reminders"
+        )
     else:
         create_owner_collection(
             base_url, token, users_id, "debt_reminders", DEBT_FIELDS,
@@ -284,8 +410,11 @@ def configure_schema(base_url: str, token: str):
 
     exceptions = collection(base_url, token, "business_exceptions")
     if exceptions:
-        ensure_fields(
+        exceptions = ensure_fields(
             base_url, token, exceptions, EXCEPTION_FIELDS, "business_exceptions"
+        )
+        secure_existing_owner_collection(
+            base_url, token, exceptions, users_id, "business_exceptions"
         )
     else:
         create_owner_collection(
@@ -298,6 +427,9 @@ def configure_schema(base_url: str, token: str):
     if plays:
         plays = ensure_fields(
             base_url, token, plays, GRADING_PLAY_FIELDS, "grading_plays"
+        )
+        plays = secure_existing_owner_collection(
+            base_url, token, plays, users_id, "grading_plays"
         )
     else:
         plays = create_owner_collection(
@@ -312,6 +444,9 @@ def configure_schema(base_url: str, token: str):
         grading_cards = ensure_fields(
             base_url, token, grading_cards, card_fields, "grading_play_cards"
         )
+        grading_cards = secure_existing_owner_collection(
+            base_url, token, grading_cards, users_id, "grading_play_cards"
+        )
     else:
         grading_cards = create_owner_collection(
             base_url, token, users_id, "grading_play_cards", card_fields,
@@ -322,8 +457,11 @@ def configure_schema(base_url: str, token: str):
     sale_fields = grading_sale_fields(plays["id"], grading_cards["id"])
     grading_sales = collection(base_url, token, "grading_play_sales")
     if grading_sales:
-        ensure_fields(
+        grading_sales = ensure_fields(
             base_url, token, grading_sales, sale_fields, "grading_play_sales"
+        )
+        secure_existing_owner_collection(
+            base_url, token, grading_sales, users_id, "grading_play_sales"
         )
     else:
         create_owner_collection(

@@ -13,9 +13,17 @@ only in the ignored local `pocketbase-setup.env` file. Future runs display those
 two saved values without stopping for input; the only prompt is
 `Superuser password (hidden)`.
 
+Before changing the schema, create a PocketBase backup from **Settings →
+Backups**. The setup tool performs an ownership safety check before repairing
+API rules. If any collection has a missing, invalid, or empty owner, it stops
+without changing that collection's rules so existing records are not locked
+out.
+
 It prepares:
 
-- `cards`: adds selling-cost fields and optional PSA sales-estimate fields;
+- `cards`: adds selling-cost fields and optional PSA sales-estimate fields,
+  verifies owner-only API rules, and protects inventory photos with short-lived
+  file tokens;
 - `market_values`: keeps manual comps, source, notes, update date, and history;
 - `business_entries`: stores owner-scoped expenses, contributions, draws,
   loans, other income, and protected receipt/invoice uploads.
@@ -30,7 +38,8 @@ It prepares:
   grading results inside each play.
 - `grading_play_sales`: stores any number of sales against each grading play.
 
-Every market and business record is protected by owner-based API rules:
+Every inventory, market, and business record is protected by owner-based API
+rules:
 
 - List/View/Update/Delete: `owner = @request.auth.id`
 - Create: `@request.body.owner = @request.auth.id`
@@ -46,16 +55,31 @@ guide value.
 2. Copy `pb_hooks/slab_ledger_psa.pb.js` next to the PocketBase executable as
    `pb_hooks/slab_ledger_psa.pb.js`.
 3. Set `PARSE_BOT_API_KEY` in the environment that starts PocketBase, then
-   restart PocketBase.
+   restart PocketBase. If PocketBase is launched from another directory, start
+   it with `--hooksDir=/path/to/pb_hooks`.
 4. Run the Slab Ledger PocketBase setup tool once to add the three optional
    estimate fields to `cards`.
 5. Sign in to Slab Ledger. Scan a PSA QR or type a cert, then use **Fill from
    PSA**. **Get estimate** uses one additional Parse.bot credit.
 
 The API key remains on the PocketBase server and is never sent to the browser.
-Both proxy routes require an authenticated `users` account. Parse.bot's free
-tier currently includes 100 successful calls per month at 5 requests/minute;
-confirm current limits on Parse.bot before relying on them.
+Both proxy routes require an authenticated `users` account. Parse.bot currently
+advertises 200 free credits and a 5 requests/minute limit, while some individual
+marketplace tables still display an older allowance. Use the signed-in usage
+page as the source of truth for your account.
+
+## Recommended PocketBase launch restrictions
+
+For the GitHub Pages app, add this launch option to restrict cross-origin
+browser access:
+
+```text
+--origins=https://lhuynh17.github.io
+```
+
+Keep Tailscale Serve private and do not enable Tailscale Funnel. Also enable
+PocketBase rate limiting, create regular backups, and review the `_superusers`
+MFA and IP restriction options before exposing any additional network path.
 
 ## After setup
 
