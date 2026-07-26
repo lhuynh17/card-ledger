@@ -330,6 +330,7 @@ class PocketBaseClient:
                 "company": str(record.get("company") or "PSA").upper(),
                 "cert": str(record.get("cert") or ""),
                 "name": str(record.get("name") or ""),
+                "ebay_search": str(record.get("ebay_search") or ""),
                 "grade": str(record.get("grade") or ""),
                 "cost": number(record.get("cost")),
                 "photo": "",
@@ -412,12 +413,14 @@ def card_keywords(name: str) -> str:
     generic = {
         "POKEMON", "CARD", "CARDS", "TRADING", "COLLECTIBLE",
         "HOLO", "HOLOFOIL", "HOLOGRAPHIC", "FOIL", "FA",
+        "LMTD", "COLL", "MASTER", "BTL", "SET",
     }
     original = str(name or "").upper()
     numbered_title = re.match(r"^(.*?)#\s*([A-Z0-9-]+)\s+(.+)$", original)
     if numbered_title:
         prefix_words = re.sub(r"[^A-Z0-9]+", " ", numbered_title.group(1)).split()
         repeated_words = set(prefix_words)
+        year_words = [word for word in prefix_words if re.fullmatch(r"(?:19|20)\d{2}", word)]
         languages = {
             "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
             "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
@@ -429,7 +432,7 @@ def card_keywords(name: str) -> str:
             if word not in generic and word not in repeated_words
         ]
         concise_words = list(dict.fromkeys(
-            language_words + [numbered_title.group(2)] + subject_words
+            year_words + language_words + [numbered_title.group(2)] + subject_words
         ))
         if len(concise_words) >= 2:
             return " ".join(concise_words)
@@ -453,7 +456,8 @@ def ebay_search_terms(card: dict) -> str:
         exact_grade += ' "Black Label"'
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
-    return " ".join(filter(None, [card_keywords(card.get("name", "")), exact_grade, "-raw", "-ungraded"]))
+    keywords = str(card.get("ebay_search") or "").strip() or card_keywords(card.get("name", ""))
+    return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
 
 
 def fetch_page(session: requests.Session, search: str, page: int) -> str:

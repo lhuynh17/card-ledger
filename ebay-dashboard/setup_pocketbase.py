@@ -51,6 +51,7 @@ BUSINESS_FIELDS = [
 ]
 
 CARD_EXTRA_FIELDS = [
+    {"name": "ebay_search", "type": "text", "max": 1000},
     {"name": "photo_back", "type": "file", "maxSelect": 1,
      "maxSize": 10485760, "protected": True,
      "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/heic",

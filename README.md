@@ -7,7 +7,8 @@ The app tracks:
 - active and sold inventory, cost basis, sale proceeds, fees, and shipping;
 - scan-first PSA certificate autofill for card details, protected front/back
   slab images, and optional recent-sales estimates through private PocketBase
-  routes, with a guided manual fallback;
+  routes, with structured, editable eBay search keywords and a guided manual
+  fallback;
 - one-tap PSA recent-sale comparables or manual market values from one to three
   sales, including links, source, notes, update date, and value history;
 - collection cost, market value, and unrealized gain or loss;
