@@ -18,7 +18,8 @@
       .app-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:1180px;margin:14px auto 2px;padding:0 22px}
       .app-nav button{min-height:44px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--muted);font:750 13px var(--font-sans);cursor:pointer}
       .app-nav button.active{border-color:var(--accent);background:var(--accent);color:#fff}
-      .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-card{padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+      .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-group-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:0 2px 11px;border-bottom:1px solid var(--line)}.tool-group-label:first-child{margin-top:0}.tool-group-number{display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:var(--accent-soft);color:#9db8ff;font:800 11px var(--font-mono)}.tool-group-label h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.tool-group-label p{margin:2px 0 0;color:var(--muted);font-size:11px}.tool-card{position:relative;padding:18px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),rgba(14,20,32,.82));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.tool-card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--tool-tone,#4B7BE5)}
+      .tool-card.tone-green{--tool-tone:#35b37e}.tool-card.tone-blue{--tool-tone:#4b7be5}.tool-card.tone-violet{--tool-tone:#9b7bea}.tool-card.tone-amber{--tool-tone:#e9b949}
       .tool-card.capital-card{grid-column:1/-1}.tool-card h2{margin:0 0 5px;font-size:16px}.tool-card p{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
       .tool-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tool-field{display:grid;gap:5px}.tool-field.full{grid-column:1/-1}.tool-field label{font-size:11px;color:var(--muted);font-weight:750}
       .tool-field input,.tool-field select,.tool-field textarea{box-sizing:border-box;width:100%;min-height:43px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.tool-field textarea{min-height:65px;resize:vertical}
@@ -28,7 +29,7 @@
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-empty{color:var(--muted);font-size:11px}
-      @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-card.capital-card,.debt-card{grid-column:auto}.tool-fields,.debt-layout,.debt-columns{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
+      @media(max-width:700px){.app-nav{padding:0 14px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.tool-card.capital-card,.debt-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.tool-fields,.debt-layout,.debt-columns{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
     `;
     document.head.appendChild(style);
 
@@ -47,7 +48,8 @@
     tools.innerHTML = `
       <div class="panel-head"><div class="panel-title">Tools</div></div>
       <div class="tools-grid">
-        <div class="tool-card capital-card">
+        <div class="tool-group-label"><span class="tool-group-number">01</span><div><h2>Buying & deal math</h2><p>Quick numbers for decisions at shows, shops, and online.</p></div></div>
+        <div class="tool-card capital-card tone-green">
           <h2>Inventory buying capital</h2>
           <p>A personal reminder of what you currently have available to spend. It is not included in exports, profit, or tax calculations.</p>
           <div class="tool-fields">
@@ -58,7 +60,7 @@
           <div class="capital-total"><span>Total available to spend</span><strong id="capitalTotal">$0.00</strong></div>
           <button class="capital-save" id="capitalSave" type="button">Save reminder</button><span class="capital-status" id="capitalStatus"></span>
         </div>
-        <div class="tool-card">
+        <div class="tool-card tone-blue">
           <h2>Percentage of an amount</h2>
           <p>Enter an amount and a percentage to calculate that portion.</p>
           <div class="tool-fields">
@@ -68,7 +70,7 @@
           <div class="calculator-result"><span>Calculated value</span><strong id="percentResult">$0.00</strong></div>
           <button class="calculator-clear" id="percentClear" type="button">Clear form</button>
         </div>
-        <div class="tool-card">
+        <div class="tool-card tone-violet">
           <h2>What percent am I paying?</h2>
           <p>Compare your purchase price with the asking or market value.</p>
           <div class="tool-fields">
@@ -78,7 +80,8 @@
           <div class="calculator-result"><span>You are paying</span><strong id="payingResult">0%</strong></div>
           <button class="calculator-clear" id="payingClear" type="button">Clear form</button>
         </div>
-        <div class="tool-card debt-card">
+        <div class="tool-group-label"><span class="tool-group-number">02</span><div><h2>People & balances</h2><p>Private reminders for short-term money shared with other vendors.</p></div></div>
+        <div class="tool-card debt-card tone-amber">
           <h2>Money owed reminders</h2>
           <p>Keep track of informal vendor-to-vendor loans. These reminders are private and are not included in tax calculations or exports.</p>
           <div class="debt-layout">
