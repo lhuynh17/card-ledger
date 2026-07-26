@@ -103,6 +103,19 @@ GRADING_PLAY_FIELDS = [
     {"name": "notes", "type": "text", "max": 5000},
 ]
 
+GRADING_ITEM_FIELDS = [
+    {"name": "card_name", "type": "text", "required": True, "max": 1000},
+    {"name": "quantity", "type": "number", "required": True, "min": 1,
+     "onlyInt": True},
+    {"name": "raw_cost_each", "type": "number", "min": 0},
+    {"name": "grading_cost_each", "type": "number", "min": 0},
+    {"name": "photo", "type": "file", "maxSelect": 1,
+     "maxSize": 10485760, "protected": True,
+     "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/heic",
+                   "image/heif"]},
+    {"name": "notes", "type": "text", "max": 2000},
+]
+
 
 def grading_card_fields(play_collection_id: str):
     return [
@@ -463,6 +476,21 @@ def configure_schema(base_url: str, token: str):
             base_url, token, users_id, "business_exceptions", EXCEPTION_FIELDS,
             ["CREATE INDEX `idx_business_exceptions_owner_date` "
              "ON `business_exceptions` (`owner`, `exception_date`)"],
+        )
+
+    grading_items = collection(base_url, token, "grading_items")
+    if grading_items:
+        grading_items = ensure_fields(
+            base_url, token, grading_items, GRADING_ITEM_FIELDS, "grading_items"
+        )
+        secure_existing_owner_collection(
+            base_url, token, grading_items, users_id, "grading_items"
+        )
+    else:
+        create_owner_collection(
+            base_url, token, users_id, "grading_items", GRADING_ITEM_FIELDS,
+            ["CREATE INDEX `idx_grading_items_owner_created` "
+             "ON `grading_items` (`owner`, `created`)"],
         )
 
     plays = collection(base_url, token, "grading_plays")
