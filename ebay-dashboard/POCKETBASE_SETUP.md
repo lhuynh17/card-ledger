@@ -8,6 +8,9 @@ After pulling this version, run the setup tool on either computer:
 
 Enter the PocketBase URL and superuser credentials when prompted. The installer
 never saves the password and never deletes existing records.
+If superuser MFA is enabled, the password step triggers the normal PocketBase
+MFA email and the tool then asks for that one-time code. MFA does not need to be
+disabled.
 After the first successful run, the non-secret URL and superuser email are saved
 only in the ignored local `pocketbase-setup.env` file. Future runs display those
 two saved values without stopping for input; the only prompt is

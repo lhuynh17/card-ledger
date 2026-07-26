@@ -163,9 +163,41 @@ def authenticate(base_url: str, email: str, password: str) -> str:
         base_url + "/api/collections/_superusers/auth-with-password",
         json={"identity": email, "password": password}, timeout=TIMEOUT,
     )
-    if not response.ok:
+    data = response.json() if response.content else {}
+    if response.ok:
+        return data["token"]
+
+    mfa_id = data.get("mfaId")
+    if not mfa_id:
         raise RuntimeError(f"Superuser sign-in failed: {response_message(response)}")
-    return response.json()["token"]
+
+    otp_response = requests.post(
+        base_url + "/api/collections/_superusers/request-otp",
+        json={"email": email}, timeout=TIMEOUT,
+    )
+    if not otp_response.ok:
+        raise RuntimeError(
+            "The password was accepted, but PocketBase could not send the MFA "
+            f"email: {response_message(otp_response)}"
+        )
+    otp_id = otp_response.json().get("otpId")
+    if not otp_id:
+        raise RuntimeError("PocketBase did not return an MFA request identifier.")
+
+    print("Password accepted. PocketBase sent an MFA code to the superuser email.")
+    otp_code = getpass.getpass("MFA code from email (hidden): ").strip()
+    if not otp_code:
+        raise RuntimeError("The MFA code cannot be empty.")
+    mfa_response = requests.post(
+        base_url + "/api/collections/_superusers/auth-with-otp",
+        json={"otpId": otp_id, "password": otp_code, "mfaId": mfa_id},
+        timeout=TIMEOUT,
+    )
+    if not mfa_response.ok:
+        raise RuntimeError(
+            f"Superuser MFA verification failed: {response_message(mfa_response)}"
+        )
+    return mfa_response.json()["token"]
 
 
 def request(base_url: str, token: str, method: str, path: str, body=None):
