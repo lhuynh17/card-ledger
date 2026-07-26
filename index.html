@@ -315,8 +315,12 @@ select option{ background: var(--surface-2); color: var(--text); }
 }
 .scan-frame{ position: relative; }
 .scan-frame::after{
-  content:""; position:absolute; inset: 18% 30%;
+  content:""; position:absolute; left:10%; right:10%; top:37%; height:26%;
   border: 2px solid var(--accent); border-radius: 8px; pointer-events:none;
+}
+.scan-tip{
+  max-width:520px; margin:10px auto 0; color:var(--muted);
+  text-align:center; font-size:13px; line-height:1.4;
 }
 .btn-cancel{
   display:block; margin: 14px auto 0; cursor:pointer;
@@ -731,6 +735,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   <!-- Live camera view (hidden until Scan is tapped) -->
   <div id="scannerWrap">
     <div class="scan-frame"><video id="video" muted playsinline></video></div>
+    <p class="scan-tip">For a barcode, hold the slab sideways so the entire long barcode fits inside the wide box. Move closer until the bars look sharp.</p>
     <button type="button" class="btn-cancel" id="cancelScanBtn">Stop camera</button>
   </div>
 
@@ -2017,13 +2022,32 @@ async function startLiveScan() {
 
   $("scannerWrap").classList.add("active");
   scanStatus.className = "status";
-  scanStatus.textContent = "Starting camera… point it at the QR code on the label.";
+  scanStatus.textContent = "Starting camera… point it at the QR code or long barcode on the label.";
 
   try {
-    codeReader = new ZXing.BrowserMultiFormatReader();
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.CODABAR,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.DATA_MATRIX
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    codeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
 
     // Ask specifically for the REAR camera (environment).
-    const constraints = { video: { facingMode: { ideal: "environment" } } };
+    const constraints = {
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal:1920 },
+        height: { ideal:1080 }
+      }
+    };
 
     // The callback fires repeatedly. `result` is set once a code is read.
     await codeReader.decodeFromConstraints(constraints, "video", (result, err) => {
