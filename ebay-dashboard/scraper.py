@@ -411,8 +411,29 @@ def card_keywords(name: str) -> str:
     """Port of Slab Ledger's ebayCardKeywords() function."""
     generic = {
         "POKEMON", "CARD", "CARDS", "TRADING", "COLLECTIBLE",
-        "HOLO", "HOLOFOIL", "HOLOGRAPHIC", "FOIL",
+        "HOLO", "HOLOFOIL", "HOLOGRAPHIC", "FOIL", "FA",
     }
+    original = str(name or "").upper()
+    numbered_title = re.match(r"^(.*?)#\s*([A-Z0-9-]+)\s+(.+)$", original)
+    if numbered_title:
+        prefix_words = re.sub(r"[^A-Z0-9]+", " ", numbered_title.group(1)).split()
+        repeated_words = set(prefix_words)
+        languages = {
+            "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
+            "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
+        }
+        language_words = [word for word in prefix_words if word in languages]
+        subject_words = [
+            word
+            for word in re.sub(r"[^A-Z0-9]+", " ", numbered_title.group(3)).split()
+            if word not in generic and word not in repeated_words
+        ]
+        concise_words = list(dict.fromkeys(
+            language_words + [numbered_title.group(2)] + subject_words
+        ))
+        if len(concise_words) >= 2:
+            return " ".join(concise_words)
+
     words, seen = [], set()
     clean_name = normalized_card_name(name)
     for word in re.sub(r"[^A-Z0-9/]+", " ", clean_name.upper()).split():

@@ -1295,10 +1295,34 @@ function gradeNumber(text) {
 // Turn a formal cert-page title into broader eBay keywords. PSA titles often
 // repeat the set name and include label words that ordinary sellers omit.
 function ebayCardKeywords(cardName) {
-  const generic = new Set(["POKEMON", "CARD", "HOLO", "HOLOGRAPHIC", "FOIL"]);
+  const generic = new Set([
+    "POKEMON", "CARD", "CARDS", "TRADING", "COLLECTIBLE",
+    "HOLO", "HOLOFOIL", "HOLOGRAPHIC", "FOIL", "FA"
+  ]);
+  const original = String(cardName || "").toUpperCase();
+  const numberedTitle = original.match(/^(.*?)#\s*([A-Z0-9-]+)\s+(.+)$/);
+
+  // PSA's API returns a catalog title rather than the shorter wording most
+  // eBay sellers use. For numbered cards, keep the language, card number, and
+  // subject while dropping a set name repeated on both sides of "#".
+  if (numberedTitle) {
+    const prefixWords = numberedTitle[1].replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/);
+    const repeatedWords = new Set(prefixWords);
+    const languageWords = prefixWords.filter((word) =>
+      ["JAPANESE", "ENGLISH", "KOREAN", "CHINESE", "FRENCH", "GERMAN", "SPANISH", "ITALIAN"].includes(word)
+    );
+    const subjectWords = numberedTitle[3]
+      .replace(/[^A-Z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word && !generic.has(word) && !repeatedWords.has(word));
+    const conciseWords = [...languageWords, numberedTitle[2], ...subjectWords];
+    const uniqueWords = conciseWords.filter((word, index) => conciseWords.indexOf(word) === index);
+    if (uniqueWords.length >= 2) return uniqueWords.join(" ");
+  }
+
   const seen = new Set();
-  const words = String(cardName || "")
-    .toUpperCase()
+  const words = original
     .replace(/[^A-Z0-9]+/g, " ")
     .trim()
     .split(/\s+/)
