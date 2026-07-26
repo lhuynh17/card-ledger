@@ -9,7 +9,7 @@ The app tracks:
   source, notes, update date, and value history;
 - collection cost, market value, and unrealized gain or loss;
 - business expenses, owner contributions and draws, loans, other income, and
-  protected receipt or invoice uploads;
+  protected receipt or invoice uploads, with post-save corrections;
 - tax-year estimates for gross receipts, COGS, selling costs, operating
   expenses, profit, and available capital;
 - a private bank/cash buying-capital reminder, money owed lists, and quick
