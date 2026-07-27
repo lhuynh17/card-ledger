@@ -19,7 +19,7 @@
     style.textContent = `
       .app-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;max-width:1180px;margin:14px auto 2px;padding:6px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface) 84%,transparent);box-shadow:0 14px 38px rgba(0,0,0,.18);backdrop-filter:blur(12px)}
       .app-nav button{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;overflow:hidden;border:1px solid transparent;border-radius:13px;background:transparent;color:var(--muted);font:750 13px var(--font-body);letter-spacing:.02em;cursor:pointer;transition:transform .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease}
-      .app-nav button::after{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(115deg,transparent 10%,rgba(255,255,255,.16) 45%,transparent 70%);transform:translateX(-120%);transition:transform .45s ease}.app-nav button:hover{color:var(--text);border-color:var(--line);transform:translateY(-1px)}.app-nav button:hover::after{transform:translateX(120%)}.app-nav button.active{border-color:rgba(131,166,246,.72);background:linear-gradient(135deg,var(--accent-grad-a),var(--accent),var(--accent-grad-b));color:#fff;box-shadow:0 9px 24px rgba(45,82,175,.38),inset 0 1px rgba(255,255,255,.24);transform:translateY(-1px)}.app-nav-icon{display:grid;place-items:center;width:28px;height:28px;border:1px solid currentColor;border-radius:9px;opacity:.88}.app-nav-icon svg{width:15px;height:15px}
+      .app-nav button::after{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(115deg,transparent 10%,rgba(255,255,255,.16) 45%,transparent 70%);transform:translateX(-120%);transition:transform .45s ease}.app-nav button:hover{color:var(--text);border-color:var(--line);transform:translateY(-1px)}.app-nav button:hover::after{transform:translateX(120%)}.app-nav button.active{border-color:rgba(131,166,246,.72);background:linear-gradient(135deg,var(--accent-grad-a),var(--accent),var(--accent-grad-b));color:#fff;box-shadow:0 9px 24px rgba(45,82,175,.38),inset 0 1px rgba(255,255,255,.24);transform:translateY(-1px)}.app-nav-icon{display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;border:1px solid currentColor;border-radius:9px;opacity:.88}.app-nav-icon svg{display:block;width:15px;height:15px}
       .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-group-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:0 2px 11px;border-bottom:1px solid var(--line)}.tool-group-label:first-child{margin-top:0}.tool-group-number{display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:var(--accent-soft);color:var(--accent-readable);font:800 11px var(--font-mono)}.tool-group-label h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.tool-group-label p{margin:2px 0 0;color:var(--muted);font-size:11px}.tool-card{position:relative;padding:18px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),var(--surface-end));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.tool-card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--tool-tone,#4B7BE5)}
       .tool-card.tone-green{--tool-tone:#35b37e}.tool-card.tone-blue{--tool-tone:#4b7be5}.tool-card.tone-violet{--tool-tone:#9b7bea}.tool-card.tone-amber{--tool-tone:#e9b949}
       .tool-card h2{margin:0 0 5px;font-size:16px}.tool-card p{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
@@ -33,7 +33,7 @@
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel,.debt-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.debt-empty{color:var(--muted);font-size:11px}
       @media(max-width:700px){.app-nav{padding:5px;margin-inline:8px;gap:5px}.app-nav button{min-height:49px;gap:5px;font-size:11px}.app-nav-icon{width:24px;height:24px;border-radius:7px}.app-nav-icon svg{width:13px;height:13px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.debt-card,.theme-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.debt-layout,.debt-columns{grid-template-columns:1fr}.theme-card-body{display:block}.theme-options{margin-top:12px;width:100%}}
-      @media(max-width:430px){.tool-fields{grid-template-columns:1fr}.tool-field.full{grid-column:auto}}
+      @media(max-width:430px){.tool-fields:not(.compact-fields){grid-template-columns:1fr}.tool-field.full{grid-column:auto}.compact-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.compact-fields .tool-field label{font-size:10px}.compact-fields .tool-field.full{grid-column:1/-1}}
     `;
     document.head.appendChild(style);
 
@@ -41,7 +41,7 @@
     nav.className = "app-nav"; nav.setAttribute("aria-label", "Slab Ledger pages");
     nav.innerHTML = `
       <button type="button" data-view="inventory"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Inventory</span></button>
-      <button type="button" data-view="ledger"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 18h16M6 16V9m4 7V5m4 11v-4m4 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Business Ledger</span></button>
+      <button type="button" data-view="ledger"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 18h16M6 16V9m4 7V5m4 11v-4m4 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Ledger</span></button>
       <button type="button" data-view="tools"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="m14.7 6.3 3-3 3 3-3 3m-8.4 8.4-3 3-3-3 3-3M13 7l4 4M7 13l4 4M9.5 4.5l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Tools</span></button>`;
     document.querySelector(".app-header").insertAdjacentElement("afterend", nav);
 
@@ -56,7 +56,7 @@
         <div class="tool-card capital-card tone-green">
           <h2>Capital</h2>
           <p>A personal reminder of what you currently have available to spend. It is not included in exports, profit, or tax calculations.</p>
-          <div class="tool-fields">
+          <div class="tool-fields compact-fields">
             <div class="tool-field"><label for="capitalBank">Available in bank</label><input id="capitalBank" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             <div class="tool-field"><label for="capitalCash">Available in cash</label><input id="capitalCash" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             <div class="tool-field full"><label for="capitalNote">Reminder note (optional)</label><textarea id="capitalNote" placeholder="For example: keep $200 reserved for show expenses"></textarea></div>
@@ -71,7 +71,7 @@
             <button class="active" type="button" data-calculator-mode="portion">Percent of amount</button>
             <button type="button" data-calculator-mode="ratio">What percent?</button>
           </div>
-          <div class="tool-fields">
+          <div class="tool-fields compact-fields">
             <div class="tool-field"><label id="calculatorFirstLabel" for="calculatorFirst">Amount</label><input id="calculatorFirst" type="number" min="0" step="0.01" inputmode="decimal" placeholder="100.00"></div>
             <div class="tool-field"><label id="calculatorSecondLabel" for="calculatorSecond">Percent</label><input id="calculatorSecond" type="number" min="0" step="0.01" inputmode="decimal" placeholder="70"></div>
           </div>

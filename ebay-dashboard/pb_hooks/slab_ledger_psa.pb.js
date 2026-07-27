@@ -61,46 +61,6 @@ routerAdd("GET", "/api/slab-ledger/psa-credits", (e) => {
   return e.json(200, credits);
 }, $apis.requireAuth("users"));
 
-routerAdd("POST", "/api/slab-ledger/psa-credits", (e) => {
-  const input = e.requestInfo().body || {};
-  const limit = parseCreditLimit();
-  const remaining = Math.floor(Number(input.remaining));
-  if (!isFinite(remaining) || remaining < 0 || remaining > limit) {
-    return e.json(400, {
-      message: "Enter a remaining credit balance from 0 to " + limit + ".",
-    });
-  }
-  const month = new Date().toISOString().slice(0, 7);
-  let record;
-  try {
-    record = $app.findFirstRecordByFilter(
-      "app_preferences",
-      "owner = {:owner}",
-      { owner: e.auth.id }
-    );
-  } catch (_) {
-    record = new Record($app.findCollectionByNameOrId("app_preferences"));
-    record.set("owner", e.auth.id);
-  }
-  try {
-    record.set("parse_credits_month", month);
-    record.set("parse_credits_used", limit - remaining);
-    $app.save(record);
-  } catch (_) {
-    return e.json(503, {
-      message: "Credit tracking is not ready yet. Run the latest PocketBase setup tool, then restart PocketBase and try again.",
-    });
-  }
-  return e.json(200, {
-    month: month,
-    limit: limit,
-    used: limit - remaining,
-    remaining: remaining,
-    reset_at: parseCreditResetAt(),
-    tracking: "slab_ledger_calls",
-  });
-}, $apis.requireAuth("users"));
-
 routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
   const cert = e.request.pathValue("cert");
   if (!/^\d{8,10}$/.test(cert)) {
