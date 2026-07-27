@@ -80,6 +80,7 @@ document.getElementById("themeColorMeta").content =
   --accent-line: rgba(75,123,229,.5);
   --accent-grad-a: #2E4FA8;
   --accent-grad-b: #1D3574;
+  --accent-readable: #AFC6FF;
   --gold:      #E9B949;
   --ok:        #35B37E;
   --radius: 16px;
@@ -104,6 +105,7 @@ document.getElementById("themeColorMeta").content =
   --muted-2:   #7C8798;
   --accent-soft: rgba(60,105,205,.12);
   --accent-line: rgba(60,105,205,.38);
+  --accent-readable: #2F5DB8;
   --bg-glow: #DCE8FA;
   --surface-end: #F7F9FC;
   color-scheme: light;
@@ -163,14 +165,16 @@ body{
 .owner-chip small{ display:block; color:var(--muted); font-size:10px; }
 .owner-chip:hover small{ color:#AFC6FF; }
 .parse-credit-chip{
-  display:inline-flex; align-items:center; gap:7px; min-height:34px;
-  padding:7px 11px; border:1px solid rgba(233,185,73,.38);
+  display:inline-flex; align-items:center; gap:7px; min-height:36px;
+  padding:5px 10px; border:1px solid rgba(233,185,73,.38);
   border-radius:999px; background:linear-gradient(135deg,rgba(233,185,73,.14),rgba(75,123,229,.1));
   color:var(--gold); box-shadow:0 8px 22px rgba(0,0,0,.14);
   font:650 11px var(--font-body); white-space:nowrap; cursor:pointer;
 }
 .parse-credit-chip svg{ width:15px; height:15px; flex:0 0 auto; }
-.parse-credit-chip strong{ color:var(--text); font:700 11px var(--font-mono); }
+.parse-credit-copy{ display:grid; gap:0; text-align:left; line-height:1.1; }
+.parse-credit-chip strong{ color:var(--text); font:700 10px var(--font-mono); }
+.parse-credit-chip small{ color:var(--muted); font:500 8px var(--font-body); }
 /* ---- Panels ---- */
 section{
   background: linear-gradient(180deg, var(--surface) 0%, var(--surface-end) 100%);
@@ -463,7 +467,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 .tabs button, .view-toggle button{ border:0; background:transparent; color:var(--muted); padding:8px 13px; border-radius:7px; cursor:pointer; font:600 13px var(--font-body); }
 .tabs button.active, .view-toggle button.active{ background:var(--field); color:var(--text); box-shadow:0 1px 5px rgba(0,0,0,.25); }
 .tabs button span{ display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:20px; margin-left:6px; padding:0 7px; border-radius:999px; background:var(--field-hover); border:1px solid var(--line); color:var(--text); font-size:11px; }
-.tabs button.active span{ background:var(--accent-soft); border-color:var(--accent-line); color:#AFC6FF; }
+.tabs button.active span{ background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-readable); }
 .portfolio-overview{ margin:0 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface-2) 62%,transparent); }
 .portfolio-chart-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:8px; }
 .portfolio-chart-head strong{ display:block; font-size:13px; }
@@ -538,7 +542,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   font-weight: 600; font-size: 17px; line-height:1.3;
   overflow-wrap:anywhere; margin-bottom:6px;
 }
-.slab-main .name-link{ color:var(--text); text-decoration:none; border-bottom:1px dashed rgba(125,166,255,.55); }
+.slab-main .name-link{ color:var(--text)!important; text-decoration:none; border-bottom:1px dashed rgba(125,166,255,.55); }
 .slab-main .name-link:hover{ color:#AFC6FF; border-bottom-style:solid; }
 .slab-main .name-link:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; border-radius:2px; }
 .slab-main .meta{ font-size: 13px; color: var(--muted); }
@@ -773,7 +777,7 @@ select option{ background: var(--surface-2); color: var(--text); }
     <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
     <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to match the balance shown in your Parse.bot account.">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-      <strong id="parseCreditText">Credits unavailable</strong>
+      <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
     </button>
   </div>
 </header>
@@ -1049,8 +1053,15 @@ function updateParseCreditBadge(credits) {
   parseCreditMonthlyLimit = Math.max(1, Number(credits.limit) || 200);
   const chip = document.getElementById("parseCreditChip");
   const text = document.getElementById("parseCreditText");
+  const reset = document.getElementById("parseCreditReset");
   if (!chip || !text) return;
   text.textContent = remaining + (remaining === 1 ? " Credit Left" : " Credits Left");
+  if (reset) {
+    const resetDate = new Date(credits.reset_at || "");
+    reset.textContent = Number.isFinite(resetDate.getTime())
+      ? "Resets " + resetDate.toLocaleDateString(undefined, { month:"short", day:"numeric" })
+      : "Resets monthly";
+  }
   chip.title = `Slab Ledger tracked ${Number(credits.used) || 0} successful Parse.bot call${Number(credits.used) === 1 ? "" : "s"} this month out of ${Number(credits.limit) || 200}. Click to match the balance shown in your Parse.bot account.`;
   chip.hidden = false;
 }
@@ -2828,8 +2839,8 @@ init();
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-11"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-2"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-9"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-9"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-10"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-10"></script>
 <script src="ebay-dashboard/grading-plays.js?v=grading-items-1"></script>
 </body>
 </html>
