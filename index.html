@@ -131,7 +131,7 @@ body{
 /* ---- Header ---- */
 .app-header{
   display:flex; align-items:center; justify-content:space-between;
-  padding: 8px 4px 28px;
+  padding: 8px 4px 56px;
 }
 .brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; min-width:0; }
 .brand .logo{
@@ -1701,6 +1701,7 @@ function ebayResearchUrl(card) {
   return "https://www.ebay.com/sh/research?" + new URLSearchParams({
     marketplace:"EBAY-US",
     keywords:ebaySearchTerms(card),
+    sorting:"datelastsold",
     tabName:"SOLD"
   }).toString();
 }
