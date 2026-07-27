@@ -6,6 +6,7 @@
   let pendingPhoto = "";
   let removeExistingPhoto = false;
   const photoUrls = new Map();
+  const CACHE_PREFIX = "slabLedgerGradingCache:";
   const n = (value) => Math.max(0, Number(value) || 0);
   const whole = (value) => Math.max(1, Math.floor(Number(value) || 1));
   const cash = (value) => new Intl.NumberFormat("en-US", {
@@ -129,6 +130,25 @@
     document.getElementById("gradingPhotoRemove").hidden = !src;
   }
 
+  function cacheKey() {
+    return CACHE_PREFIX + String(cloudSession?.record?.id || "signed-out");
+  }
+
+  function loadCache() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey()));
+      return Array.isArray(cached) ? cached : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveCache() {
+    try {
+      localStorage.setItem(cacheKey(), JSON.stringify(items));
+    } catch (_) {}
+  }
+
   async function load() {
     if (!cloudSession?.token) {
       items = [];
@@ -136,14 +156,21 @@
       return;
     }
     try {
-      const data = await pbRequest("/api/collections/grading_items/records?perPage=500&sort=-created");
+      const data = await pbRequest("/api/slab-ledger/grading-items");
       items = data?.items || [];
+      saveCache();
+      document.getElementById("gradingItemMessage").textContent =
+        items.length ? `Loaded ${items.length} synced grading item${items.length === 1 ? "" : "s"}.` : "";
       render();
       loadPhotos();
     } catch (error) {
-      document.getElementById("gradingItemMessage").textContent = error.status === 404
-        ? "Run the PocketBase setup tool once to enable the new grading tracker."
-        : "The grading tracker could not be loaded.";
+      items = loadCache();
+      render();
+      document.getElementById("gradingItemMessage").textContent = items.length
+        ? "Showing the last saved device copy while cloud loading is unavailable."
+        : (error.status === 404
+          ? "Install the latest PocketBase hook and restart PocketBase once."
+          : "The grading tracker could not be loaded.");
     }
   }
 
@@ -296,6 +323,7 @@
       } else {
         items.unshift(record);
       }
+      saveCache();
       resetForm();
       document.getElementById("gradingItemMessage").textContent = "Grading tracker saved.";
       render();
@@ -315,6 +343,7 @@
       if (url) URL.revokeObjectURL(url);
       photoUrls.delete(item.id);
       items = items.filter((row) => row.id !== item.id);
+      saveCache();
       if (editingId === item.id) resetForm();
       render();
     } catch (_) {
