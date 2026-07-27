@@ -6,6 +6,11 @@ function parseCreditLimit() {
   return configured > 0 ? configured : 200;
 }
 
+function parseCreditResetAt() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
+
 function parseCreditState(e, increment) {
   const month = new Date().toISOString().slice(0, 7);
   const limit = parseCreditLimit();
@@ -33,6 +38,7 @@ function parseCreditState(e, increment) {
     limit: limit,
     used: used,
     remaining: Math.max(0, limit - used),
+    reset_at: parseCreditResetAt(),
     tracking: "slab_ledger_calls",
   };
 }
@@ -56,12 +62,13 @@ routerAdd("GET", "/api/slab-ledger/psa-credits", (e) => {
 }, $apis.requireAuth("users"));
 
 routerAdd("POST", "/api/slab-ledger/psa-credits", (e) => {
-  const input = new DynamicModel({ remaining: -1 });
-  e.bindBody(input);
+  const input = e.requestInfo().body || {};
   const limit = parseCreditLimit();
   const remaining = Math.floor(Number(input.remaining));
-  if (!Number.isFinite(remaining) || remaining < 0 || remaining > limit) {
-    throw new BadRequestError("Enter a remaining credit balance from 0 to " + limit + ".");
+  if (!isFinite(remaining) || remaining < 0 || remaining > limit) {
+    return e.json(400, {
+      message: "Enter a remaining credit balance from 0 to " + limit + ".",
+    });
   }
   const month = new Date().toISOString().slice(0, 7);
   let record;
@@ -75,14 +82,21 @@ routerAdd("POST", "/api/slab-ledger/psa-credits", (e) => {
     record = new Record($app.findCollectionByNameOrId("app_preferences"));
     record.set("owner", e.auth.id);
   }
-  record.set("parse_credits_month", month);
-  record.set("parse_credits_used", limit - remaining);
-  $app.save(record);
+  try {
+    record.set("parse_credits_month", month);
+    record.set("parse_credits_used", limit - remaining);
+    $app.save(record);
+  } catch (_) {
+    return e.json(503, {
+      message: "Credit tracking is not ready yet. Run the latest PocketBase setup tool, then restart PocketBase and try again.",
+    });
+  }
   return e.json(200, {
     month: month,
     limit: limit,
     used: limit - remaining,
     remaining: remaining,
+    reset_at: parseCreditResetAt(),
     tracking: "slab_ledger_calls",
   });
 }, $apis.requireAuth("users"));
