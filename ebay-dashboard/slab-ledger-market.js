@@ -207,7 +207,8 @@
         main.insertBefore(badge, main.querySelector(".slab-actions"));
       }
       tile.addEventListener("click", (event) => {
-        if (!event.target.closest("button,a,input,select,textarea,.slab-thumb")) show(card);
+        if (!tile.closest(".grid-view") &&
+            !event.target.closest("button,a,input,select,textarea,.slab-thumb")) show(card);
       });
     });
   }

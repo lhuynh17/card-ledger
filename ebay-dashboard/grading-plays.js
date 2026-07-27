@@ -200,13 +200,22 @@
     try {
       const token = await protectedFileToken();
       await Promise.all(withPhotos.map(async (item) => {
-        const response = await fetch(PB_URL + "/api/files/" + item.collectionId + "/" +
-          item.id + "/" + encodeURIComponent(item.photo) + "?token=" + encodeURIComponent(token));
-        if (!response.ok) return;
+        const collection = item.collectionId || item.collectionName || "grading_items";
+        const response = await fetch(PB_URL + "/api/files/" + collection + "/" +
+          item.id + "/" + encodeURIComponent(item.photo) + "?token=" + encodeURIComponent(token), {
+          headers:cloudSession?.token ? { Authorization:cloudSession.token } : {}
+        });
+        if (!response.ok) {
+          photoUrls.set(item.id, "");
+          return;
+        }
         photoUrls.set(item.id, URL.createObjectURL(await response.blob()));
       }));
       render();
-    } catch (_) {}
+    } catch (_) {
+      withPhotos.forEach((item) => photoUrls.set(item.id, ""));
+      render();
+    }
   }
 
   function render() {
@@ -240,7 +249,8 @@
         image.alt = item.card_name;
         photo.appendChild(image);
       } else {
-        photo.textContent = item.photo ? "Loading photo…" : "No photo";
+        photo.textContent = item.photo && !photoUrls.has(item.id) ? "Loading photo…" :
+          (item.photo ? "Photo unavailable" : "No photo");
       }
       const body = document.createElement("div");
       const title = document.createElement("h3");
