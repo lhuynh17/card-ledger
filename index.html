@@ -505,12 +505,48 @@ select option{ background: var(--surface-2); color: var(--text); }
 .act.sell{ color:var(--ok); border-color:rgba(53,179,126,.38); }
 
 #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-#inventoryList.grid-view .slab{ grid-template-columns:1fr auto; align-items:start; }
-#inventoryList.grid-view .slab-main{ grid-column:1; grid-row:2; }
-#inventoryList.grid-view .grade-desktop{ grid-column:2; grid-row:2; width:68px; }
-#inventoryList.grid-view .slab-media{ grid-column:1/-1; grid-row:1; width:100%; }
-#inventoryList.grid-view .slab-thumb{ width:100%; height:250px; }
-#inventoryList.grid-view .slab-actions{ grid-column:1/-1; grid-row:3; }
+#inventoryList.grid-view .slab{
+  aspect-ratio:1/1; grid-template-columns:42% minmax(0,1fr); grid-template-rows:1fr;
+  align-items:stretch; gap:10px; padding:12px; overflow:hidden; cursor:pointer;
+}
+#inventoryList.grid-view .slab-main{
+  grid-column:2; grid-row:1; display:flex; min-height:0; flex-direction:column;
+  justify-content:flex-start; overflow:hidden;
+}
+#inventoryList.grid-view .grade-desktop{ display:none; }
+#inventoryList.grid-view .slab-media{
+  position:relative; grid-column:1; grid-row:1; width:100%; min-width:0; height:100%;
+}
+#inventoryList.grid-view .slab-thumb{ width:100%; height:100%; border-radius:9px; }
+#inventoryList.grid-view .grade-mobile{
+  position:absolute; z-index:2; top:5px; right:5px; display:flex; width:auto; margin:0;
+  filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));
+}
+#inventoryList.grid-view .grade-medal{ width:58px; }
+#inventoryList.grid-view .grade-badge.num{ width:43px; height:43px; font-size:19px; }
+#inventoryList.grid-view .grade-badge.grader{ min-width:42px; height:35px; padding:0 7px; font-size:17px; }
+#inventoryList.grid-view .slab-main .cert{ margin-bottom:4px; font-size:11px; }
+#inventoryList.grid-view .slab-main .name{
+  margin-bottom:5px; font-size:12px; line-height:1.12; display:-webkit-box;
+  -webkit-box-orient:vertical; -webkit-line-clamp:5; overflow:hidden;
+}
+#inventoryList.grid-view .slab-main .meta{ display:grid; gap:2px; font-size:9px; line-height:1.18; }
+#inventoryList.grid-view .slab-main .meta span{ display:block; }
+#inventoryList.grid-view .slab-main .meta span + span::before{ content:""; }
+#inventoryList.grid-view .slab-main .notes{
+  margin-top:4px; font-size:9px; line-height:1.15; display:-webkit-box;
+  -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden;
+}
+#inventoryList.grid-view .market-age{ display:none; }
+#inventoryList.grid-view .slab-actions{
+  position:absolute; z-index:5; inset:7px; display:none; grid-template-columns:1fr;
+  grid-auto-flow:row; grid-auto-columns:auto; align-content:center; gap:5px;
+  width:auto; margin:0; padding:12px; border:1px solid var(--line);
+  border-radius:11px; background:color-mix(in srgb,var(--surface) 94%,transparent);
+  box-shadow:0 16px 38px rgba(0,0,0,.42); backdrop-filter:blur(10px);
+}
+#inventoryList.grid-view .slab.grid-actions-open .slab-actions{ display:grid; }
+#inventoryList.grid-view .slab-actions .act{ min-height:34px; padding:7px 9px; font-size:10px; }
 #inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
 
 /* ============ 5. INVENTORY LIST ============ */
@@ -714,23 +750,25 @@ select option{ background: var(--surface-2); color: var(--text); }
 @media (max-width: 560px){
   #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
   #inventoryList.grid-view .slab{
-    grid-template-columns:1fr; grid-template-rows:auto 1fr auto;
-    gap:8px; padding:9px; align-items:start;
+    aspect-ratio:1/1; grid-template-columns:43% minmax(0,1fr); grid-template-rows:1fr;
+    gap:7px; padding:8px; align-items:stretch;
   }
-  #inventoryList.grid-view .slab-media{ grid-column:1; grid-row:1; }
-  #inventoryList.grid-view .slab-main{ grid-column:1; grid-row:2; width:100%; }
-  #inventoryList.grid-view .slab-thumb{ height:150px; border-radius:6px; }
-  #inventoryList.grid-view .grade-mobile{ margin-bottom:6px; }
+  #inventoryList.grid-view .slab-media{ grid-column:1; grid-row:1; height:100%; }
+  #inventoryList.grid-view .slab-main{ grid-column:2; grid-row:1; width:100%; }
+  #inventoryList.grid-view .slab-thumb{ height:100%; border-radius:6px; }
+  #inventoryList.grid-view .grade-mobile{ top:3px; right:3px; margin:0; }
   #inventoryList.grid-view .grade-desktop{ display:none; }
-  #inventoryList.grid-view .grade-medal{ width:58px; }
-  #inventoryList.grid-view .grade-badge.num{ width:46px; height:46px; font-size:20px; }
-  #inventoryList.grid-view .slab-main .cert{ font-size:11px; margin-bottom:5px; }
-  #inventoryList.grid-view .slab-main .name{ font-size:13px; line-height:1.25; margin-bottom:5px; }
+  #inventoryList.grid-view .grade-medal{ width:46px; }
+  #inventoryList.grid-view .grade-badge.num{ width:35px; height:35px; font-size:16px; }
+  #inventoryList.grid-view .grade-badge.grader{ min-width:36px; height:31px; padding:0 5px; font-size:15px; border-width:2px; }
+  #inventoryList.grid-view .grade-badge .psa-mark{ width:22px; height:7px; }
+  #inventoryList.grid-view .slab-main .cert{ font-size:9px; margin-bottom:3px; }
+  #inventoryList.grid-view .slab-main .name{ font-size:10px; line-height:1.08; margin-bottom:4px; -webkit-line-clamp:5; }
   #inventoryList.grid-view .slab-main .meta,
-  #inventoryList.grid-view .slab-main .notes{ font-size:10px; line-height:1.3; }
-  #inventoryList.grid-view .slab-actions{ grid-column:1; grid-row:3; gap:3px; margin-top:5px; }
-  #inventoryList.grid-view .act{ min-width:0; padding:6px 3px; font-size:9px; gap:3px; }
-  #inventoryList.grid-view .act svg{ display:none; }
+  #inventoryList.grid-view .slab-main .notes{ font-size:8px; line-height:1.12; }
+  #inventoryList.grid-view .slab-actions{ inset:5px; gap:4px; padding:9px; }
+  #inventoryList.grid-view .act{ min-width:0; min-height:31px; padding:5px 7px; font-size:9px; gap:4px; }
+  #inventoryList.grid-view .act svg{ width:11px; height:11px; }
   #inventoryList.grid-view .slab.editing,
   #inventoryList.grid-view .slab.sale-open{ display:block; grid-column:1/-1; }
   .sale-panel{ grid-template-columns:1fr; }
@@ -1705,7 +1743,7 @@ function ebayResearchUrl(card) {
   return "https://www.ebay.com/sh/research?" + new URLSearchParams({
     marketplace:"EBAY-US",
     keywords:ebaySearchTerms(card),
-    sorting:"datelastsold",
+    sorting:"-datelastsold",
     tabName:"SOLD"
   }).toString();
 }
@@ -2017,9 +2055,11 @@ function render() {
       thumb.src = card.photo; thumb.alt = "Slab photo";
       thumb.tabIndex = 0; thumb.setAttribute("role", "button");
       thumb.title = "View larger photo";
-      thumb.addEventListener("click", () => openPhotoPreview(card.photo, card.name, card.backPhoto));
+      thumb.addEventListener("click", () => {
+        if (viewMode !== "grid") openPhotoPreview(card.photo, card.name, card.backPhoto);
+      });
       thumb.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (viewMode !== "grid" && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault(); openPhotoPreview(card.photo, card.name, card.backPhoto);
         }
       });
@@ -2068,7 +2108,7 @@ function render() {
         addMeta("Market " + money(marketRecord.marketValue), "money-positive");
         addMeta((gain >= 0 ? "Gain " : "Loss ") + money(Math.abs(gain)),
           gain >= 0 ? "money-positive" : "money-negative");
-      } else addMeta("Market not set");
+      } else addMeta("Market not set", "market-unvalued");
     }
     if (card.sold) addMeta("Sold " + money(card.soldPrice) + (card.soldDate ? " on " + card.soldDate : ""), "money-positive");
     metaParts.forEach((part) => {
@@ -2119,6 +2159,7 @@ function render() {
     sale.className = "act sell"; sale.type = "button";
     sale.textContent = card.sold ? "Return to inventory" : "Mark sold";
     sale.addEventListener("click", async () => {
+      li.classList.remove("grid-actions-open");
       if (card.sold) {
         if (!confirm("Return this card to active inventory?")) return;
         try { await saveCardUpdate({ ...card, sold:false, soldPrice:"", soldDate:"", sellingFees:"", shippingCost:"", saleNotes:"" }); render(); }
@@ -2151,6 +2192,15 @@ function render() {
       actions.append(research);
     }
     actions.append(sale, del);
+
+    li.addEventListener("click", (event) => {
+      if (viewMode !== "grid" || event.target.closest("button,a,input,select,textarea")) return;
+      const willOpen = !li.classList.contains("grid-actions-open");
+      document.querySelectorAll("#inventoryList .grid-actions-open").forEach((tile) =>
+        tile.classList.remove("grid-actions-open"));
+      li.classList.toggle("grid-actions-open", willOpen);
+      li.setAttribute("aria-expanded", String(willOpen));
+    });
 
     li.appendChild(main);
 
@@ -3043,11 +3093,11 @@ async function init() {
 }
 init();
 </script>
-<script src="ebay-dashboard/slab-ledger-market.js?v=market-12"></script>
+<script src="ebay-dashboard/slab-ledger-market.js?v=market-13"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-12"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-14"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-4"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-15"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-5"></script>
 </body>
 </html>

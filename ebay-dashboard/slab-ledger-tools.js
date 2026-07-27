@@ -29,7 +29,7 @@
       .capital-save{margin-top:11px;min-height:42px;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:9px 14px;font-weight:800;cursor:pointer}.capital-status{margin-left:9px;color:var(--muted);font-size:11px}
       .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
       .calculator-mode,.theme-options{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.calculator-mode button,.theme-options button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:800;cursor:pointer}.calculator-mode button.active,.theme-options button.active{background:var(--accent);color:#fff}.tools-head{align-items:center}.tools-head .theme-options{width:180px;flex:0 0 auto;margin:0}.tools-head .theme-options button{min-height:34px}
-      .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
+      .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}.debt-date-amount{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel,.debt-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.debt-empty{color:var(--muted);font-size:11px}
       @media(max-width:700px){.app-nav{width:100vw;max-width:none;margin-inline:calc(50% - 50vw);padding:5px max(5px,env(safe-area-inset-right)) 5px max(5px,env(safe-area-inset-left));gap:5px;border-left:0;border-right:0;border-radius:0}.app-nav button{width:100%;min-width:0;min-height:49px;gap:5px;font-size:11px}.app-nav-icon{width:24px;height:24px;border-radius:7px}.app-nav-icon svg{width:13px;height:13px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.debt-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.debt-layout,.debt-columns{grid-template-columns:1fr}.tools-head .theme-options{width:154px}.tools-head .theme-options button{font-size:10px}}
@@ -65,10 +65,9 @@
           <div class="tool-fields compact-fields">
             <div class="tool-field"><label for="capitalBank">Available in bank</label><input id="capitalBank" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             <div class="tool-field"><label for="capitalCash">Available in cash</label><input id="capitalCash" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
-            <div class="tool-field full"><label for="capitalNote">Reminder note (optional)</label><textarea id="capitalNote" placeholder="For example: keep $200 reserved for show expenses"></textarea></div>
           </div>
           <div class="capital-total"><span>Total available to spend</span><strong id="capitalTotal">$0.00</strong></div>
-          <button class="capital-save" id="capitalSave" type="button">Save reminder</button><span class="capital-status" id="capitalStatus"></span>
+          <button class="capital-save" id="capitalSave" type="button">Save capital</button><span class="capital-status" id="capitalStatus"></span>
         </div>
         <div class="tool-card tone-blue">
           <h2>Percentage calculator</h2>
@@ -92,9 +91,11 @@
             <form id="debtForm" class="debt-form">
               <div class="tool-fields">
                 <div class="tool-field"><label for="debtDirection">Reminder type</label><select id="debtDirection"><option value="owed_to_me">Owed to me</option><option value="i_owe">I owe</option></select></div>
-                <div class="tool-field"><label for="debtDate">Date</label><input id="debtDate" type="date" required></div>
                 <div class="tool-field"><label for="debtPerson">Person</label><input id="debtPerson" type="text" required placeholder="Vendor or friend"></div>
-                <div class="tool-field"><label for="debtAmount">Amount</label><input id="debtAmount" type="number" min="0" step="0.01" inputmode="decimal" required placeholder="0.00"></div>
+                <div class="debt-date-amount">
+                  <div class="tool-field"><label for="debtDate">Date</label><input id="debtDate" type="date" required></div>
+                  <div class="tool-field"><label for="debtAmount">Amount</label><input id="debtAmount" type="number" min="0" step="0.01" inputmode="decimal" required placeholder="0.00"></div>
+                </div>
                 <div class="tool-field full"><label for="debtNotes">Note (optional)</label><textarea id="debtNotes" placeholder="What the money was for"></textarea></div>
               </div>
               <button class="capital-save" id="debtSaveButton" type="submit">Add reminder</button>
@@ -216,15 +217,13 @@
   function capitalData() {
     return {
       bank_capital:amount(document.getElementById("capitalBank").value),
-      cash_capital:amount(document.getElementById("capitalCash").value),
-      capital_note:document.getElementById("capitalNote").value.trim()
+      cash_capital:amount(document.getElementById("capitalCash").value)
     };
   }
 
   function populateCapital(data) {
     document.getElementById("capitalBank").value = data.bank_capital || "";
     document.getElementById("capitalCash").value = data.cash_capital || "";
-    document.getElementById("capitalNote").value = data.capital_note || "";
     updateCapitalTotal();
   }
 
