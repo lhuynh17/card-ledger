@@ -92,6 +92,11 @@ It uses 200 monthly credits by default. If your allowance changes, set
 does not currently document an account balance endpoint, so calls made outside
 Slab Ledger are not included automatically.
 
+The grading tracker loads through the authenticated
+`/api/slab-ledger/grading-items` hook route. It always filters by the signed-in
+user on the server and retains the last successful device copy as a loading
+fallback.
+
 ## Recommended PocketBase launch restrictions
 
 For the GitHub Pages app, add this launch option to restrict cross-origin

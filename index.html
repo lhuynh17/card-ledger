@@ -1036,6 +1036,7 @@ let parseCreditMonthlyLimit = 200;
 let parseCreditLastState = null;
 let parseCreditPreferenceId = "";
 let parseCreditCloudLoaded = false;
+let parseCreditPreferenceRecord = null;
 const PARSE_CREDIT_SETTINGS_KEY = "slabLedgerParseCreditSettings";
 
 try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
@@ -1124,6 +1125,7 @@ async function loadSyncedParseCreditSettings() {
   try {
     const result = await pbRequest("/api/collections/app_preferences/records?perPage=1");
     const record = result?.items?.[0] || null;
+    parseCreditPreferenceRecord = record;
     parseCreditPreferenceId = record?.id || "";
     parseCreditCloudLoaded = true;
     const synced = parseCreditSettingsFromRecord(record);
@@ -1156,6 +1158,7 @@ async function saveSyncedParseCreditSettings(settings) {
       body:JSON.stringify(payload)
     });
     parseCreditPreferenceId = record.id;
+    parseCreditPreferenceRecord = record;
     parseCreditCloudLoaded = true;
     return true;
   } catch (_) {
@@ -1176,12 +1179,31 @@ async function refreshParseCredits(force = false) {
   if (!force && now - parseCreditRefreshAt < 60000) return;
   parseCreditRefreshAt = now;
   try {
-    const credits = await pbRequest("/api/slab-ledger/psa-credits");
-    await loadSyncedParseCreditSettings();
+    const settings = await loadSyncedParseCreditSettings();
+    const month = new Date().toISOString().slice(0, 7);
+    const used = parseCreditPreferenceRecord?.parse_credits_month === month
+      ? Math.max(0, Number(parseCreditPreferenceRecord.parse_credits_used) || 0)
+      : Math.max(0, Number(parseCreditLastState?.used) || 0);
+    const currentDate = new Date();
+    const credits = {
+      limit:parseCreditMonthlyLimit,
+      used,
+      remaining:Math.max(0, parseCreditMonthlyLimit - used),
+      reset_at:settings?.resetAt || new Date(Date.UTC(
+        currentDate.getUTCFullYear(), currentDate.getUTCMonth() + 1, 1
+      )).toISOString()
+    };
     updateParseCreditBadge(credits);
   } catch (_) {
-    const chip = document.getElementById("parseCreditChip");
-    if (chip) chip.hidden = true;
+    const settings = loadParseCreditSettings();
+    if (settings) {
+      updateParseCreditBadge({
+        limit:parseCreditMonthlyLimit,
+        used:Number(parseCreditLastState?.used) || settings.usedAtSync,
+        remaining:settings.remaining,
+        reset_at:settings.resetAt
+      });
+    }
   }
 }
 
@@ -1427,6 +1449,7 @@ async function syncCloud() {
       cloudSession = null;
       parseCreditPreferenceId = "";
       parseCreditCloudLoaded = false;
+      parseCreditPreferenceRecord = null;
       localStorage.removeItem(PB_AUTH_KEY);
       setSyncStatus("Sign in to sync", "error");
       document.getElementById("cloudModal").classList.add("open");
@@ -2890,6 +2913,7 @@ $('logoutBtn').addEventListener('click', () => {
   cloudSession = null;
   parseCreditPreferenceId = "";
   parseCreditCloudLoaded = false;
+  parseCreditPreferenceRecord = null;
   cloudFileToken = { value:"", expiresAt:0 };
   localStorage.removeItem(PB_AUTH_KEY);
   sessionStorage.removeItem('slabLedgerOfflineChosen');
@@ -2920,6 +2944,7 @@ $('cloudLoginBtn').addEventListener('click', async () => {
     cloudSession = { token:data.token, record:data.record };
     parseCreditPreferenceId = "";
     parseCreditCloudLoaded = false;
+    parseCreditPreferenceRecord = null;
     localStorage.setItem(PB_AUTH_KEY, JSON.stringify(cloudSession));
     $('cloudPassword').value = ''; $('cloudMessage').textContent = '';
     $('cloudModal').classList.remove('open');
@@ -2975,6 +3000,6 @@ init();
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-10"></script>
 <script src="ebay-dashboard/slab-ledger-tools.js?v=tools-11"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-1"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-2"></script>
 </body>
 </html>

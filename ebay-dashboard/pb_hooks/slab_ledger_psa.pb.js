@@ -61,6 +61,18 @@ routerAdd("GET", "/api/slab-ledger/psa-credits", (e) => {
   return e.json(200, credits);
 }, $apis.requireAuth("users"));
 
+routerAdd("GET", "/api/slab-ledger/grading-items", (e) => {
+  const records = $app.findRecordsByFilter(
+    "grading_items",
+    "owner = {:owner}",
+    "-created",
+    500,
+    0,
+    { owner: e.auth.id }
+  );
+  return e.json(200, { items: records });
+}, $apis.requireAuth("users"));
+
 routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
   const cert = e.request.pathValue("cert");
   if (!/^\d{8,10}$/.test(cert)) {
