@@ -100,7 +100,7 @@
     const state = age(value);
     const query = ebaySearchTerms(card);
     const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
-      _nkw:query, LH_Sold:"1", LH_Complete:"1", _sop:"13"
+      _nkw:query, LH_Sold:"1", LH_Complete:"1", LH_TitleDesc:"1", _ipg:"240", _sop:"13"
     });
     document.getElementById("marketModalTitle").textContent = card.name || "Market details";
     document.getElementById("marketModalBody").innerHTML = `

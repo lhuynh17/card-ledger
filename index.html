@@ -133,7 +133,7 @@ body{
   display:flex; align-items:center; justify-content:space-between;
   padding: 8px 4px 28px;
 }
-.brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; }
+.brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; min-width:min(560px,100%); }
 .brand .logo{
   width:52px; height:52px; flex:0 0 auto;
   border:2px solid var(--accent); border-radius:12px;
@@ -150,8 +150,12 @@ body{
 .brand .subtitle{
   font-size: 12px; color: var(--muted); margin-top:3px;
 }
+.identity-row{
+  display:flex; flex:1 0 100%; align-items:center; justify-content:space-between;
+  gap:14px; min-width:0; margin-top:18px;
+}
 .owner-chip{
-  display:flex; flex:1 0 100%; align-items:center; gap:11px; margin-top:18px;
+  display:flex; min-width:0; align-items:center; gap:11px;
   border:0; background:transparent; color:var(--text); text-align:left; cursor:pointer;
 }
 .owner-avatar{
@@ -762,7 +766,15 @@ select option{ background: var(--surface-2); color: var(--text); }
 .photo-side-toggle.open{ display:flex; }
 .photo-side-toggle button{ min-width:88px; padding:9px 16px; border:0; border-radius:7px; background:transparent; color:#b9c0ce; cursor:pointer; font-weight:650; }
 .photo-side-toggle button.active{ background:var(--accent); color:#fff; }
-@media(max-width:560px){ .app-header{ align-items:flex-start; } .header-actions{ flex-direction:column; align-items:flex-end; gap:6px; } .sync-btn{ padding:6px 9px; } }
+@media(max-width:700px){
+  .app-header{ align-items:flex-start; flex-wrap:wrap; }
+  .brand{ flex:1 0 100%; min-width:0; }
+  .identity-row{ width:100%; }
+  .header-actions{ width:100%; flex-direction:row; justify-content:flex-end; align-items:center; gap:6px; margin-top:8px; }
+  .sync-btn{ padding:6px 9px; }
+  .owner-chip strong{ max-width:min(44vw,230px); }
+  .parse-credit-chip{ flex:0 0 auto; }
+}
 </style>
 </head>
 <body>
@@ -774,14 +786,17 @@ select option{ background: var(--surface-2); color: var(--text); }
       <h1>Slab Ledger</h1>
       <div class="subtitle">Track your graded card inventory</div>
     </div>
+    <div class="identity-row" id="identityRow">
+      <div id="ownerChipSlot"></div>
+      <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to set the starting balance and reset date.">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
+      </button>
+    </div>
   </div>
   <div class="header-actions">
     <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
     <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
-    <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to set the starting balance and reset date.">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-      <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
-    </button>
   </div>
 </header>
 
@@ -1667,11 +1682,17 @@ function ebayCardKeywords(cardName) {
 function ebaySearchTerms(card) {
   const company = card.company && COMPANIES[card.company] ? card.company : "PSA";
   const numericGrade = gradeNumber(card.grade);
-  let exactGrade = numericGrade ? '"' + company + ' ' + numericGrade + '"' : company;
-  if (card.grade === "BL10") exactGrade += ' "Black Label"';
-  if (card.grade === "P10") exactGrade += " Pristine";
-  const keywords = String(card.ebaySearch || "").trim() || ebayCardKeywords(card.name);
-  return [keywords, exactGrade, "-raw", "-ungraded"].filter(Boolean).join(" ");
+  let gradeTerms = numericGrade ? company + " " + numericGrade : company;
+  if (card.grade === "BL10") gradeTerms += " Black Label";
+  if (card.grade === "P10") gradeTerms += " Pristine";
+  // Build this at click time from the card title so older and newly imported
+  // records benefit from search improvements without being edited one by one.
+  const generated = ebayCardKeywords(card.name);
+  const saved = String(card.ebaySearch || "").trim();
+  const keywords = generated || saved;
+  // Avoid exact phrases and negative keywords: sellers commonly write PSA10,
+  // PSA 10, or include "raw" in a description even when the item is slabbed.
+  return [keywords, gradeTerms].filter(Boolean).join(" ");
 }
 
 // Build seller-style search keywords from Parse.bot's structured PSA fields.
@@ -2004,7 +2025,10 @@ function render() {
     name.textContent = card.name || "(unnamed card)";
     if (card.name) {
       const searchTerms = ebaySearchTerms(card);
-      const params = new URLSearchParams({ _nkw: searchTerms, LH_Sold: "1", LH_Complete: "1", _sop: "13" });
+      const params = new URLSearchParams({
+        _nkw: searchTerms, LH_Sold: "1", LH_Complete: "1",
+        LH_TitleDesc: "1", _ipg: "240", _sop: "13"
+      });
       name.href = "https://www.ebay.com/sch/i.html?" + params.toString();
       name.target = "_blank";
       name.rel = "noopener noreferrer";
@@ -2995,11 +3019,11 @@ async function init() {
 }
 init();
 </script>
-<script src="ebay-dashboard/slab-ledger-market.js?v=market-11"></script>
-<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-2"></script>
+<script src="ebay-dashboard/slab-ledger-market.js?v=market-12"></script>
+<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-3"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-10"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-11"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-2"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-11"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-12"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-3"></script>
 </body>
 </html>
