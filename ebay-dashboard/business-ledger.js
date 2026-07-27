@@ -40,7 +40,7 @@
       .finance-card span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.finance-card strong{display:block;margin-top:4px;font:700 20px var(--font-mono)}
       .finance-card small{display:block;margin-top:4px;color:var(--muted);font-size:10px}.finance-card.featured{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent) 9%,var(--surface-2))}
       .ledger-layout{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:14px}.ledger-box{max-width:100%;padding:16px;border:1px solid var(--line);border-top:3px solid #4b7be5;border-radius:12px;background:linear-gradient(145deg,var(--surface),var(--surface-end));box-shadow:0 10px 28px rgba(0,0,0,.14);overflow:hidden}.ledger-box:nth-child(2){border-top-color:#35b37e}
-      .ledger-box h3{margin:0 0 12px;font-size:15px}.ledger-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px}.ledger-field{display:grid;min-width:0;grid-template-rows:minmax(28px,auto) auto;align-content:start;gap:5px}.ledger-field.full{grid-column:1/-1}.ledger-field label{display:flex;min-height:28px;align-items:flex-end;font-size:11px;line-height:1.2;color:var(--muted);font-weight:700}.ledger-field textarea{min-height:66px;resize:vertical}
+      .ledger-box h3{margin:0 0 12px;font-size:15px}.ledger-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px}.field-pair{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px}.ledger-field{display:grid;min-width:0;grid-template-rows:minmax(28px,auto) auto;align-content:start;gap:5px}.ledger-field.full{grid-column:1/-1}.ledger-field label{display:flex;min-height:28px;align-items:flex-end;font-size:11px;line-height:1.2;color:var(--muted);font-weight:700}.ledger-field textarea{min-height:66px;resize:vertical}
       .ledger-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px}.ledger-actions button,.ledger-export{min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px 12px;font-weight:750;cursor:pointer}.ledger-actions .primary{background:var(--accent);border-color:var(--accent);color:#fff}
       .ledger-message{grid-column:1/-1;min-height:17px;color:#ff7885;font-size:11px}.ledger-list{display:grid;gap:7px;max-width:100%;max-height:430px;overflow-x:hidden;overflow-y:auto}.ledger-row{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto;gap:9px;align-items:center;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);font-size:11px}
       .ledger-row>div,.exception-row>div{overflow-wrap:anywhere}.ledger-row strong{font-size:12px}.ledger-row .amount{font:700 13px var(--font-mono);white-space:nowrap}.ledger-row-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.receipt-open,.ledger-edit{border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);padding:6px 8px;cursor:pointer;font-size:10px;font-weight:800}.ledger-delete{border:0;background:transparent;color:#ff7885;cursor:pointer;font-weight:800}.tax-caption{margin-top:9px;color:var(--muted-2);font-size:10px;line-height:1.4;overflow-wrap:anywhere}
@@ -74,10 +74,12 @@
           <div class="ledger-field"><label for="ledgerType">Entry type</label><select id="ledgerType">
             ${Object.entries(typeNames).map(([value,label]) => `<option value="${value}">${label}</option>`).join("")}
           </select></div>
-          <div class="ledger-field"><label for="ledgerDate">Date</label><input id="ledgerDate" type="date" value="${today()}" required></div>
-          <div class="ledger-field"><label for="ledgerAmount">Amount</label><input id="ledgerAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" required></div>
+          <div class="field-pair">
+            <div class="ledger-field"><label for="ledgerDate">Date</label><input id="ledgerDate" type="date" value="${today()}" required></div>
+            <div class="ledger-field"><label for="ledgerAmount">Amount</label><input id="ledgerAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" required></div>
+          </div>
           <div class="ledger-field"><label for="ledgerCategory">Category</label><select id="ledgerCategory">${categories.map((category) => `<option>${category}</option>`).join("")}</select></div>
-          <div class="ledger-field"><label for="ledgerVendor">Vendor / source</label><input id="ledgerVendor" type="text" placeholder="eBay, card show, office store…"></div>
+          <div class="ledger-field"><label for="ledgerVendor">Source</label><input id="ledgerVendor" type="text" placeholder="eBay, card show, office store…"></div>
           <div class="ledger-field"><label for="ledgerDeductible">Business-use %</label><input id="ledgerDeductible" type="number" min="0" max="100" step="1" value="100"></div>
           <div class="ledger-field full"><label for="ledgerNotes">Description / receipt note</label><textarea id="ledgerNotes" placeholder="What was purchased or why money entered/left the business"></textarea></div>
           <div class="ledger-field full"><label for="ledgerReceipt">Receipt or invoice (optional)</label><input id="ledgerReceipt" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"><small>Photo, screenshot, or PDF · maximum 10 MB</small></div>
@@ -91,8 +93,10 @@
         <p class="finance-note">Document business money that moved through a personal account or another unusual situation. These reminders are included in the annual CSV but do not change financial totals automatically.</p>
         <form id="exceptionForm" class="exception-form">
           <div class="exception-field"><label for="exceptionType">Exception type</label><select id="exceptionType">${Object.entries(exceptionNames).map(([value,label]) => `<option value="${value}">${label}</option>`).join("")}</select></div>
-          <div class="exception-field"><label for="exceptionDate">Date</label><input id="exceptionDate" type="date" value="${today()}" required></div>
-          <div class="exception-field"><label for="exceptionAmount">Amount (optional)</label><input id="exceptionAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+          <div class="field-pair">
+            <div class="exception-field"><label for="exceptionDate">Date</label><input id="exceptionDate" type="date" value="${today()}" required></div>
+            <div class="exception-field"><label for="exceptionAmount">Amount (optional)</label><input id="exceptionAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+          </div>
           <div class="exception-field full"><label for="exceptionSource">Account, payment method, or source</label><input id="exceptionSource" type="text" placeholder="Personal checking, Venmo, specific card…"></div>
           <div class="exception-field full"><label for="exceptionNotes">What happened and why?</label><textarea id="exceptionNotes" required placeholder="Explain what the transaction was for and why it used the unusual account"></textarea></div>
           <div class="ledger-actions"><button class="primary" id="exceptionSave" type="submit">Save exception note</button><button id="exceptionCancelEdit" type="button" hidden>Cancel edit</button></div><div class="ledger-message" id="exceptionMessage"></div>

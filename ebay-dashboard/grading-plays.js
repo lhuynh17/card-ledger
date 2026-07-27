@@ -23,7 +23,7 @@
   function install() {
     const style = document.createElement("style");
     style.textContent = `
-      .grading-section{margin-top:28px;padding-top:2px}.grading-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:0 2px 11px;border-bottom:1px solid var(--line)}.grading-head::before{content:"04";display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:rgba(53,179,126,.14);color:#6fd5a4;font:800 11px var(--font-mono)}.grading-head h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.grading-head p{margin:2px 0 0;color:var(--muted);font-size:11px}
+      .grading-section{margin-top:28px;padding-top:2px}.grading-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:0 2px 11px;border-bottom:1px solid var(--line)}.grading-head::before{content:"03";display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:rgba(53,179,126,.14);color:#6fd5a4;font:800 11px var(--font-mono)}.grading-head h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.grading-head p{margin:2px 0 0;color:var(--muted);font-size:11px}
       .grading-new{position:relative;padding:17px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),var(--surface-end));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.grading-new::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:#35b37e}.grading-form{display:grid;grid-template-columns:minmax(180px,2fr) repeat(3,minmax(120px,1fr));align-items:start;gap:10px}.grading-field{display:grid;min-width:0;grid-template-rows:minmax(30px,auto) auto;align-content:start;gap:5px}.grading-field.full{grid-column:1/-1}.grading-field label{display:flex;min-height:30px;align-items:flex-end;font-size:11px;line-height:1.2;color:var(--muted);font-weight:750}.grading-field input,.grading-field textarea{box-sizing:border-box;width:100%;min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.grading-field textarea{min-height:62px;resize:vertical}
       .grading-photo-line{grid-column:1/-1;display:flex;align-items:center;gap:12px;min-width:0}.grading-photo-preview{width:72px;height:72px;display:grid;place-items:center;flex:0 0 auto;overflow:hidden;border:1px dashed var(--line);border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:10px;text-align:center}.grading-photo-preview img{width:100%;height:100%;object-fit:cover}.grading-photo-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.grading-photo-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
       .grading-estimate{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:11px;background:var(--surface-2);overflow:hidden}.grading-estimate div{padding:11px 13px;border-right:1px solid var(--line)}.grading-estimate div:last-child{border-right:0}.grading-estimate span{display:block;min-height:26px;color:var(--muted);font-size:9px;font-weight:750;letter-spacing:.05em;text-transform:uppercase}.grading-estimate strong{display:block;font:750 16px var(--font-mono)}.grading-estimate div:last-child strong{color:var(--ok)}
@@ -67,7 +67,9 @@
         </form>
       </div>
       <div class="grading-list" id="gradingItemList"></div>`;
-    document.querySelector(".tools-section").appendChild(section);
+    const themeSection = document.getElementById("toolsThemeSection");
+    if (themeSection) themeSection.before(section);
+    else document.querySelector(".tools-section").appendChild(section);
 
     document.getElementById("gradingItemForm").addEventListener("submit", save);
     document.getElementById("gradingItemCancel").addEventListener("click", resetForm);
@@ -156,8 +158,28 @@
       return;
     }
     try {
-      const data = await pbRequest("/api/slab-ledger/grading-items");
-      items = data?.items || [];
+      const owner = String(cloudSession.record?.id || "");
+      let standardItems = [];
+      let routeItems = [];
+      let cloudResponded = false;
+      try {
+        const filter = encodeURIComponent(`owner="${owner}"`);
+        const standard = await pbRequest(`/api/collections/grading_items/records?perPage=500&sort=-created&filter=${filter}`);
+        standardItems = Array.isArray(standard?.items) ? standard.items : [];
+        cloudResponded = true;
+      } catch (_) {}
+      try {
+        const route = await pbRequest("/api/slab-ledger/grading-items");
+        routeItems = Array.isArray(route?.items) ? route.items : [];
+        cloudResponded = true;
+      } catch (_) {}
+      if (!cloudResponded) throw Object.assign(new Error("Cloud grading data unavailable"), { status:503 });
+      items = standardItems.length ? standardItems : routeItems;
+      if (!items.length && !standardItems.length && !routeItems.length) {
+        // An empty array is a valid synced state, so do not replace it with a
+        // stale device cache.
+        items = [];
+      }
       saveCache();
       document.getElementById("gradingItemMessage").textContent =
         items.length ? `Loaded ${items.length} synced grading item${items.length === 1 ? "" : "s"}.` : "";

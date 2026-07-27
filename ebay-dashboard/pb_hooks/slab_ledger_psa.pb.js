@@ -70,7 +70,21 @@ routerAdd("GET", "/api/slab-ledger/grading-items", (e) => {
     0,
     { owner: e.auth.id }
   );
-  return e.json(200, { items: records });
+  const items = records.map((record) => ({
+    id: record.id,
+    collectionId: record.collection().id,
+    collectionName: record.collection().name,
+    owner: record.getString("owner"),
+    card_name: record.getString("card_name"),
+    quantity: record.getInt("quantity"),
+    raw_cost_each: record.getFloat("raw_cost_each"),
+    grading_cost_each: record.getFloat("grading_cost_each"),
+    photo: record.getString("photo"),
+    notes: record.getString("notes"),
+    created: record.getString("created"),
+    updated: record.getString("updated"),
+  }));
+  return e.json(200, { items: items });
 }, $apis.requireAuth("users"));
 
 routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {

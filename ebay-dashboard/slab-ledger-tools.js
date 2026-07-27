@@ -32,7 +32,7 @@
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-form .capital-save{width:100%}
       .debt-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}.debt-list{display:grid;gap:7px}.debt-column{padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.debt-column h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 10px;font-size:14px}.debt-column h3 span{font-family:var(--font-mono)}
       .debt-row{padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.debt-row-head{display:flex;justify-content:space-between;gap:8px}.debt-row strong{font-size:12px}.debt-row .debt-amount{font:800 13px var(--font-mono)}.debt-detail{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.35}.debt-row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.debt-settle,.debt-edit,.debt-cancel,.debt-delete{border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--text);padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer}.debt-delete{border-color:rgba(255,120,133,.35);color:#ff7885}.debt-empty{color:var(--muted);font-size:11px}
-      @media(max-width:700px){.app-nav{padding:5px;margin-inline:8px;gap:5px}.app-nav button{min-height:49px;gap:5px;font-size:11px}.app-nav-icon{width:24px;height:24px;border-radius:7px}.app-nav-icon svg{width:13px;height:13px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.debt-card,.theme-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.debt-layout,.debt-columns{grid-template-columns:1fr}.theme-card-body{display:block}.theme-options{margin-top:12px;width:100%}}
+      @media(max-width:700px){.app-nav{width:100vw;max-width:none;margin-inline:calc(50% - 50vw);padding:5px max(5px,env(safe-area-inset-right)) 5px max(5px,env(safe-area-inset-left));gap:5px;border-left:0;border-right:0;border-radius:0}.app-nav button{width:100%;min-width:0;min-height:49px;gap:5px;font-size:11px}.app-nav-icon{width:24px;height:24px;border-radius:7px}.app-nav-icon svg{width:13px;height:13px}.tools-grid{grid-template-columns:1fr}.tool-group-label,.debt-card,.theme-card{grid-column:auto}.tool-group-label{align-items:flex-start;margin-top:18px}.debt-layout,.debt-columns{grid-template-columns:1fr}.theme-card-body{display:block}.theme-options{margin-top:12px;width:100%}}
       @media(max-width:430px){.tool-fields:not(.compact-fields){grid-template-columns:1fr}.tool-field.full{grid-column:auto}.compact-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.compact-fields .tool-field label{font-size:10px}.compact-fields .tool-field.full{grid-column:1/-1}}
     `;
     document.head.appendChild(style);
@@ -78,17 +78,7 @@
           <div class="calculator-result"><span id="calculatorResultLabel">Calculated value</span><strong id="calculatorResult">$0.00</strong></div>
           <button class="calculator-clear" id="calculatorClear" type="button">Clear form</button>
         </div>
-        <div class="tool-group-label"><span class="tool-group-number">02</span><div><h2>Appearance</h2><p>Choose the theme that is easiest for you to use.</p></div></div>
-        <div class="tool-card theme-card tone-violet">
-          <div class="theme-card-body">
-            <div><h2>App theme</h2><p>Use a light or dark appearance. Your choice is remembered on this device.</p></div>
-            <div class="theme-options" role="group" aria-label="App theme">
-              <button type="button" data-theme-choice="light">Light</button>
-              <button type="button" data-theme-choice="dark">Dark</button>
-            </div>
-          </div>
-        </div>
-        <div class="tool-group-label"><span class="tool-group-number">03</span><div><h2>Balances</h2><p>Private reminders for short-term money shared with other vendors.</p></div></div>
+        <div class="tool-group-label"><span class="tool-group-number">02</span><div><h2>Balances</h2><p>Private reminders for short-term money shared with other vendors.</p></div></div>
         <div class="tool-card debt-card tone-amber">
           <h2>Money owed reminders</h2>
           <p>Keep track of informal vendor-to-vendor loans. These reminders are private and are not included in tax calculations or exports.</p>
@@ -108,6 +98,18 @@
             <div class="debt-columns">
               <div class="debt-column"><h3>Owed to me <span id="owedToMeTotal">$0.00</span></h3><div class="debt-list" id="owedToMeList"></div></div>
               <div class="debt-column"><h3>I owe <span id="iOweTotal">$0.00</span></h3><div class="debt-list" id="iOweList"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tools-theme-section" id="toolsThemeSection">
+        <div class="tool-group-label"><span class="tool-group-number">04</span><div><h2>Appearance</h2><p>Choose the theme that is easiest for you to use.</p></div></div>
+        <div class="tool-card theme-card tone-violet">
+          <div class="theme-card-body">
+            <div><h2>App theme</h2><p>Use a light or dark appearance. Your choice is remembered on this device.</p></div>
+            <div class="theme-options" role="group" aria-label="App theme">
+              <button type="button" data-theme-choice="light">Light</button>
+              <button type="button" data-theme-choice="dark">Dark</button>
             </div>
           </div>
         </div>
