@@ -8,6 +8,7 @@
   let debtReminders = [];
   let editingDebtId = "";
   let calculatorMode = "portion";
+  let capitalSaveTimer = null;
 
   const amount = (value) => Math.max(0, Number.parseFloat(value) || 0);
   const money = (value) => new Intl.NumberFormat("en-US", {
@@ -17,7 +18,7 @@
   function install() {
     const style = document.createElement("style");
     style.textContent = `
-      .app-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;max-width:1180px;margin:14px auto 2px;padding:6px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface) 84%,transparent);box-shadow:0 14px 38px rgba(0,0,0,.18);backdrop-filter:blur(12px)}
+      .app-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;max-width:1180px;margin:14px auto 2px;padding:6px;border:2px solid var(--outline);border-radius:18px;background:color-mix(in srgb,var(--surface) 84%,transparent);box-shadow:0 14px 38px rgba(0,0,0,.18);backdrop-filter:blur(12px)}
       .app-nav button{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;overflow:hidden;border:1px solid transparent;border-radius:13px;background:transparent;color:var(--muted);font:750 13px var(--font-body);letter-spacing:.02em;cursor:pointer;transition:transform .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease}
       .app-nav button::after{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(115deg,transparent 10%,rgba(255,255,255,.16) 45%,transparent 70%);transform:translateX(-120%);transition:transform .45s ease}.app-nav button:hover{color:var(--text);border-color:var(--line);transform:translateY(-1px)}.app-nav button:hover::after{transform:translateX(120%)}.app-nav button.active{border-color:rgba(131,166,246,.72);background:linear-gradient(135deg,var(--accent-grad-a),var(--accent),var(--accent-grad-b));color:#fff;box-shadow:0 9px 24px rgba(45,82,175,.38),inset 0 1px rgba(255,255,255,.24);transform:translateY(-1px)}.app-nav-icon{display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;border:1px solid currentColor;border-radius:9px;opacity:.88}.app-nav-icon svg{display:block;width:15px;height:15px}
       .tools-section{margin-top:22px}.tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tool-group-label{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:0 2px 11px;border-bottom:1px solid var(--line)}.tool-group-label:first-child{margin-top:0}.tool-group-number{display:grid;place-items:center;width:31px;height:31px;flex:0 0 auto;border-radius:9px;background:var(--accent-soft);color:var(--accent-readable);font:800 11px var(--font-mono)}.tool-group-label h2{margin:0;font:650 17px var(--font-display);letter-spacing:.05em;text-transform:uppercase}.tool-group-label p{margin:2px 0 0;color:var(--muted);font-size:11px}.tool-card{position:relative;padding:18px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(145deg,var(--surface),var(--surface-end));box-shadow:0 10px 28px rgba(0,0,0,.16);overflow:hidden}.tool-card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--tool-tone,#4B7BE5)}
@@ -26,7 +27,7 @@
       .tool-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:10px}.tool-field{display:grid;min-width:0;grid-template-rows:minmax(28px,auto) auto;align-content:start;gap:5px}.tool-field.full{grid-column:1/-1}.tool-field label{display:flex;min-height:28px;align-items:flex-end;font-size:11px;line-height:1.2;color:var(--muted);font-weight:750}
       .tool-field input,.tool-field select,.tool-field textarea{box-sizing:border-box;width:100%;min-height:43px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);padding:9px;font:inherit}.tool-field textarea{min-height:65px;resize:vertical}
       .capital-total,.calculator-result{margin-top:13px;padding:13px;border-radius:10px;background:var(--surface-2)}.capital-total span,.calculator-result span{display:block;color:var(--muted);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.capital-total strong,.calculator-result strong{display:block;margin-top:3px;font:800 24px var(--font-mono)}
-      .capital-save{margin-top:11px;min-height:42px;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:9px 14px;font-weight:800;cursor:pointer}.capital-status{margin-left:9px;color:var(--muted);font-size:11px}
+      .capital-save{margin-top:11px;min-height:42px;border:0;border-radius:9px;background:var(--accent);color:#fff;padding:9px 14px;font-weight:800;cursor:pointer}.capital-status{margin-left:9px;color:var(--muted);font-size:11px}.capital-card .capital-status{display:block;min-height:16px;margin:7px 0 0}
       .calculator-clear{width:100%;margin-top:9px;min-height:38px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:750;cursor:pointer}
       .calculator-mode,.theme-options{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.calculator-mode button,.theme-options button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:800;cursor:pointer}.calculator-mode button.active,.theme-options button.active{background:var(--accent);color:#fff}.tools-head{align-items:center}.tools-head .theme-options{width:180px;flex:0 0 auto;margin:0}.tools-head .theme-options button{min-height:34px}
       .debt-card{grid-column:1/-1}.debt-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(360px,1.3fr);gap:14px}.debt-form{padding:13px;border:1px solid var(--outline);border-radius:10px;background:var(--surface-2)}.debt-form .tool-fields{gap:7px}.debt-form .tool-field{grid-template-rows:minmax(24px,auto) auto;gap:3px}.debt-form .tool-field label{min-height:24px}.debt-form .tool-field input,.debt-form .tool-field select{min-height:43px;padding:9px}.debt-form .tool-field textarea{min-height:65px;padding:9px}.debt-form .capital-save{width:100%;min-height:42px;margin-top:7px}.debt-date-amount{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
@@ -67,7 +68,7 @@
             <div class="tool-field"><label for="capitalCash">Available in cash</label><input id="capitalCash" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
           </div>
           <div class="capital-total"><span>Total available to spend</span><strong id="capitalTotal">$0.00</strong></div>
-          <button class="capital-save" id="capitalSave" type="button">Save capital</button><span class="capital-status" id="capitalStatus"></span>
+          <span class="capital-status" id="capitalStatus"></span>
         </div>
         <div class="tool-card tone-blue">
           <h2>Percentage calculator</h2>
@@ -116,7 +117,11 @@
     nav.querySelectorAll("button").forEach((button) =>
       button.addEventListener("click", () => showView(button.dataset.view)));
     ["capitalBank","capitalCash"].forEach((id) =>
-      document.getElementById(id).addEventListener("input", updateCapitalTotal));
+      document.getElementById(id).addEventListener("input", () => {
+        updateCapitalTotal();
+        clearTimeout(capitalSaveTimer);
+        capitalSaveTimer = setTimeout(saveCapital, 500);
+      }));
     ["calculatorFirst","calculatorSecond"].forEach((id) =>
       document.getElementById(id).addEventListener("input", updateCalculator));
     document.querySelectorAll("[data-calculator-mode]").forEach((button) =>
@@ -124,7 +129,6 @@
     document.getElementById("calculatorClear").addEventListener("click", clearCalculator);
     document.querySelectorAll("[data-theme-choice]").forEach((button) =>
       button.addEventListener("click", () => applyTheme(button.dataset.themeChoice)));
-    document.getElementById("capitalSave").addEventListener("click", saveCapital);
     document.getElementById("debtDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("debtForm").addEventListener("submit", saveDebtReminder);
     document.getElementById("debtCancelEdit").addEventListener("click", resetDebtForm);
