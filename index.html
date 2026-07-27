@@ -519,7 +519,8 @@ select option{ background: var(--surface-2); color: var(--text); }
 }
 #inventoryList.grid-view .slab-thumb{ width:100%; height:100%; border-radius:9px; }
 #inventoryList.grid-view .grade-mobile{
-  position:absolute; z-index:2; top:5px; right:5px; display:flex; width:auto; margin:0;
+  position:absolute; z-index:2; top:5px; left:50%; display:flex; width:auto; margin:0;
+  transform:translateX(-50%);
   filter:drop-shadow(0 3px 5px rgba(0,0,0,.55));
 }
 #inventoryList.grid-view .grade-medal{ width:58px; }
@@ -539,15 +540,33 @@ select option{ background: var(--surface-2); color: var(--text); }
 }
 #inventoryList.grid-view .market-age{ display:none; }
 #inventoryList.grid-view .slab-actions{
-  position:absolute; z-index:5; inset:7px; display:none; grid-template-columns:1fr;
-  grid-auto-flow:row; grid-auto-columns:auto; align-content:center; gap:5px;
-  width:auto; margin:0; padding:12px; border:1px solid var(--line);
-  border-radius:11px; background:color-mix(in srgb,var(--surface) 94%,transparent);
-  box-shadow:0 16px 38px rgba(0,0,0,.42); backdrop-filter:blur(10px);
+  position:fixed; z-index:1200; inset:0; display:none; grid-template-columns:min(390px,100%);
+  grid-auto-flow:row; grid-auto-columns:auto; align-content:center; justify-content:center; gap:8px;
+  width:auto; margin:0; padding:max(24px,env(safe-area-inset-top)) 18px
+    max(24px,env(safe-area-inset-bottom)); border:0; border-radius:0;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);
+  box-shadow:none; backdrop-filter:blur(15px);
 }
 #inventoryList.grid-view .slab.grid-actions-open .slab-actions{ display:grid; }
-#inventoryList.grid-view .slab-actions .act{ min-height:34px; padding:7px 9px; font-size:10px; }
-#inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
+#inventoryList.grid-view .slab-actions .act{
+  width:100%; min-height:48px; padding:10px 14px; border-radius:11px; font-size:13px;
+}
+.grid-action-title,.grid-actions-close{ display:none; }
+#inventoryList.grid-view .grid-action-title{
+  display:block; margin-bottom:7px; color:var(--text); text-align:center;
+  font:650 16px/1.25 var(--font-display);
+}
+#inventoryList.grid-view .grid-action-title small{
+  display:block; margin-top:4px; color:var(--muted); font:500 10px/1.3 var(--font-body);
+}
+#inventoryList.grid-view .grid-actions-close{
+  display:block; width:100%; min-height:45px; margin-top:5px; border:1px solid var(--line);
+  border-radius:11px; background:transparent; color:var(--muted); font-weight:750; cursor:pointer;
+}
+#inventoryList.grid-view .slab.editing,
+#inventoryList.grid-view .slab.sale-open{
+  display:block; grid-column:1/-1; aspect-ratio:auto; min-height:0; overflow:visible; cursor:default;
+}
 
 /* ============ 5. INVENTORY LIST ============ */
 #inventoryList{ list-style:none; display:grid; gap:14px; }
@@ -756,7 +775,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   #inventoryList.grid-view .slab-media{ grid-column:1; grid-row:1; height:100%; }
   #inventoryList.grid-view .slab-main{ grid-column:2; grid-row:1; width:100%; }
   #inventoryList.grid-view .slab-thumb{ height:100%; border-radius:6px; }
-  #inventoryList.grid-view .grade-mobile{ top:3px; right:3px; margin:0; }
+  #inventoryList.grid-view .grade-mobile{ top:3px; left:50%; margin:0; }
   #inventoryList.grid-view .grade-desktop{ display:none; }
   #inventoryList.grid-view .grade-medal{ width:46px; }
   #inventoryList.grid-view .grade-badge.num{ width:35px; height:35px; font-size:16px; }
@@ -766,9 +785,9 @@ select option{ background: var(--surface-2); color: var(--text); }
   #inventoryList.grid-view .slab-main .name{ font-size:10px; line-height:1.08; margin-bottom:4px; -webkit-line-clamp:5; }
   #inventoryList.grid-view .slab-main .meta,
   #inventoryList.grid-view .slab-main .notes{ font-size:8px; line-height:1.12; }
-  #inventoryList.grid-view .slab-actions{ inset:5px; gap:4px; padding:9px; }
-  #inventoryList.grid-view .act{ min-width:0; min-height:31px; padding:5px 7px; font-size:9px; gap:4px; }
-  #inventoryList.grid-view .act svg{ width:11px; height:11px; }
+  #inventoryList.grid-view .slab-actions{ gap:7px; padding-inline:16px; }
+  #inventoryList.grid-view .act{ min-width:0; min-height:48px; padding:9px 12px; font-size:12px; gap:6px; }
+  #inventoryList.grid-view .act svg{ width:14px; height:14px; }
   #inventoryList.grid-view .slab.editing,
   #inventoryList.grid-view .slab.sale-open{ display:block; grid-column:1/-1; }
   .sale-panel{ grid-template-columns:1fr; }
@@ -2133,15 +2152,27 @@ function render() {
 
     const actions = document.createElement("div");
     actions.className = "slab-actions";
+    const actionTitle = document.createElement("div");
+    actionTitle.className = "grid-action-title";
+    actionTitle.textContent = card.name || "Card actions";
+    const actionCert = document.createElement("small");
+    actionCert.textContent = "#" + card.cert;
+    actionTitle.appendChild(actionCert);
+    const closeActions = () => {
+      li.classList.remove("grid-actions-open");
+      li.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+    };
     const edit = document.createElement("button");
     edit.className = "act"; edit.type = "button";
     edit.innerHTML = icon("edit") + "Edit";
-    edit.addEventListener("click", () => { editingId = card.id; render(); });
+    edit.addEventListener("click", () => { closeActions(); editingId = card.id; render(); });
     const market = document.createElement("button");
     market.className = "act"; market.type = "button";
     market.textContent = "Market";
     market.title = "View recent eBay sold listings and assumed market price";
     market.addEventListener("click", () => {
+      closeActions();
       if (typeof window.openSlabMarket === "function") {
         window.openSlabMarket(card);
         return;
@@ -2155,11 +2186,12 @@ function render() {
     research.target = "_blank";
     research.rel = "noopener noreferrer";
     research.title = "Open eBay Product Research with this card search already filled";
+    research.addEventListener("click", closeActions);
     const sale = document.createElement("button");
     sale.className = "act sell"; sale.type = "button";
     sale.textContent = card.sold ? "Return to inventory" : "Mark sold";
     sale.addEventListener("click", async () => {
-      li.classList.remove("grid-actions-open");
+      closeActions();
       if (card.sold) {
         if (!confirm("Return this card to active inventory?")) return;
         try { await saveCardUpdate({ ...card, sold:false, soldPrice:"", soldDate:"", sellingFees:"", shippingCost:"", saleNotes:"" }); render(); }
@@ -2176,6 +2208,7 @@ function render() {
     del.className = "act del"; del.type = "button";
     del.innerHTML = icon("trash") + "Delete";
     del.addEventListener("click", async () => {
+      closeActions();
       if (confirm("Delete this card from your inventory?")) {
         try {
           if (card.remoteId) await dbPut({ ...card, _deleted:true, _dirty:true });
@@ -2186,12 +2219,15 @@ function render() {
         render();
       }
     });
-    actions.append(edit);
+    actions.append(actionTitle, edit);
     if (card.name) {
       if (!card.sold) actions.append(market);
       actions.append(research);
     }
-    actions.append(sale, del);
+    const close = document.createElement("button");
+    close.className = "grid-actions-close"; close.type = "button"; close.textContent = "Close";
+    close.addEventListener("click", closeActions);
+    actions.append(sale, del, close);
 
     li.addEventListener("click", (event) => {
       if (viewMode !== "grid" || event.target.closest("button,a,input,select,textarea")) return;
@@ -2200,6 +2236,7 @@ function render() {
         tile.classList.remove("grid-actions-open"));
       li.classList.toggle("grid-actions-open", willOpen);
       li.setAttribute("aria-expanded", String(willOpen));
+      document.body.style.overflow = willOpen ? "hidden" : "";
     });
 
     li.appendChild(main);
@@ -3097,7 +3134,7 @@ init();
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-12"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-15"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-5"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-16"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-6"></script>
 </body>
 </html>

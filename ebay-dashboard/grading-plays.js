@@ -197,25 +197,12 @@
   async function loadPhotos() {
     const withPhotos = items.filter((item) => item.photo && !photoUrls.has(item.id));
     if (!withPhotos.length) return;
-    try {
-      const token = await protectedFileToken();
-      await Promise.all(withPhotos.map(async (item) => {
-        const collection = item.collectionId || item.collectionName || "grading_items";
-        const response = await fetch(PB_URL + "/api/files/" + collection + "/" +
-          item.id + "/" + encodeURIComponent(item.photo) + "?token=" + encodeURIComponent(token), {
-          headers:cloudSession?.token ? { Authorization:cloudSession.token } : {}
-        });
-        if (!response.ok) {
-          photoUrls.set(item.id, "");
-          return;
-        }
-        photoUrls.set(item.id, URL.createObjectURL(await response.blob()));
-      }));
-      render();
-    } catch (_) {
-      withPhotos.forEach((item) => photoUrls.set(item.id, ""));
-      render();
-    }
+    await Promise.all(withPhotos.map(async (item) => {
+      // This is the same protected-file loader used by inventory photos.
+      const src = await remotePhotoData(item, null, "photo", "photo");
+      photoUrls.set(item.id, src || "");
+    }));
+    render();
   }
 
   function render() {
