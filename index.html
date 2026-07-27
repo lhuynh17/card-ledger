@@ -505,15 +505,13 @@ select option{ background: var(--surface-2); color: var(--text); }
 .act.sell{ color:var(--ok); border-color:rgba(53,179,126,.38); }
 
 #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-#inventoryList.grid-view .slab{ display:grid; grid-template-columns:1fr auto; align-items:start; }
-#inventoryList.grid-view .slab-main{ grid-column:1; }
-#inventoryList.grid-view .grade-desktop{ grid-column:2; grid-row:1; width:68px; }
-#inventoryList.grid-view .slab-media{ grid-column:1/-1; grid-row:2; width:100%; }
+#inventoryList.grid-view .slab{ grid-template-columns:1fr auto; align-items:start; }
+#inventoryList.grid-view .slab-main{ grid-column:1; grid-row:2; }
+#inventoryList.grid-view .grade-desktop{ grid-column:2; grid-row:2; width:68px; }
+#inventoryList.grid-view .slab-media{ grid-column:1/-1; grid-row:1; width:100%; }
 #inventoryList.grid-view .slab-thumb{ width:100%; height:250px; }
+#inventoryList.grid-view .slab-actions{ grid-column:1/-1; grid-row:3; }
 #inventoryList.grid-view .slab.editing{ display:block; grid-column:1/-1; }
-@media (min-width:721px){
-  #inventoryList.grid-view .grade-desktop{ margin-top:31px; }
-}
 
 /* ============ 5. INVENTORY LIST ============ */
 #inventoryList{ list-style:none; display:grid; gap:14px; }
@@ -523,7 +521,8 @@ select option{ background: var(--surface-2); color: var(--text); }
   border: 2px solid rgba(75,123,229,.68);
   border-radius: var(--radius);
   padding: 18px 20px;
-  display:flex; align-items:center; gap:20px;
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:start; gap:10px 18px;
   box-shadow: 0 8px 22px rgba(0,0,0,.32), 0 0 0 1px rgba(255,255,255,.025) inset;
 }
 .slab-thumb{
@@ -537,8 +536,8 @@ select option{ background: var(--surface-2); color: var(--text); }
   color: var(--muted-2); background: var(--surface-2);
 }
 .slab-thumb.placeholder svg{ width:30px; height:30px; }
-.slab-media{ flex:0 0 auto; }
-.slab-main{ flex:1 1 auto; min-width:0; }
+.slab-media{ grid-column:1; grid-row:1; min-width:0; }
+.slab-main{ grid-column:2; grid-row:1; min-width:0; }
 .slab-main .cert{
   font-family: var(--font-mono); font-size: 17px; font-weight:600;
   color: #7DA6FF; letter-spacing:.04em;
@@ -546,7 +545,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   text-shadow: 0 0 14px rgba(75,123,229,.35);
 }
 .slab-main .name{
-  font-weight: 600; font-size: 17px; line-height:1.3;
+  font-weight: 600; font-size: 15px; line-height:1.28;
   overflow-wrap:anywhere; margin-bottom:6px;
 }
 .slab-main .name-link{ color:var(--text)!important; text-decoration:none; border-bottom:1px dashed rgba(125,166,255,.55); }
@@ -558,10 +557,14 @@ select option{ background: var(--surface-2); color: var(--text); }
   font-size:13px; color: var(--muted-2); margin-top:6px;
   overflow-wrap:anywhere; font-style:italic;
 }
-.slab-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.slab-actions{
+  grid-column:1/-1; grid-row:2; display:grid;
+  grid-auto-flow:column; grid-auto-columns:minmax(0,1fr);
+  gap:4px; width:100%; margin-top:2px;
+}
 .act{
-  display:flex; align-items:center; gap:6px;
-  padding:8px 14px; font-size:13px; font-weight:500; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:5px; min-width:0; min-height:38px;
+  padding:7px 8px; font-size:11px; font-weight:600; line-height:1.15; cursor:pointer;
   border-radius:8px; background: var(--surface-2);
   border:1px solid var(--line); color: var(--muted); text-decoration:none;
 }
@@ -570,7 +573,8 @@ select option{ background: var(--surface-2); color: var(--text); }
 .act.del:hover{ color: var(--accent); border-color: var(--accent-line); }
 
 /* ---- Grade badge (right side of tile) ---- */
-.grade-cell{ flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:68px; }
+.grade-cell{ display:flex; align-items:flex-start; justify-content:center; width:68px; }
+.grade-desktop{ grid-column:3; grid-row:1; align-self:start; }
 .grade-mobile{ display:none; }
 .grade-badge.grader{
   min-width:48px; height:40px; padding:0 10px; border-radius:7px;
@@ -692,25 +696,25 @@ select option{ background: var(--surface-2); color: var(--text); }
   .brand h1{ font-size:24px; }
   .brand .logo{ width:44px; height:44px; font-size:26px; }
 
-  /* keep inventory tile horizontal */
-  .slab{ gap:12px; padding:14px; align-items:center; }
+  /* keep inventory tile compact and top-aligned */
+  .slab{ grid-template-columns:auto minmax(0,1fr); gap:8px 12px; padding:14px; align-items:start; }
   .slab-thumb{ width:76px; height:108px; }
-  .slab-main .name{ font-size:15px; }
+  .slab-main .name{ font-size:13px; line-height:1.25; }
   .slab-main .name-link{ border-bottom:0; color:#AFC6FF; }
   .slab-main .name-link::after{ content:" ↗"; color:var(--muted); font-size:10px; vertical-align:top; }
   .slab-main .cert{ font-size:15px; }
   .slab-main .meta{ font-size:12px; }
   .grade-desktop{ display:none; }
-  .grade-mobile{ display:flex; width:auto; margin:0 auto 8px; }
+  .grade-mobile{ display:flex; width:auto; margin:0 auto 6px; align-items:flex-start; }
   .grade-medal{ width: clamp(64px, 22vw, 96px); }
   .grade-badge.num{ width:52px; height:52px; font-size:23px; }
-  .slab-actions{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
-  .act{ justify-content:center; padding:7px 6px; font-size:11px; }
+  .slab-actions{ grid-column:1/-1; grid-row:2; gap:3px; }
+  .act{ padding:6px 3px; font-size:9px; }
 }
 @media (max-width: 560px){
   #inventoryList.grid-view{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
   #inventoryList.grid-view .slab{
-    grid-template-columns:1fr; grid-template-rows:auto 1fr;
+    grid-template-columns:1fr; grid-template-rows:auto 1fr auto;
     gap:8px; padding:9px; align-items:start;
   }
   #inventoryList.grid-view .slab-media{ grid-column:1; grid-row:1; }
@@ -724,7 +728,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   #inventoryList.grid-view .slab-main .name{ font-size:13px; line-height:1.25; margin-bottom:5px; }
   #inventoryList.grid-view .slab-main .meta,
   #inventoryList.grid-view .slab-main .notes{ font-size:10px; line-height:1.3; }
-  #inventoryList.grid-view .slab-actions{ grid-template-columns:1fr 1fr; gap:5px; margin-top:9px; }
+  #inventoryList.grid-view .slab-actions{ grid-column:1; grid-row:3; gap:3px; margin-top:5px; }
   #inventoryList.grid-view .act{ min-width:0; padding:6px 3px; font-size:9px; gap:3px; }
   #inventoryList.grid-view .act svg{ display:none; }
   #inventoryList.grid-view .slab.editing,
@@ -739,7 +743,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 }
 @media (max-width: 420px){
   .action-btn .t2{ display:none; }         /* drop subtitles on very small screens */
-  .slab-actions{ gap:8px; }
+  .slab-actions{ gap:3px; }
 }
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 .header-actions{ display:flex; align-items:center; gap:10px; margin-left:auto; }
@@ -984,6 +988,15 @@ select option{ background: var(--surface-2); color: var(--text); }
     </div>
   </div>
 
+  <div class="portfolio-overview" id="portfolioOverview">
+    <div id="portfolioChart"></div>
+    <div class="totals-bar" id="totalsBar">
+      <div class="total-card"><span id="totalOneLabel">Inventory cost</span><strong id="totalOne">$0.00</strong></div>
+      <div class="total-card"><span id="totalTwoLabel">Items</span><strong id="totalTwo">0</strong></div>
+      <div class="total-card"><span id="totalThreeLabel">Potential basis</span><strong id="totalThree">$0.00</strong></div>
+    </div>
+  </div>
+
   <div class="inventory-tools">
     <div class="tabs" role="tablist" aria-label="Inventory status">
       <button type="button" id="activeTab" class="active" role="tab" aria-selected="true">Inventory <span id="activeCount">0</span></button>
@@ -993,15 +1006,6 @@ select option{ background: var(--surface-2); color: var(--text); }
     <div class="view-toggle" aria-label="Inventory view">
       <button type="button" id="listViewBtn" class="active">List</button>
       <button type="button" id="gridViewBtn">Grid</button>
-    </div>
-  </div>
-
-  <div class="portfolio-overview" id="portfolioOverview">
-    <div id="portfolioChart"></div>
-    <div class="totals-bar" id="totalsBar">
-      <div class="total-card"><span id="totalOneLabel">Inventory cost</span><strong id="totalOne">$0.00</strong></div>
-      <div class="total-card"><span id="totalTwoLabel">Items</span><strong id="totalTwo">0</strong></div>
-      <div class="total-card"><span id="totalThreeLabel">Potential basis</span><strong id="totalThree">$0.00</strong></div>
     </div>
   </div>
 
@@ -2148,7 +2152,6 @@ function render() {
     }
     actions.append(sale, del);
 
-    main.appendChild(actions);
     li.appendChild(main);
 
     // Desktop keeps the grade in its own right-side column.
@@ -2156,6 +2159,7 @@ function render() {
     desktopGrade.className = "grade-cell grade-desktop";
     desktopGrade.appendChild(buildGradeBadge(card.grade, co));
     li.appendChild(desktopGrade);
+    li.appendChild(actions);
 
     listEl.appendChild(li);
   });
@@ -3006,7 +3010,6 @@ $('cloudPassword').addEventListener('keydown', (event) => {
 });
 window.addEventListener('online', syncSoon);
 window.addEventListener('focus', syncSoon);
-setInterval(syncCloud, 30000);
 
 // ---- Release the camera if the user leaves the page ------------------------
 window.addEventListener("pagehide", stopLiveScan);
@@ -3044,7 +3047,7 @@ init();
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-12"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-13"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-3"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-14"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-4"></script>
 </body>
 </html>

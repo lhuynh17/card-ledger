@@ -67,9 +67,7 @@
         </form>
       </div>
       <div class="grading-list" id="gradingItemList"></div>`;
-    const themeSection = document.getElementById("toolsThemeSection");
-    if (themeSection) themeSection.before(section);
-    else document.querySelector(".tools-section").appendChild(section);
+    document.querySelector(".tools-section").appendChild(section);
 
     document.getElementById("gradingItemForm").addEventListener("submit", save);
     document.getElementById("gradingItemCancel").addEventListener("click", resetForm);
@@ -347,7 +345,7 @@
       }
       saveCache();
       resetForm();
-      document.getElementById("gradingItemMessage").textContent = "Grading tracker saved.";
+      document.getElementById("gradingItemMessage").textContent = "Saved to PocketBase.";
       render();
       loadPhotos();
     } catch (error) {
@@ -376,6 +374,5 @@
   install();
   window.gradingItemTotals = totals;
   window.addEventListener("slab-cloud-synced", load);
-  window.addEventListener("focus", load);
   load();
 })();
