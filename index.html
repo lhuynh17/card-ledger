@@ -72,6 +72,7 @@ document.getElementById("themeColorMeta").content =
   --field-hover:#2D374A;
   --line:      #232A38;
   --line-soft: #1A2130;
+  --outline:   #3A465B;
   --text:      #EDF1F8;
   --muted:     #8A94A6;
   --muted-2:   #6B7484;
@@ -100,6 +101,7 @@ document.getElementById("themeColorMeta").content =
   --field-hover:#D1DBE7;
   --line:      #CDD6E2;
   --line-soft: #E3E8EF;
+  --outline:   #AAB7C8;
   --text:      #182235;
   --muted:     #5E6B7F;
   --muted-2:   #7C8798;
@@ -182,10 +184,11 @@ body{
 /* ---- Panels ---- */
 section{
   background: linear-gradient(180deg, var(--surface) 0%, var(--surface-end) 100%);
-  border: 1px solid var(--line);
+  border: 1px solid var(--outline);
   border-radius: var(--radius);
   padding: clamp(18px, 2.4vw, 30px);
   margin-bottom: 22px;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--outline) 16%,transparent);
 }
 .panel-head{
   display:flex; align-items:center; justify-content:space-between;
@@ -475,7 +478,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 .tabs button span{ display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:20px; margin-left:6px; padding:0 7px; border-radius:999px; background:var(--field-hover); border:1px solid var(--line); color:var(--text); font-size:11px; }
 .tabs button.active span{ background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-readable); }
 #inventoryAddSection{ margin-top:22px; }
-.portfolio-overview{ margin:0 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface-2) 62%,transparent); }
+.portfolio-overview{ margin:0 0 18px; padding:14px 16px; border:1px solid var(--outline); border-radius:12px; background:color-mix(in srgb,var(--surface-2) 62%,transparent); }
 .portfolio-chart-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:8px; }
 .portfolio-chart-head strong{ display:block; font-size:13px; }
 .portfolio-chart-head span{ display:block; color:var(--muted); font-size:10px; }
@@ -3137,8 +3140,8 @@ init();
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-13"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-13"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-17"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-7"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-14"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-18"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-8"></script>
 </body>
 </html>
