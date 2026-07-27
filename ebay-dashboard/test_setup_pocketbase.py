@@ -216,6 +216,11 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(fields["parse_credits_month"]["max"], 7)
         self.assertTrue(fields["parse_credits_used"]["onlyInt"])
         self.assertEqual(fields["parse_credits_used"]["min"], 0)
+        self.assertTrue(fields["parse_credit_balance"]["onlyInt"])
+        self.assertEqual(fields["parse_credit_balance"]["min"], 0)
+        self.assertEqual(fields["parse_credit_reset_at"]["max"], 10)
+        self.assertTrue(fields["parse_credit_used_at_sync"]["onlyInt"])
+        self.assertEqual(fields["parse_credit_used_at_sync"]["min"], 0)
 
     def test_grading_item_photo_is_single_and_protected(self):
         photo = next(

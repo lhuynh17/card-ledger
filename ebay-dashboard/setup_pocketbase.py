@@ -74,6 +74,11 @@ PREFERENCE_FIELDS = [
     {"name": "parse_credits_month", "type": "text", "max": 7},
     {"name": "parse_credits_used", "type": "number", "min": 0,
      "onlyInt": True},
+    {"name": "parse_credit_balance", "type": "number", "min": 0,
+     "onlyInt": True},
+    {"name": "parse_credit_reset_at", "type": "text", "max": 10},
+    {"name": "parse_credit_used_at_sync", "type": "number", "min": 0,
+     "onlyInt": True},
 ]
 
 DEBT_FIELDS = [
