@@ -149,6 +149,43 @@
     } catch (_) {}
   }
 
+  function photoCacheGet(id) {
+    return new Promise((resolve) => {
+      if (!db?.objectStoreNames.contains(GRADING_PHOTO_STORE)) return resolve(null);
+      const request = db.transaction(GRADING_PHOTO_STORE, "readonly")
+        .objectStore(GRADING_PHOTO_STORE).get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+  }
+
+  function photoCachePut(id, file, data) {
+    return new Promise((resolve) => {
+      if (!db?.objectStoreNames.contains(GRADING_PHOTO_STORE)) return resolve();
+      const transaction = db.transaction(GRADING_PHOTO_STORE, "readwrite");
+      transaction.objectStore(GRADING_PHOTO_STORE).put({ id, file, data });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+    });
+  }
+
+  function photoCacheDelete(id) {
+    return new Promise((resolve) => {
+      if (!db?.objectStoreNames.contains(GRADING_PHOTO_STORE)) return resolve();
+      const transaction = db.transaction(GRADING_PHOTO_STORE, "readwrite");
+      transaction.objectStore(GRADING_PHOTO_STORE).delete(id);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => resolve();
+    });
+  }
+
+  async function restoreCachedPhotos(rows) {
+    await Promise.all(rows.filter((item) => item.photo).map(async (item) => {
+      const cached = await photoCacheGet(item.id);
+      if (cached?.data && cached.file === item.photo) photoUrls.set(item.id, cached.data);
+    }));
+  }
+
   async function load() {
     if (!cloudSession?.token) {
       items = [];
@@ -173,6 +210,7 @@
       } catch (_) {}
       if (!cloudResponded) throw Object.assign(new Error("Cloud grading data unavailable"), { status:503 });
       items = standardItems.length ? standardItems : routeItems;
+      await restoreCachedPhotos(items);
       if (!items.length && !standardItems.length && !routeItems.length) {
         // An empty array is a valid synced state, so do not replace it with a
         // stale device cache.
@@ -185,6 +223,7 @@
       loadPhotos();
     } catch (error) {
       items = loadCache();
+      await restoreCachedPhotos(items);
       render();
       document.getElementById("gradingItemMessage").textContent = items.length
         ? "Showing the last saved device copy while cloud loading is unavailable."
@@ -201,6 +240,7 @@
       // This is the same protected-file loader used by inventory photos.
       const src = await remotePhotoData(item, null, "photo", "photo");
       photoUrls.set(item.id, src || "");
+      if (src) await photoCachePut(item.id, item.photo, src);
     }));
     render();
   }
@@ -324,17 +364,22 @@
     form.append("notes", document.getElementById("gradingItemNotes").value.trim());
     if (pendingPhoto) form.append("photo", dataUrlBlob(pendingPhoto), "raw-card.jpg");
     if (editingId && removeExistingPhoto) form.append("photo", "");
+    const savedPhotoData = pendingPhoto;
+    const removingPhoto = removeExistingPhoto;
     try {
-      const record = await pbRequest("/api/collections/grading_items/records" +
+      let record = await pbRequest("/api/collections/grading_items/records" +
         (editingId ? "/" + editingId : ""), {
         method:editingId ? "PATCH" : "POST",
         body:form
       });
+      if (savedPhotoData && record.photo) {
+        photoUrls.set(record.id, savedPhotoData);
+        await photoCachePut(record.id, record.photo, savedPhotoData);
+      }
       if (editingId) {
-        const oldUrl = photoUrls.get(editingId);
-        if ((pendingPhoto || removeExistingPhoto) && oldUrl) {
-          URL.revokeObjectURL(oldUrl);
+        if (removingPhoto) {
           photoUrls.delete(editingId);
+          await photoCacheDelete(editingId);
         }
         items = items.map((item) => item.id === record.id ? record : item);
       } else {
@@ -359,6 +404,7 @@
       const url = photoUrls.get(item.id);
       if (url) URL.revokeObjectURL(url);
       photoUrls.delete(item.id);
+      await photoCacheDelete(item.id);
       items = items.filter((row) => row.id !== item.id);
       saveCache();
       if (editingId === item.id) resetForm();
