@@ -80,7 +80,6 @@
           </div>
           <div class="ledger-field"><label for="ledgerCategory">Category</label><select id="ledgerCategory">${categories.map((category) => `<option>${category}</option>`).join("")}</select></div>
           <div class="ledger-field"><label for="ledgerVendor">Source</label><input id="ledgerVendor" type="text" placeholder="eBay, card show, office store…"></div>
-          <div class="ledger-field"><label for="ledgerDeductible">Business-use %</label><input id="ledgerDeductible" type="number" min="0" max="100" step="1" value="100"></div>
           <div class="ledger-field full"><label for="ledgerNotes">Description / receipt note</label><textarea id="ledgerNotes" placeholder="What was purchased or why money entered/left the business"></textarea></div>
           <div class="ledger-field full"><label for="ledgerReceipt">Receipt or invoice (optional)</label><input id="ledgerReceipt" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.pdf"><small>Photo, screenshot, or PDF · maximum 10 MB</small></div>
           <div class="ledger-actions"><button class="primary" id="ledgerSave" type="submit">Save entry</button><button id="ledgerCancelEdit" type="button" hidden>Cancel edit</button></div><div class="ledger-message" id="ledgerMessage"></div>
@@ -125,7 +124,6 @@
   function updateFormForType() {
     const expense = document.getElementById("ledgerType").value === "expense";
     document.getElementById("ledgerCategory").disabled = !expense;
-    document.getElementById("ledgerDeductible").disabled = !expense;
   }
 
   async function loadEntries() {
@@ -379,7 +377,9 @@
       form.set("category", type === "expense" ? document.getElementById("ledgerCategory").value : "");
       form.set("amount", String(amount));
       form.set("vendor", document.getElementById("ledgerVendor").value.trim());
-      form.set("deductible_percent", String(type === "expense" ? n(document.getElementById("ledgerDeductible").value) : 0));
+      // Slab Ledger entries are business records, so expenses are treated as
+      // fully business-related without asking for an extra percentage field.
+      form.set("deductible_percent", type === "expense" ? "100" : "0");
       form.set("notes", document.getElementById("ledgerNotes").value.trim());
       if (receipt) form.set("receipt", receipt, receipt.name);
       const row = await pbRequest("/api/collections/business_entries/records" +
@@ -404,8 +404,6 @@
     document.getElementById("ledgerAmount").value = entry.amount || "";
     document.getElementById("ledgerCategory").value = entry.category || "Other";
     document.getElementById("ledgerVendor").value = entry.vendor || "";
-    document.getElementById("ledgerDeductible").value =
-      entry.deductible_percent == null ? "100" : String(entry.deductible_percent);
     document.getElementById("ledgerNotes").value = entry.notes || "";
     document.getElementById("ledgerFormTitle").textContent = "Edit ledger entry";
     document.getElementById("ledgerSave").textContent = "Update entry";
@@ -420,7 +418,6 @@
     editingEntryId = "";
     document.getElementById("ledgerForm").reset();
     document.getElementById("ledgerDate").value = today();
-    document.getElementById("ledgerDeductible").value = "100";
     document.getElementById("ledgerFormTitle").textContent = "Add ledger entry";
     document.getElementById("ledgerSave").textContent = "Save entry";
     document.getElementById("ledgerCancelEdit").hidden = true;

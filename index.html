@@ -133,7 +133,7 @@ body{
   display:flex; align-items:center; justify-content:space-between;
   padding: 8px 4px 28px;
 }
-.brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; min-width:min(560px,100%); }
+.brand{ display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; row-gap:0; min-width:0; }
 .brand .logo{
   width:52px; height:52px; flex:0 0 auto;
   border:2px solid var(--accent); border-radius:12px;
@@ -150,9 +150,9 @@ body{
 .brand .subtitle{
   font-size: 12px; color: var(--muted); margin-top:3px;
 }
-.identity-row{
-  display:flex; flex:1 0 100%; align-items:center; justify-content:space-between;
-  gap:14px; min-width:0; margin-top:18px;
+.account-bar{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  width:100%; min-width:0; padding:0 4px; margin:0 0 8px;
 }
 .owner-chip{
   display:flex; min-width:0; align-items:center; gap:11px;
@@ -563,7 +563,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   display:flex; align-items:center; gap:6px;
   padding:8px 14px; font-size:13px; font-weight:500; cursor:pointer;
   border-radius:8px; background: var(--surface-2);
-  border:1px solid var(--line); color: var(--muted);
+  border:1px solid var(--line); color: var(--muted); text-decoration:none;
 }
 .act:hover{ color: var(--text); border-color: var(--muted); }
 .act svg{ width:14px; height:14px; }
@@ -767,10 +767,12 @@ select option{ background: var(--surface-2); color: var(--text); }
 .photo-side-toggle button{ min-width:88px; padding:9px 16px; border:0; border-radius:7px; background:transparent; color:#b9c0ce; cursor:pointer; font-weight:650; }
 .photo-side-toggle button.active{ background:var(--accent); color:#fff; }
 @media(max-width:700px){
-  .app-header{ align-items:flex-start; flex-wrap:wrap; }
-  .brand{ flex:1 0 100%; min-width:0; }
-  .identity-row{ width:100%; }
-  .header-actions{ width:100%; flex-direction:row; justify-content:flex-end; align-items:center; gap:6px; margin-top:8px; }
+  .app-header{ align-items:flex-start; gap:8px; }
+  .brand{ min-width:0; column-gap:9px; }
+  .brand .logo{ width:42px; height:42px; font-size:25px; }
+  .brand h1{ font-size:clamp(19px,5.6vw,25px); }
+  .brand .subtitle{ font-size:9px; white-space:nowrap; }
+  .header-actions{ width:auto; flex-direction:row; justify-content:flex-end; align-items:center; gap:5px; margin-top:0; }
   .sync-btn{ padding:6px 9px; }
   .owner-chip strong{ max-width:min(44vw,230px); }
   .parse-credit-chip{ flex:0 0 auto; }
@@ -786,19 +788,19 @@ select option{ background: var(--surface-2); color: var(--text); }
       <h1>Slab Ledger</h1>
       <div class="subtitle">Track your graded card inventory</div>
     </div>
-    <div class="identity-row" id="identityRow">
-      <div id="ownerChipSlot"></div>
-      <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to set the starting balance and reset date.">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-        <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
-      </button>
-    </div>
   </div>
   <div class="header-actions">
     <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
     <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
   </div>
 </header>
+<div class="account-bar" id="accountBar">
+  <div id="ownerChipSlot"></div>
+  <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to set the starting balance and reset date.">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
+  </button>
+</div>
 
 <div class="cloud-modal" id="cloudModal" role="dialog" aria-modal="true" aria-labelledby="cloudTitle">
   <div class="cloud-card">
@@ -1695,6 +1697,14 @@ function ebaySearchTerms(card) {
   return [keywords, gradeTerms].filter(Boolean).join(" ");
 }
 
+function ebayResearchUrl(card) {
+  return "https://www.ebay.com/sh/research?" + new URLSearchParams({
+    marketplace:"EBAY-US",
+    keywords:ebaySearchTerms(card),
+    tabName:"SOLD"
+  }).toString();
+}
+
 // Build seller-style search keywords from Parse.bot's structured PSA fields.
 // Keep this intentionally concise: eBay works better when catalog-only set
 // abbreviations are not all required in every listing title.
@@ -2093,6 +2103,13 @@ function render() {
       }
       alert("Market details are still loading. Please try again.");
     });
+    const research = document.createElement("a");
+    research.className = "act";
+    research.textContent = "Research";
+    research.href = ebayResearchUrl(card);
+    research.target = "_blank";
+    research.rel = "noopener noreferrer";
+    research.title = "Open eBay Product Research with this card search already filled";
     const sale = document.createElement("button");
     sale.className = "act sell"; sale.type = "button";
     sale.textContent = card.sold ? "Return to inventory" : "Mark sold";
@@ -2124,7 +2141,10 @@ function render() {
       }
     });
     actions.append(edit);
-    if (card.name && !card.sold) actions.append(market);
+    if (card.name) {
+      if (!card.sold) actions.append(market);
+      actions.append(research);
+    }
     actions.append(sale, del);
 
     main.appendChild(actions);
@@ -3020,10 +3040,10 @@ async function init() {
 init();
 </script>
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-12"></script>
-<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-3"></script>
+<script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-11"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-12"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-12"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-13"></script>
 <script src="ebay-dashboard/grading-plays.js?v=grading-items-3"></script>
 </body>
 </html>
