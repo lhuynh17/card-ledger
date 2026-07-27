@@ -43,7 +43,8 @@
       <button type="button" data-view="inventory"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Inventory</span></button>
       <button type="button" data-view="ledger"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 18h16M6 16V9m4 7V5m4 11v-4m4 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span>Ledger</span></button>
       <button type="button" data-view="tools"><span class="app-nav-icon"><svg viewBox="0 0 24 24" fill="none"><path d="m14.7 6.3 3-3 3 3-3 3m-8.4 8.4-3 3-3-3 3-3M13 7l4 4M7 13l4 4M9.5 4.5l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Tools</span></button>`;
-    document.querySelector(".app-header").insertAdjacentElement("afterend", nav);
+    const accountBar = document.getElementById("accountBar");
+    (accountBar || document.querySelector(".app-header")).insertAdjacentElement("afterend", nav);
 
     const finance = document.querySelector(".finance-section");
     finance.dataset.appView = "ledger";
