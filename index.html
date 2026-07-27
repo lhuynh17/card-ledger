@@ -1100,6 +1100,7 @@ select option{ background: var(--surface-2); color: var(--text); }
 const OLD_STORAGE_KEY = "psa_inventory";   // legacy localStorage key
 const DB_NAME  = "slabLedger";
 const DB_STORE = "cards";
+const GRADING_PHOTO_STORE = "gradingPhotos";
 const PB_URL = "https://long-cloud.tail314ec.ts.net";
 const PB_AUTH_KEY = "slabLedgerCloudAuth";
 let db = null;
@@ -1543,13 +1544,16 @@ function syncSoon() {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains(DB_STORE)) {
         // autoIncrement gives each card a unique, ever-increasing id;
         // higher id = added later, which we use to sort newest-first.
         d.createObjectStore(DB_STORE, { keyPath: "id", autoIncrement: true });
+      }
+      if (!d.objectStoreNames.contains(GRADING_PHOTO_STORE)) {
+        d.createObjectStore(GRADING_PHOTO_STORE, { keyPath:"id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -3133,8 +3137,8 @@ init();
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-13"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
-<script src="ebay-dashboard/business-ledger.js?v=business-ledger-12"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-16"></script>
-<script src="ebay-dashboard/grading-plays.js?v=grading-items-6"></script>
+<script src="ebay-dashboard/business-ledger.js?v=business-ledger-13"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-17"></script>
+<script src="ebay-dashboard/grading-plays.js?v=grading-items-7"></script>
 </body>
 </html>
