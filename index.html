@@ -1034,6 +1034,8 @@ let cloudFileToken = { value:"", expiresAt:0 };
 let parseCreditRefreshAt = 0;
 let parseCreditMonthlyLimit = 200;
 let parseCreditLastState = null;
+let parseCreditPreferenceId = "";
+let parseCreditCloudLoaded = false;
 const PARSE_CREDIT_SETTINGS_KEY = "slabLedgerParseCreditSettings";
 
 try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
@@ -1063,6 +1065,7 @@ function updateParseCreditBadge(credits) {
     settings.usedAtSync = Math.max(0, Number(credits.used) || 0);
     settings.resetAt = advanceMonthlyReset(settings.resetAt, today);
     saveParseCreditSettings(settings);
+    if (cloudSession?.token) void saveSyncedParseCreditSettings(settings);
   }
   const usedSinceSetup = settings
     ? Math.max(0, (Number(credits.used) || 0) - settings.usedAtSync)
@@ -1104,6 +1107,62 @@ function saveParseCreditSettings(settings) {
   localStorage.setItem(PARSE_CREDIT_SETTINGS_KEY, JSON.stringify(settings));
 }
 
+function parseCreditSettingsFromRecord(record) {
+  const remaining = Number(record?.parse_credit_balance);
+  const resetAt = String(record?.parse_credit_reset_at || "");
+  if (!Number.isInteger(remaining) || remaining < 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(resetAt)) return null;
+  return {
+    remaining,
+    resetAt,
+    usedAtSync:Math.max(0, Number(record?.parse_credit_used_at_sync) || 0)
+  };
+}
+
+async function loadSyncedParseCreditSettings() {
+  if (!cloudSession?.token) return loadParseCreditSettings();
+  try {
+    const result = await pbRequest("/api/collections/app_preferences/records?perPage=1");
+    const record = result?.items?.[0] || null;
+    parseCreditPreferenceId = record?.id || "";
+    parseCreditCloudLoaded = true;
+    const synced = parseCreditSettingsFromRecord(record);
+    if (synced) {
+      saveParseCreditSettings(synced);
+      return synced;
+    }
+    const local = loadParseCreditSettings();
+    if (local) await saveSyncedParseCreditSettings(local);
+    return local;
+  } catch (_) {
+    return loadParseCreditSettings();
+  }
+}
+
+async function saveSyncedParseCreditSettings(settings) {
+  if (!cloudSession?.token) return false;
+  try {
+    if (!parseCreditCloudLoaded) await loadSyncedParseCreditSettings();
+    const payload = {
+      parse_credit_balance:settings.remaining,
+      parse_credit_reset_at:settings.resetAt,
+      parse_credit_used_at_sync:settings.usedAtSync
+    };
+    if (!parseCreditPreferenceId) payload.owner = cloudSession.record.id;
+    const record = await pbRequest("/api/collections/app_preferences/records" +
+      (parseCreditPreferenceId ? "/" + parseCreditPreferenceId : ""), {
+      method:parseCreditPreferenceId ? "PATCH" : "POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    parseCreditPreferenceId = record.id;
+    parseCreditCloudLoaded = true;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 function advanceMonthlyReset(resetAt, today) {
   const date = new Date(resetAt + "T12:00:00");
   do date.setMonth(date.getMonth() + 1);
@@ -1117,14 +1176,16 @@ async function refreshParseCredits(force = false) {
   if (!force && now - parseCreditRefreshAt < 60000) return;
   parseCreditRefreshAt = now;
   try {
-    updateParseCreditBadge(await pbRequest("/api/slab-ledger/psa-credits"));
+    const credits = await pbRequest("/api/slab-ledger/psa-credits");
+    await loadSyncedParseCreditSettings();
+    updateParseCreditBadge(credits);
   } catch (_) {
     const chip = document.getElementById("parseCreditChip");
     if (chip) chip.hidden = true;
   }
 }
 
-document.getElementById("parseCreditChip").addEventListener("click", () => {
+document.getElementById("parseCreditChip").addEventListener("click", async () => {
   const settings = loadParseCreditSettings();
   const shown = document.getElementById("parseCreditText").textContent;
   const current = Number.parseInt(shown, 10);
@@ -1155,14 +1216,19 @@ document.getElementById("parseCreditChip").addEventListener("click", () => {
     alert("Enter a future reset date in YYYY-MM-DD format.");
     return;
   }
-  saveParseCreditSettings({
+  const updated = {
     remaining,
     resetAt,
     usedAtSync:Math.max(0, Number(parseCreditLastState?.used) || 0)
-  });
+  };
+  saveParseCreditSettings(updated);
+  const synced = await saveSyncedParseCreditSettings(updated);
   updateParseCreditBadge(parseCreditLastState || {
     remaining, limit:parseCreditMonthlyLimit, used:0, reset_at:resetAt
   });
+  if (cloudSession?.token && !synced) {
+    alert("The credit settings were saved on this device but could not sync yet. Run the latest PocketBase setup tool once, then try again.");
+  }
 });
 
 async function pbRequest(path, options = {}) {
@@ -1358,7 +1424,10 @@ async function syncCloud() {
     window.dispatchEvent(new CustomEvent("slab-cloud-synced"));
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
-      cloudSession = null; localStorage.removeItem(PB_AUTH_KEY);
+      cloudSession = null;
+      parseCreditPreferenceId = "";
+      parseCreditCloudLoaded = false;
+      localStorage.removeItem(PB_AUTH_KEY);
       setSyncStatus("Sign in to sync", "error");
       document.getElementById("cloudModal").classList.add("open");
     } else setSyncStatus("Sync paused", "error");
@@ -2819,6 +2888,8 @@ $('syncBtn').addEventListener('click', () => {
 $('logoutBtn').addEventListener('click', () => {
   if (!confirm('Sign out of cloud sync on this device? Your local inventory will remain here.')) return;
   cloudSession = null;
+  parseCreditPreferenceId = "";
+  parseCreditCloudLoaded = false;
   cloudFileToken = { value:"", expiresAt:0 };
   localStorage.removeItem(PB_AUTH_KEY);
   sessionStorage.removeItem('slabLedgerOfflineChosen');
@@ -2847,6 +2918,8 @@ $('cloudLoginBtn').addEventListener('click', async () => {
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.message || 'Sign-in failed.');
     cloudSession = { token:data.token, record:data.record };
+    parseCreditPreferenceId = "";
+    parseCreditCloudLoaded = false;
     localStorage.setItem(PB_AUTH_KEY, JSON.stringify(cloudSession));
     $('cloudPassword').value = ''; $('cloudMessage').textContent = '';
     $('cloudModal').classList.remove('open');
