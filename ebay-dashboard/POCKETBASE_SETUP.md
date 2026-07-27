@@ -83,12 +83,13 @@ marketplace tables still display an older allowance. Use the signed-in usage
 page as the source of truth for your account.
 
 The compact header badge tracks successful Parse.bot calls made through Slab
-Ledger and resets each calendar month. It uses 200 monthly credits by default.
-If your allowance changes, set `PARSE_BOT_MONTHLY_CREDITS` in the PocketBase
-container environment. Parse.bot does not currently document an account
-balance endpoint, so calls made outside Slab Ledger are not included
-automatically. Click the badge to match it to the current remaining balance
-shown in your Parse.bot account whenever needed.
+Ledger. Click it once to enter the starting balance and the next reset date.
+That starting point is saved on the current device, app lookups count down from
+it, and the counter returns to the monthly allowance on the chosen date. It
+uses 200 monthly credits by default. If your allowance changes, set
+`PARSE_BOT_MONTHLY_CREDITS` in the PocketBase container environment. Parse.bot
+does not currently document an account balance endpoint, so calls made outside
+Slab Ledger are not included automatically.
 
 ## Recommended PocketBase launch restrictions
 

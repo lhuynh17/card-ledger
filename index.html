@@ -148,7 +148,7 @@ body{
   letter-spacing: .04em; text-transform: uppercase; line-height:1;
 }
 .brand .subtitle{
-  font-size: 14px; color: var(--muted); margin-top:4px;
+  font-size: 12px; color: var(--muted); margin-top:3px;
 }
 .owner-chip{
   display:flex; flex:1 0 100%; align-items:center; gap:11px; margin-top:18px;
@@ -464,10 +464,13 @@ select option{ background: var(--surface-2); color: var(--text); }
 
 .inventory-tools{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
 .tabs, .view-toggle{ display:flex; padding:3px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); }
+.inventory-tools .tabs{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:min(100%,450px); }
 .tabs button, .view-toggle button{ border:0; background:transparent; color:var(--muted); padding:8px 13px; border-radius:7px; cursor:pointer; font:600 13px var(--font-body); }
+.inventory-tools .tabs button{ display:flex; align-items:center; justify-content:center; min-width:0; white-space:nowrap; }
 .tabs button.active, .view-toggle button.active{ background:var(--field); color:var(--text); box-shadow:0 1px 5px rgba(0,0,0,.25); }
 .tabs button span{ display:inline-flex; align-items:center; justify-content:center; min-width:23px; height:20px; margin-left:6px; padding:0 7px; border-radius:999px; background:var(--field-hover); border:1px solid var(--line); color:var(--text); font-size:11px; }
 .tabs button.active span{ background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-readable); }
+#inventoryAddSection{ margin-top:22px; }
 .portfolio-overview{ margin:0 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface-2) 62%,transparent); }
 .portfolio-chart-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:8px; }
 .portfolio-chart-head strong{ display:block; font-size:13px; }
@@ -775,7 +778,7 @@ select option{ background: var(--surface-2); color: var(--text); }
   <div class="header-actions">
     <button type="button" class="sync-btn" id="syncBtn">Sign in to sync</button>
     <button type="button" class="sync-btn" id="logoutBtn" hidden>Sign out</button>
-    <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to match the balance shown in your Parse.bot account.">
+    <button type="button" class="parse-credit-chip" id="parseCreditChip" hidden title="Tracks successful Parse.bot calls made through Slab Ledger. Click to set the starting balance and reset date.">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13.2 2.5 5.8 13h5l-1 8.5L18.4 10h-5.1l-.1-7.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       <span class="parse-credit-copy"><strong id="parseCreditText">Credits unavailable</strong><small id="parseCreditReset"></small></span>
     </button>
@@ -968,7 +971,7 @@ select option{ background: var(--surface-2); color: var(--text); }
     <div class="tabs" role="tablist" aria-label="Inventory status">
       <button type="button" id="activeTab" class="active" role="tab" aria-selected="true">Inventory <span id="activeCount">0</span></button>
       <button type="button" id="soldTab" role="tab" aria-selected="false">Sold <span id="soldCount">0</span></button>
-      <button type="button" id="needsUpdateBtn" aria-pressed="false">Needs value update</button>
+      <button type="button" id="needsUpdateBtn" aria-pressed="false">Needs Update</button>
     </div>
     <div class="view-toggle" aria-label="Inventory view">
       <button type="button" id="listViewBtn" class="active">List</button>
@@ -1030,6 +1033,8 @@ let syncTimer = null;
 let cloudFileToken = { value:"", expiresAt:0 };
 let parseCreditRefreshAt = 0;
 let parseCreditMonthlyLimit = 200;
+let parseCreditLastState = null;
+const PARSE_CREDIT_SETTINGS_KEY = "slabLedgerParseCreditSettings";
 
 try { cloudSession = JSON.parse(localStorage.getItem(PB_AUTH_KEY)); } catch (e) {}
 
@@ -1049,23 +1054,62 @@ function setSyncStatus(text, state = "") {
 
 function updateParseCreditBadge(credits) {
   if (!credits || !Number.isFinite(Number(credits.remaining))) return;
-  const remaining = Math.max(0, Number(credits.remaining));
+  parseCreditLastState = credits;
   parseCreditMonthlyLimit = Math.max(1, Number(credits.limit) || 200);
+  let settings = loadParseCreditSettings();
+  const today = new Date().toISOString().slice(0, 10);
+  if (settings && settings.resetAt <= today) {
+    settings.remaining = parseCreditMonthlyLimit;
+    settings.usedAtSync = Math.max(0, Number(credits.used) || 0);
+    settings.resetAt = advanceMonthlyReset(settings.resetAt, today);
+    saveParseCreditSettings(settings);
+  }
+  const usedSinceSetup = settings
+    ? Math.max(0, (Number(credits.used) || 0) - settings.usedAtSync)
+    : 0;
+  const remaining = settings
+    ? Math.max(0, settings.remaining - usedSinceSetup)
+    : Math.max(0, Number(credits.remaining));
   const chip = document.getElementById("parseCreditChip");
   const text = document.getElementById("parseCreditText");
   const reset = document.getElementById("parseCreditReset");
   if (!chip || !text) return;
-  text.textContent = remaining + (remaining === 1 ? " Credit Left" : " Credits Left");
+  text.textContent = remaining + (remaining === 1 ? " Credit" : " Credits");
   if (reset) {
-    const resetDate = new Date(credits.reset_at || "");
+    const resetDate = new Date((settings?.resetAt || credits.reset_at || "").slice(0, 10) + "T12:00:00");
     reset.textContent = Number.isFinite(resetDate.getTime())
       ? "Resets " + resetDate.toLocaleDateString(undefined, { month:"short", day:"numeric" })
       : "Resets monthly";
   }
-  chip.title = `Slab Ledger tracked ${Number(credits.used) || 0} successful Parse.bot call${Number(credits.used) === 1 ? "" : "s"} this month out of ${Number(credits.limit) || 200}. Click to match the balance shown in your Parse.bot account.`;
+  chip.title = `Slab Ledger counts successful Parse.bot calls from your saved starting balance. Click to change the balance or reset date.`;
   chip.hidden = false;
 }
 window.updateParseCreditBadge = updateParseCreditBadge;
+
+function loadParseCreditSettings() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PARSE_CREDIT_SETTINGS_KEY));
+    if (!value || !Number.isInteger(value.remaining) || !/^\d{4}-\d{2}-\d{2}$/.test(value.resetAt)) return null;
+    return {
+      remaining:Math.max(0, value.remaining),
+      resetAt:value.resetAt,
+      usedAtSync:Math.max(0, Number(value.usedAtSync) || 0)
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveParseCreditSettings(settings) {
+  localStorage.setItem(PARSE_CREDIT_SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function advanceMonthlyReset(resetAt, today) {
+  const date = new Date(resetAt + "T12:00:00");
+  do date.setMonth(date.getMonth() + 1);
+  while (date.toISOString().slice(0, 10) <= today);
+  return date.toISOString().slice(0, 10);
+}
 
 async function refreshParseCredits(force = false) {
   if (!cloudSession?.token) return;
@@ -1080,11 +1124,12 @@ async function refreshParseCredits(force = false) {
   }
 }
 
-document.getElementById("parseCreditChip").addEventListener("click", async () => {
+document.getElementById("parseCreditChip").addEventListener("click", () => {
+  const settings = loadParseCreditSettings();
   const shown = document.getElementById("parseCreditText").textContent;
   const current = Number.parseInt(shown, 10);
   const answer = prompt(
-    "Enter the credits remaining shown in your Parse.bot account. Slab Ledger will count down from that number.",
+    "Enter your current Parse.bot credits. Slab Ledger will count down successful lookups made in the app.",
     Number.isFinite(current) ? String(current) : ""
   );
   if (answer === null) return;
@@ -1093,15 +1138,31 @@ document.getElementById("parseCreditChip").addEventListener("click", async () =>
     alert("Enter a whole number from 0 to " + parseCreditMonthlyLimit + ".");
     return;
   }
-  try {
-    updateParseCreditBadge(await pbRequest("/api/slab-ledger/psa-credits", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ remaining })
-    }));
-  } catch (error) {
-    alert(error.message || "The Parse.bot credit balance could not be updated.");
+  const defaultReset = settings?.resetAt ||
+    String(parseCreditLastState?.reset_at || "").slice(0, 10) ||
+    new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const resetAt = prompt(
+    "Enter the next reset date as YYYY-MM-DD. On this date the counter will reset to " + parseCreditMonthlyLimit + ".",
+    defaultReset
+  );
+  if (resetAt === null) return;
+  const resetDate = new Date(resetAt + "T12:00:00");
+  const today = new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(resetAt) ||
+      !Number.isFinite(resetDate.getTime()) ||
+      resetDate.toISOString().slice(0, 10) !== resetAt ||
+      resetAt <= today) {
+    alert("Enter a future reset date in YYYY-MM-DD format.");
+    return;
   }
+  saveParseCreditSettings({
+    remaining,
+    resetAt,
+    usedAtSync:Math.max(0, Number(parseCreditLastState?.used) || 0)
+  });
+  updateParseCreditBadge(parseCreditLastState || {
+    remaining, limit:parseCreditMonthlyLimit, used:0, reset_at:resetAt
+  });
 });
 
 async function pbRequest(path, options = {}) {
@@ -2840,7 +2901,7 @@ init();
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-2"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-10"></script>
-<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-10"></script>
+<script src="ebay-dashboard/slab-ledger-tools.js?v=tools-11"></script>
 <script src="ebay-dashboard/grading-plays.js?v=grading-items-1"></script>
 </body>
 </html>
