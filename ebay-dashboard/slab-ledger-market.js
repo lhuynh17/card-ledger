@@ -109,10 +109,11 @@
       <form id="manualCompForm" class="manual-comps">
       <p class="market-help">Use the PSA button to fill recent sales automatically, or enter at least one comparable price yourself. Two or three comps improve confidence.</p>
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
+      ${window.slabManagedMarketplace?.state?.enabled ? `<button id="loadManagedSales" type="button"${window.slabManagedMarketplace.state.kill_switch || !window.slabManagedMarketplace.state.configured ? " disabled" : ""}>Evaluate with managed provider</button>` : ""}
       <a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open eBay sold search ↗</a></div>
       ${[0,1,2].map((i) => `<div class="comp-row"><div class="mf"><label>Sold price ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
       <div class="mf"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="Paste the sold-listing link"></div></div>`).join("")}
-      <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
+      <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","Bright Data evaluation","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
       <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
       <div class="mf full"><label>Notes</label><textarea id="marketNotes" placeholder="Why these comps were selected…">${safe(value?.notes || "")}</textarea></div>
       <div class="market-actions"><button class="primary" type="submit">Save average as market value</button></div>
@@ -154,6 +155,51 @@
         message.textContent = error.message || "Recent PSA sales could not be loaded.";
       } finally {
         psaButton.disabled = false;
+      }
+    });
+    const managedButton = document.getElementById("loadManagedSales");
+    if (managedButton) managedButton.addEventListener("click", async () => {
+      const message = document.getElementById("marketMessage");
+      managedButton.disabled = true;
+      message.className = "market-message";
+      message.textContent = "Running a private side-by-side marketplace evaluation…";
+      try {
+        const result = await window.slabManagedMarketplace.search({
+          card_id:String(card.remoteId || ""),
+          query,
+          card_identity:card.name || query,
+          grader:String(card.company || "PSA").toUpperCase(),
+          grade:String(card.grade || ""),
+          marketplace:"ebay",
+          sold_only:true,
+          completed_only:true,
+          sort:"sold_desc",
+          search_url:soldUrl,
+          result_limit:50,
+          feature:"market_modal"
+        });
+        const candidates = Array.isArray(result?.candidates)
+          ? result.candidates.slice(0, 3)
+          : [];
+        if (!result?.valuation || !candidates.length) {
+          throw new Error("No usable managed-provider comparables were returned. Your saved value was not changed.");
+        }
+        const urlInputs = [...document.querySelectorAll(".comp-url")];
+        candidates.forEach((candidate, index) => {
+          priceInputs[index].value = Number(candidate.total).toFixed(2);
+          priceInputs[index].dataset.title = candidate.title || "";
+          urlInputs[index].value = candidate.listing_url || "";
+        });
+        document.getElementById("marketSource").value = "Bright Data evaluation";
+        document.getElementById("marketDate").value = new Date().toISOString().slice(0, 10);
+        recalc();
+        message.className = "market-message ok";
+        message.textContent = `Evaluation filled ${candidates.length} comparable${candidates.length === 1 ? "" : "s"} for review. Nothing is saved until you choose Save average.`;
+      } catch (error) {
+        message.className = "market-message error";
+        message.textContent = error.message || "Managed marketplace evaluation is unavailable. Your saved value was not changed.";
+      } finally {
+        managedButton.disabled = false;
       }
     });
     document.getElementById("manualCompForm").addEventListener("submit", async (event) => {
