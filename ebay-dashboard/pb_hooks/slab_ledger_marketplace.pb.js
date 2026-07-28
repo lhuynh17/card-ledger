@@ -229,6 +229,7 @@ function safeError(error) {
     schema_changed: "Bright Data returned an unrecognized eBay record format.",
     schema_unconfirmed: "Bright Data account and eBay schema validation are incomplete.",
     provider_unavailable: "Bright Data is temporarily unavailable.",
+    provider_failed: "Bright Data could not complete the collection.",
     empty_results: "Bright Data returned no usable comparable listings.",
   };
   return { code: code, message: allowed[code] || "Marketplace refresh is temporarily unavailable." };
@@ -366,6 +367,7 @@ routerAdd("POST", "/api/slab-ledger/marketplace/search", (e) => {
           );
         }
       },
+      sleep: (milliseconds) => sleep(milliseconds),
     });
     let providerResult;
     let lastError;

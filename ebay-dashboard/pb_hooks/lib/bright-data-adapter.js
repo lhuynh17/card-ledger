@@ -97,10 +97,75 @@ function parseResponse(response, nowIso, resultLimit) {
   return { candidates, recordsReturned: records.length };
 }
 
+function snapshotId(response) {
+  const payload = response && response.json;
+  return String(payload && (payload.snapshot_id || payload.id || payload.collection_id) || "");
+}
+
+function providerResponseError(response) {
+  const status = response ? Number(response.statusCode) : 0;
+  if (status === 401 || status === 403) {
+    return new ProviderError("authentication", "Bright Data authentication failed.", false);
+  }
+  if (status === 429) {
+    return new ProviderError("rate_limited", "Bright Data rate limited the request.", true);
+  }
+  return new ProviderError(
+    "provider_unavailable",
+    "Bright Data is temporarily unavailable.",
+    status >= 500 || !status
+  );
+}
+
 function createBrightDataAdapter(options) {
   const httpSend = options.httpSend;
   const now = options.now || (() => new Date());
+  const wait = options.sleep || (() => {});
   if (typeof httpSend !== "function") throw new Error("httpSend is required.");
+  function authHeaders(config, json) {
+    const headers = {
+      Authorization: "Bearer " + config.apiToken,
+      Accept: "application/json",
+    };
+    if (json) headers["Content-Type"] = "application/json";
+    return headers;
+  }
+  function pollSnapshot(id, config) {
+    for (let attempt = 0; attempt < config.maxPolls; attempt += 1) {
+      const progress = httpSend({
+        url: API_ORIGIN + "/datasets/v3/progress/" + encodeURIComponent(id),
+        method: "GET",
+        headers: authHeaders(config, false),
+        timeout: config.timeoutSeconds,
+      });
+      if (!progress || progress.statusCode < 200 || progress.statusCode >= 300) {
+        throw providerResponseError(progress);
+      }
+      const state = String(progress.json && progress.json.status || "").toLowerCase();
+      if (state === "failed" || state === "canceled" || state === "cancelled") {
+        throw new ProviderError(
+          "provider_failed",
+          "Bright Data could not complete the collection.",
+          false
+        );
+      }
+      if (state === "ready" || state === "done" || state === "complete") {
+        const download = httpSend({
+          url: API_ORIGIN + "/datasets/v3/snapshot/" + encodeURIComponent(id) + "?format=json",
+          method: "GET",
+          headers: authHeaders(config, false),
+          timeout: config.timeoutSeconds,
+        });
+        return parseResponse(download, now().toISOString(), config.resultLimit);
+      }
+      if (attempt + 1 < config.maxPolls) wait(config.pollIntervalSeconds * 1000);
+    }
+    throw new ProviderError(
+      "timeout",
+      "Bright Data did not finish before the polling limit.",
+      true
+    );
+  }
   return {
     name: PROVIDER,
     health(config) {
@@ -123,27 +188,40 @@ function createBrightDataAdapter(options) {
       if (!config.apiToken || !config.datasetId) {
         throw new ProviderError("not_configured", "Bright Data is not configured.", false);
       }
-      if (config.requestMode !== "sync") {
+      if (config.requestMode !== "sync" && config.requestMode !== "async") {
         throw new ProviderError(
           "unsupported_request_mode",
-          "Asynchronous Bright Data polling is not enabled until the account endpoint is confirmed.",
+          "Bright Data request mode must be sync or async.",
           false
         );
       }
-      const endpoint = API_ORIGIN + "/datasets/v3/scrape?dataset_id=" +
+      const endpoint = API_ORIGIN + "/datasets/v3/" +
+        (config.requestMode === "async" ? "trigger" : "scrape") + "?dataset_id=" +
         encodeURIComponent(config.datasetId) + "&format=json";
       const response = httpSend({
         url: endpoint,
         method: "POST",
-        headers: {
-          Authorization: "Bearer " + config.apiToken,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders(config, true),
         body: JSON.stringify(inputFor(request, config)),
         timeout: config.timeoutSeconds,
       });
-      const parsed = parseResponse(response, now().toISOString(), config.resultLimit);
+      let parsed;
+      const id = snapshotId(response);
+      if (config.requestMode === "async" || id) {
+        if (!response || response.statusCode < 200 || response.statusCode >= 300) {
+          throw providerResponseError(response);
+        }
+        if (!id) {
+          throw new ProviderError(
+            "schema_changed",
+            "Bright Data did not return a snapshot ID.",
+            false
+          );
+        }
+        parsed = pollSnapshot(id, config);
+      } else {
+        parsed = parseResponse(response, now().toISOString(), config.resultLimit);
+      }
       return {
         candidates: parsed.candidates,
         retrieved_at: now().toISOString(),
@@ -164,4 +242,5 @@ module.exports = {
   createBrightDataAdapter,
   normalizeRawRecord,
   parseResponse,
+  snapshotId,
 };

@@ -37,6 +37,10 @@ function configFromEnvironment(env) {
     pageLimit: positiveInteger(get("BRIGHT_DATA_PAGE_LIMIT"), 1, 5),
     timeoutSeconds: positiveInteger(get("BRIGHT_DATA_TIMEOUT_SECONDS"), 25, 60),
     maxRetries: positiveInteger(get("BRIGHT_DATA_MAX_RETRIES"), 1, 2),
+    pollIntervalSeconds: positiveInteger(
+      get("BRIGHT_DATA_POLL_INTERVAL_SECONDS"), 5, 30
+    ),
+    maxPolls: positiveInteger(get("BRIGHT_DATA_MAX_POLLS"), 10, 24),
     cacheHours: positiveInteger(get("BRIGHT_DATA_CACHE_HOURS"), 22, 168),
     cooldownMinutes: positiveInteger(get("BRIGHT_DATA_COOLDOWN_MINUTES"), 15, 1440),
     retentionDays: positiveInteger(get("BRIGHT_DATA_RETENTION_DAYS"), 90, 365),

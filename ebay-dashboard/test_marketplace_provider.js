@@ -152,6 +152,72 @@ test("adapter reports authentication, timeout, and empty results safely", () => 
   assert.deepEqual(result.candidates, []);
 });
 
+test("asynchronous adapter polls and downloads without a webhook", () => {
+  const calls = [];
+  const responses = [
+    { statusCode: 200, json: { snapshot_id:"s_fixture" } },
+    { statusCode: 200, json: { status:"running" } },
+    { statusCode: 200, json: { status:"ready" } },
+    { statusCode: 200, json: [raw()] },
+  ];
+  const adapter = createBrightDataAdapter({
+    httpSend(options) {
+      calls.push(options);
+      return responses.shift();
+    },
+    sleep() {},
+  });
+  const result = adapter.search(
+    { ...request, search_url:"https://www.ebay.com/sch/i.html?_nkw=test" },
+    {
+      enabled:true,
+      schemaConfirmed:true,
+      apiToken:"fixture-token",
+      datasetId:"fixture-dataset",
+      requestMode:"async",
+      inputField:"url",
+      resultLimit:50,
+      pageLimit:1,
+      timeoutSeconds:25,
+      maxPolls:3,
+      pollIntervalSeconds:1,
+    }
+  );
+
+  assert.equal(result.records_returned, 1);
+  assert.match(calls[0].url, /\/trigger\?/);
+  assert.match(calls[1].url, /\/progress\/s_fixture$/);
+  assert.match(calls[3].url, /\/snapshot\/s_fixture\?format=json$/);
+  assert.equal(calls.some((call) => /webhook/i.test(JSON.stringify(call))), false);
+});
+
+test("asynchronous polling has a bounded timeout", () => {
+  const adapter = createBrightDataAdapter({
+    httpSend(options) {
+      return /\/trigger\?/.test(options.url)
+        ? { statusCode:200, json:{ snapshot_id:"s_fixture" } }
+        : { statusCode:200, json:{ status:"running" } };
+    },
+    sleep() {},
+  });
+  assert.throws(() => adapter.search(
+    { ...request, search_url:"https://www.ebay.com/sch/i.html?_nkw=test" },
+    {
+      enabled:true,
+      schemaConfirmed:true,
+      apiToken:"fixture-token",
+      datasetId:"fixture-dataset",
+      requestMode:"async",
+      inputField:"url",
+      resultLimit:50,
+      pageLimit:1,
+      timeoutSeconds:25,
+      maxPolls:2,
+      pollIntervalSeconds:1,
+    }
+  ), (error) => error.code === "timeout" && error.retryable);
+});
+
 test("budget defaults are conservative and configurable", () => {
   const values = {
     BRIGHT_DATA_ENABLED: "1",
