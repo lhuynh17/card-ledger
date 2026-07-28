@@ -31,6 +31,20 @@ PocketBase setup instructions are in
 The scraper is optional; manual market tracking and the business ledger work
 without it.
 
+## Project documentation
+
+- [`AGENTS.md`](AGENTS.md): required standards for contributors and future
+  Codex conversations
+- [`SECURITY.md`](SECURITY.md): private-deployment security model and safeguards
+- [`docs/Architecture.md`](docs/Architecture.md): current application and data
+  architecture
+- [`docs/Marketplace.md`](docs/Marketplace.md): current and target provider,
+  search, filtering, and usage architecture
+- [`docs/Roadmap.md`](docs/Roadmap.md): committed future direction and explicit
+  non-goals
+- [`docs/Decision Log.md`](docs/Decision%20Log.md): chronological durable
+  decisions and rationale
+
 The setup tool also audits existing collection ownership rules before repairing
 them and protects front/back inventory photos with PocketBase short-lived file
 tokens. It
