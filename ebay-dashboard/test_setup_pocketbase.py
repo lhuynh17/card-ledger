@@ -232,6 +232,64 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(photo["maxSelect"], 1)
         self.assertLessEqual(photo["maxSize"], 10 * 1024 * 1024)
 
+    def test_marketplace_usage_fields_are_bounded_and_private(self):
+        fields = {
+            field["name"]: field for field in SETUP.MARKETPLACE_USAGE_FIELDS
+        }
+
+        self.assertTrue(fields["records_used"]["onlyInt"])
+        self.assertEqual(fields["records_used"]["min"], 0)
+        self.assertLessEqual(fields["usage_by_feature"]["maxSize"], 100000)
+
+    def test_marketplace_observations_have_retention_and_match_fields(self):
+        fields = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_OBSERVATION_FIELDS
+        }
+
+        self.assertTrue(fields["expires_at"]["required"])
+        self.assertEqual(
+            fields["match_status"]["values"], ["accepted", "rejected"]
+        )
+        self.assertLessEqual(fields["listing_id"]["max"], 2000)
+
+    @patch.object(SETUP, "collection")
+    @patch.object(SETUP, "secure_existing_owner_collection")
+    @patch.object(SETUP, "ensure_fields")
+    @patch.object(SETUP, "protect_card_photo")
+    @patch.object(SETUP, "create_owner_collection")
+    def test_marketplace_collections_are_created_with_owner_rules(
+            self, create, protect, ensure, secure, collection):
+        users = {"id": "users_collection"}
+        cards = {
+            "id": "cards_collection",
+            "name": "cards",
+            "fields": [self.owner],
+            **self.rules,
+        }
+
+        def lookup(_base, _token, name):
+            if name == "users":
+                return users
+            if name == "cards":
+                return cards
+            return None
+
+        collection.side_effect = lookup
+        ensure.side_effect = lambda _b, _t, current, _fields, _label: current
+        secure.side_effect = lambda _b, _t, current, _u, _label: current
+        create.return_value = {"id": "created"}
+
+        SETUP.configure_schema("https://example.test", "token")
+
+        created_names = [call.args[3] for call in create.call_args_list]
+        for name in (
+                "marketplace_usage",
+                "marketplace_activity",
+                "marketplace_search_cache",
+                "marketplace_observations"):
+            self.assertIn(name, created_names)
+
 
 if __name__ == "__main__":
     unittest.main()

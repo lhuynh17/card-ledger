@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const {
   REJECTION,
@@ -13,6 +15,12 @@ const {
   createBrightDataAdapter,
   normalizeRawRecord,
 } = require("./pb_hooks/lib/bright-data-adapter");
+const {
+  configFromEnvironment,
+  evaluateBudget,
+  queryHash,
+  usageProjection,
+} = require("./pb_hooks/lib/marketplace-policy");
 
 const request = {
   query: "2023 Pokemon Charizard 199 PSA 10",
@@ -142,4 +150,67 @@ test("adapter reports authentication, timeout, and empty results safely", () => 
   const result = empty.search(search, baseConfig);
   assert.equal(result.records_returned, 0);
   assert.deepEqual(result.candidates, []);
+});
+
+test("budget defaults are conservative and configurable", () => {
+  const values = {
+    BRIGHT_DATA_ENABLED: "1",
+    BRIGHT_DATA_KILL_SWITCH: "0",
+    BRIGHT_DATA_MONTHLY_ALLOWANCE: "5000",
+    BRIGHT_DATA_DAILY_CEILING: "250",
+  };
+  const config = configFromEnvironment((name) => values[name]);
+  assert.equal(config.monthlyAllowance, 5000);
+  assert.equal(config.dailyCeiling, 250);
+  assert.equal(config.hardStop, true);
+  assert.equal(config.resultLimit, 50);
+});
+
+test("kill switch, monthly allowance, and daily ceiling stop requests", () => {
+  const base = configFromEnvironment(() => "");
+  assert.equal(evaluateBudget(base, { monthRecords: 0, todayRecords: 0 }, 50).allowed, false);
+
+  const enabled = { ...base, enabled: true, killSwitch: false };
+  assert.deepEqual(
+    evaluateBudget(enabled, { monthRecords: 5000, todayRecords: 0 }, 50).blockedReasons,
+    ["monthly_allowance"]
+  );
+  assert.deepEqual(
+    evaluateBudget(enabled, { monthRecords: 0, todayRecords: 250 }, 50).blockedReasons,
+    ["daily_ceiling"]
+  );
+  assert.deepEqual(
+    evaluateBudget(enabled, { monthRecords: 4975, todayRecords: 0 }, 50).blockedReasons,
+    ["monthly_allowance"]
+  );
+});
+
+test("hard stop can warn without blocking after explicit configuration", () => {
+  const config = {
+    ...configFromEnvironment(() => ""),
+    enabled: true,
+    killSwitch: false,
+    hardStop: false,
+  };
+  const result = evaluateBudget(config, { monthRecords: 5000, todayRecords: 250 }, 50);
+  assert.equal(result.allowed, true);
+  assert.equal(result.percentConsumed, 100);
+  assert.equal(result.warningThreshold, 90);
+});
+
+test("usage projection and query hashes are deterministic", () => {
+  assert.deepEqual(usageProjection(280, new Date("2026-07-28T00:00:00Z")), {
+    averageDailyUsage: 10,
+    projectedMonthEndUsage: 310,
+  });
+  assert.equal(queryHash(normalizeRequest(request)), queryHash(normalizeRequest(request)));
+});
+
+test("marketplace routes require app-user authentication and add no listener", () => {
+  const hook = fs.readFileSync(path.join(
+    __dirname, "pb_hooks", "slab_ledger_marketplace.pb.js"
+  ), "utf8");
+  const routes = [...hook.matchAll(/routerAdd\(([\s\S]*?)\$apis\.requireAuth\("users"\)\);/g)];
+  assert.equal(routes.length, 2);
+  assert.doesNotMatch(hook, /webhook|0\.0\.0\.0|ThreadingHTTPServer|listen\(/i);
 });
