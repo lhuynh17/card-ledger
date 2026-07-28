@@ -313,3 +313,19 @@ dataset, input and response schema, sold/completed coverage, billing unit,
 limits, and request mode are verified. Async work uses outbound polling. The
 local collector, Parse.bot, Product Research, manual comps, and cached values
 remain available throughout evaluation.
+
+## 2026-07-28 — Scheduled marketplace checks remain bounded evaluations
+
+**Decision:** Let the owner schedule three to five recent sold-listing checks
+per active graded card using hour, day, week, or month intervals. Keep the
+schedule off by default, track each card independently, and process only a
+bounded number of due cards every 15 minutes.
+
+**Why:** Cards need different refresh timing without creating a request burst
+or forcing manual refreshes, while the owner needs a visible estimate of
+monthly record use.
+
+**Consequence:** Scheduled runs use the same authenticated outbound boundary,
+cache, returned-record budgets, cooldowns, normalization, and rejection logic
+as manual evaluations. They store private observations but never overwrite a
+trusted market value automatically.

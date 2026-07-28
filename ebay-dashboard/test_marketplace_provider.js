@@ -18,7 +18,10 @@ const {
 const {
   configFromEnvironment,
   evaluateBudget,
+  nextScheduleAt,
+  normalizeSchedule,
   queryHash,
+  scheduleProjection,
   usageProjection,
 } = require("./pb_hooks/lib/marketplace-policy");
 
@@ -295,11 +298,50 @@ test("usage projection and query hashes are deterministic", () => {
   assert.equal(queryHash(normalizeRequest(request)), queryHash(normalizeRequest(request)));
 });
 
+test("schedule supports three to five listings and hour to month intervals", () => {
+  assert.deepEqual(normalizeSchedule({
+    enabled:true,
+    listing_count:5,
+    interval_unit:"hours",
+    interval_value:12,
+  }), {
+    enabled:true,
+    listing_count:5,
+    interval_unit:"hours",
+    interval_value:12,
+  });
+  assert.equal(nextScheduleAt({
+    listing_count:3,
+    interval_unit:"days",
+    interval_value:1,
+  }, new Date("2026-07-28T00:00:00Z")), "2026-07-29T00:00:00.000Z");
+  assert.equal(nextScheduleAt({
+    listing_count:3,
+    interval_unit:"months",
+    interval_value:1,
+  }, new Date("2026-07-28T00:00:00Z")), "2026-08-28T00:00:00.000Z");
+});
+
+test("schedule projection exposes the monthly budget impact", () => {
+  assert.deepEqual(scheduleProjection({
+    listing_count:5,
+    interval_unit:"hours",
+    interval_value:12,
+  }, 10), {
+    estimated_monthly_operations:609,
+    estimated_monthly_records:3045,
+  });
+});
+
 test("marketplace routes require app-user authentication and add no listener", () => {
   const hook = fs.readFileSync(path.join(
     __dirname, "pb_hooks", "slab_ledger_marketplace.pb.js"
   ), "utf8");
   const routes = [...hook.matchAll(/routerAdd\(([\s\S]*?)\$apis\.requireAuth\("users"\)\);/g)];
-  assert.equal(routes.length, 2);
+  assert.equal(routes.length, 4);
   assert.doesNotMatch(hook, /webhook|0\.0\.0\.0|ThreadingHTTPServer|listen\(/i);
+  assert.match(
+    hook,
+    /cronAdd\("slab-ledger-marketplace-schedule", "\*\/15 \* \* \* \*"/
+  );
 });

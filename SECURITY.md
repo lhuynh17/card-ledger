@@ -132,6 +132,9 @@ targets unless a narrowly reviewed internal use case explicitly requires them.
 - The adapter cannot make a live request unless the feature flag is enabled,
   the kill switch is off, and account/schema confirmation is explicit.
 - Async jobs use bounded outbound polling. No inbound callback is accepted.
+- The optional automatic scheduler runs inside PocketBase every 15 minutes,
+  selects only owner-private due settings and active owner cards, and starts no
+  inbound service. It processes a bounded number of cards per tick.
 - Provider response aliases are confined to the Bright Data adapter. Only
   strictly validated, normalized candidates cross into the domain layer.
 - Empty, malformed, timed-out, blocked, or failed results return a safe error
@@ -270,6 +273,8 @@ may contain session or account context.
 - owner-only marketplace usage, activity, cache, and normalized observation
   collections with scheduled retention cleanup;
 - side-by-side managed-provider evaluation with explicit owner save;
+- default-off owner schedule, per-card due state, monthly cost projection, and
+  a bounded cards-per-tick limit;
 - ignored secrets, caches, logs, and diagnostics;
 - local/offline fallbacks that do not replace server authorization;
 - automatic local and off-site backups.

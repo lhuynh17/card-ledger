@@ -135,6 +135,27 @@ MARKETPLACE_OBSERVATION_FIELDS = [
     {"name": "expires_at", "type": "date", "required": True},
 ]
 
+MARKETPLACE_REFRESH_SETTING_FIELDS = [
+    {"name": "enabled", "type": "bool"},
+    {"name": "listing_count", "type": "number", "required": True,
+     "min": 3, "max": 5, "onlyInt": True},
+    {"name": "interval_unit", "type": "select", "required": True,
+     "maxSelect": 1, "values": ["hours", "days", "weeks", "months"]},
+    {"name": "interval_value", "type": "number", "required": True,
+     "min": 1, "max": 720, "onlyInt": True},
+    {"name": "last_run_at", "type": "date"},
+    {"name": "next_run_at", "type": "date"},
+]
+
+MARKETPLACE_REFRESH_STATE_FIELDS = [
+    {"name": "card_id", "type": "text", "required": True, "max": 100},
+    {"name": "last_run_at", "type": "date"},
+    {"name": "next_run_at", "type": "date"},
+    {"name": "status", "type": "text", "max": 40},
+    {"name": "records_used", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "safe_error", "type": "text", "max": 500},
+]
+
 DEBT_FIELDS = [
     {"name": "direction", "type": "select", "required": True, "maxSelect": 1,
      "values": ["owed_to_me", "i_owe"]},
@@ -538,6 +559,20 @@ def configure_schema(base_url: str, token: str):
              "ON `marketplace_observations` (`owner`, `provider`, `listing_id`)",
              "CREATE INDEX `idx_marketplace_observation_owner_query` "
              "ON `marketplace_observations` (`owner`, `query_hash`)"],
+        ),
+        (
+            "marketplace_refresh_settings",
+            MARKETPLACE_REFRESH_SETTING_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_refresh_setting_owner` "
+             "ON `marketplace_refresh_settings` (`owner`)"],
+        ),
+        (
+            "marketplace_refresh_state",
+            MARKETPLACE_REFRESH_STATE_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_refresh_state_owner_card` "
+             "ON `marketplace_refresh_state` (`owner`, `card_id`)",
+             "CREATE INDEX `idx_marketplace_refresh_state_owner_next` "
+             "ON `marketplace_refresh_state` (`owner`, `next_run_at`)"],
         ),
     ]
     for name, fields, indexes in marketplace_collections:

@@ -287,8 +287,29 @@ class PocketBaseSecurityTests(unittest.TestCase):
                 "marketplace_usage",
                 "marketplace_activity",
                 "marketplace_search_cache",
-                "marketplace_observations"):
+                "marketplace_observations",
+                "marketplace_refresh_settings",
+                "marketplace_refresh_state"):
             self.assertIn(name, created_names)
+
+    def test_marketplace_schedule_is_owner_private_and_bounded(self):
+        setting = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_REFRESH_SETTING_FIELDS
+        }
+        state = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_REFRESH_STATE_FIELDS
+        }
+
+        self.assertEqual(setting["listing_count"]["min"], 3)
+        self.assertEqual(setting["listing_count"]["max"], 5)
+        self.assertEqual(
+            setting["interval_unit"]["values"],
+            ["hours", "days", "weeks", "months"],
+        )
+        self.assertTrue(state["card_id"]["required"])
+        self.assertLessEqual(state["safe_error"]["max"], 500)
 
 
 if __name__ == "__main__":

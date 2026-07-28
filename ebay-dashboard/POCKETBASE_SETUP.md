@@ -52,6 +52,10 @@ It prepares:
   results, including empty results.
 - `marketplace_observations`: owner-private normalized accepted/rejected listing
   observations with rejection reasons and expiry.
+- `marketplace_refresh_settings`: one owner-private, default-off schedule with
+  listing count and interval.
+- `marketplace_refresh_state`: owner-private per-card due time and last safe
+  scheduler result.
 
 The three older `grading_play_*` collections are retained so upgrading does
 not delete any grading data created by earlier Slab Ledger versions.
@@ -125,7 +129,7 @@ owner must explicitly save it.
 ### Install the server files
 
 1. Create a PocketBase backup.
-2. Run `setup_pocketbase.py`. The migration only adds the four owner-private
+2. Run `setup_pocketbase.py`. The migration only adds the six owner-private
    marketplace collections listed above; it does not alter or delete inventory
    or existing market values.
 3. Copy `pb_hooks/slab_ledger_marketplace.pb.js` and the complete
@@ -196,6 +200,7 @@ file.
 | `BRIGHT_DATA_COOLDOWN_MINUTES` | `15` | Cooldown after retryable failures |
 | `BRIGHT_DATA_CACHE_HOURS` | `22` | Private identical-query cache lifetime |
 | `BRIGHT_DATA_RETENTION_DAYS` | `90` | Activity and observation retention |
+| `BRIGHT_DATA_SCHEDULE_MAX_CARDS_PER_TICK` | `3` | Maximum due cards processed each 15-minute scheduler pass |
 
 `BRIGHT_DATA_HARD_STOP=0` permits warnings without blocking after the limits are
 reached and should be used only after a deliberate budget review.
@@ -213,6 +218,13 @@ Only after the account details above are confirmed:
 7. evaluate one manually reviewed card;
 8. compare candidates, rejections, record usage, and cost against eBay Product
    Research before saving anything.
+
+After live validation succeeds, open **Marketplace Usage** to configure
+automatic checks. Choose three, four, or five recent sold listings and a number
+of hours, days, weeks, or months. Use 12 hours for twice daily or one day for
+once daily. Review the projected monthly returned-record count before enabling
+the schedule. The schedule starts after the selected interval; it does not
+immediately send a request when saved.
 
 If the live response does not match the adapter schema, turn the kill switch on
 and leave `BRIGHT_DATA_SCHEMA_CONFIRMED=0` until the adapter is updated.
@@ -246,7 +258,7 @@ MFA and IP restriction options before exposing any additional network path.
 ## After setup
 
 1. Refresh Slab Ledger and sign in.
-2. Use **Market** on an active card to save up to three manual comps.
+2. Use **Market** on an active card to save up to five manual comps.
 3. When marking a card sold, enter platform fees and shipping cost.
 4. Use **Business finances** for operating expenses and owner/capital activity.
    Each entry can include one receipt photo, screenshot, or PDF up to 10 MB.

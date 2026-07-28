@@ -9,12 +9,15 @@ The app tracks:
   slab images, and optional recent-sales estimates through private PocketBase
   routes, with structured, editable eBay search keywords and a guided manual
   fallback;
-- one-tap PSA recent-sale comparables or manual market values from one to three
+- one-tap PSA recent-sale comparables or manual market values from one to five
   sales, including links, source, notes, update date, and value history;
 - a default-off Bright Data evaluation adapter behind authenticated PocketBase
   routes, with private usage controls, caching, normalized observations, and a
   Marketplace Usage dashboard; live collection remains disabled until the
   owner's account-specific eBay dataset and schema are validated;
+- an owner-controlled, default-off schedule for checking each active graded
+  card for three to five recent sold listings at an hour, day, week, or month
+  interval, without automatically replacing saved values;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;
 - an owner profile with a synced display name and protected business

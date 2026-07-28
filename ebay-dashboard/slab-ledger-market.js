@@ -95,7 +95,10 @@
 
   function show(card, value = values.get(idFor(card))) {
     const modal = document.getElementById("marketModal");
-    const comps = (value?.comparables || []).slice(0, 3);
+    const desiredComps = Math.max(3, Math.min(
+      5, Number(window.slabManagedMarketplace?.schedule?.listing_count) || 3
+    ));
+    const comps = (value?.comparables || []).slice(0, desiredComps);
     const history = (value?.history || []).slice().reverse().slice(0, 8);
     const state = age(value);
     const query = ebaySearchTerms(card);
@@ -111,7 +114,7 @@
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
       ${window.slabManagedMarketplace?.state?.enabled ? `<button id="loadManagedSales" type="button"${window.slabManagedMarketplace.state.kill_switch || !window.slabManagedMarketplace.state.configured ? " disabled" : ""}>Evaluate with managed provider</button>` : ""}
       <a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open eBay sold search ↗</a></div>
-      ${[0,1,2].map((i) => `<div class="comp-row"><div class="mf"><label>Sold price ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
+      ${Array.from({length:desiredComps}, (_, i) => `<div class="comp-row"><div class="mf"><label>Sold price ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
       <div class="mf"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="Paste the sold-listing link"></div></div>`).join("")}
       <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","Bright Data evaluation","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
       <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
@@ -160,6 +163,9 @@
     const managedButton = document.getElementById("loadManagedSales");
     if (managedButton) managedButton.addEventListener("click", async () => {
       const message = document.getElementById("marketMessage");
+      const listingCount = Math.max(3, Math.min(
+        5, Number(window.slabManagedMarketplace?.schedule?.listing_count) || 3
+      ));
       managedButton.disabled = true;
       message.className = "market-message";
       message.textContent = "Running a private side-by-side marketplace evaluation…";
@@ -175,11 +181,11 @@
           completed_only:true,
           sort:"sold_desc",
           search_url:soldUrl,
-          result_limit:50,
+          result_limit:listingCount,
           feature:"market_modal"
         });
         const candidates = Array.isArray(result?.candidates)
-          ? result.candidates.slice(0, 3)
+          ? result.candidates.slice(0, listingCount)
           : [];
         if (!result?.valuation || !candidates.length) {
           throw new Error("No usable managed-provider comparables were returned. Your saved value was not changed.");

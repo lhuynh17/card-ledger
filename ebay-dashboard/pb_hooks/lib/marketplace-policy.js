@@ -44,6 +44,9 @@ function configFromEnvironment(env) {
     cacheHours: positiveInteger(get("BRIGHT_DATA_CACHE_HOURS"), 22, 168),
     cooldownMinutes: positiveInteger(get("BRIGHT_DATA_COOLDOWN_MINUTES"), 15, 1440),
     retentionDays: positiveInteger(get("BRIGHT_DATA_RETENTION_DAYS"), 90, 365),
+    scheduleMaxCardsPerTick: positiveInteger(
+      get("BRIGHT_DATA_SCHEDULE_MAX_CARDS_PER_TICK"), 3, 25
+    ),
   };
 }
 
@@ -107,7 +110,69 @@ function queryHash(request) {
     request.card_identity,
     request.sold_only,
     request.completed_only,
+    request.result_limit,
   ].join("|").toLowerCase());
+}
+
+function normalizeSchedule(input) {
+  const schedule = input || {};
+  const listingCount = Math.max(3, Math.min(5, parseInt(
+    schedule.listing_count, 10
+  ) || 3));
+  const unit = String(schedule.interval_unit || "days").toLowerCase();
+  const limits = {
+    hours: 720,
+    days: 31,
+    weeks: 12,
+    months: 12,
+  };
+  if (!limits[unit]) throw new Error("Schedule interval unit is invalid.");
+  const value = parseInt(schedule.interval_value, 10);
+  if (!Number.isFinite(value) || value < 1 || value > limits[unit]) {
+    throw new Error("Schedule interval value is invalid.");
+  }
+  return {
+    enabled: Boolean(schedule.enabled),
+    listing_count: listingCount,
+    interval_unit: unit,
+    interval_value: value,
+  };
+}
+
+function nextScheduleAt(scheduleInput, from) {
+  const schedule = normalizeSchedule(scheduleInput);
+  const date = from instanceof Date ? new Date(from.getTime()) : new Date(from);
+  if (!Number.isFinite(date.getTime())) throw new Error("Schedule date is invalid.");
+  if (schedule.interval_unit === "months") {
+    date.setUTCMonth(date.getUTCMonth() + schedule.interval_value);
+  } else {
+    const hours = schedule.interval_unit === "hours"
+      ? schedule.interval_value
+      : schedule.interval_unit === "days"
+        ? schedule.interval_value * 24
+        : schedule.interval_value * 24 * 7;
+    date.setTime(date.getTime() + hours * 3600000);
+  }
+  return date.toISOString();
+}
+
+function scheduleProjection(scheduleInput, activeCardCount) {
+  const schedule = normalizeSchedule(scheduleInput);
+  const cards = Math.max(0, parseInt(activeCardCount, 10) || 0);
+  const hours = schedule.interval_unit === "hours"
+    ? schedule.interval_value
+    : schedule.interval_unit === "days"
+      ? schedule.interval_value * 24
+      : schedule.interval_unit === "weeks"
+        ? schedule.interval_value * 24 * 7
+        : schedule.interval_value * 24 * 30.4375;
+  const operations = cards
+    ? Math.ceil(cards * (24 * 30.4375) / hours)
+    : 0;
+  return {
+    estimated_monthly_operations: operations,
+    estimated_monthly_records: operations * schedule.listing_count,
+  };
 }
 
 module.exports = {
@@ -117,6 +182,9 @@ module.exports = {
   fnv1a,
   positiveInteger,
   queryHash,
+  normalizeSchedule,
+  nextScheduleAt,
+  scheduleProjection,
   usageProjection,
   warningThresholds,
 };

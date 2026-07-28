@@ -197,6 +197,13 @@ These rules are mandatory:
 - Managed-provider results run in side-by-side evaluation mode. They may fill a
   review form but must not overwrite a saved value without explicit owner
   action.
+- Automatic managed-provider checks are owner-configured and default off. The
+  15-minute scheduler only finds due private work; each card keeps its own next
+  run time. Budget limits, cache reuse, provider cooldowns, the feature flag,
+  and the kill switch always take precedence over the schedule.
+- Scheduled checks may request three to five accepted sold comparables per
+  card. Preserve the configurable hour/day/week/month cadence and show its
+  estimated monthly record impact before enabling it.
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
 

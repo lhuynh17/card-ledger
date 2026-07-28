@@ -170,6 +170,8 @@ Implemented safeguards:
 - duplicate-operation blocking and shared recent-query cache;
 - side-by-side UI evaluation that never writes a value automatically;
 - a Marketplace Usage dashboard.
+- an owner-controlled schedule for three to five recent accepted sold listings
+  per active card, with hour/day/week/month intervals and per-card due state.
 
 Still required before live record collection:
 
@@ -178,6 +180,28 @@ Still required before live record collection:
   support, billing unit, record/page limits, and sync/async behavior;
 - run metadata inspection, then one deliberately bounded live validation;
 - compare a representative card set against manual Product Research.
+
+## Automatic evaluation schedule — Current gated foundation
+
+The owner can enable automatic checks from Marketplace Usage, choose three,
+four, or five recent sold listings, and set a numeric interval in hours, days,
+weeks, or months. Twelve hours is twice daily and one day is once daily.
+
+The scheduler:
+
+- remains off by default and cannot bypass the provider feature flag or kill
+  switch;
+- wakes every 15 minutes but calls Bright Data only for due active cards;
+- keeps independent next-run state for each card;
+- limits cards processed per scheduler tick;
+- reuses identical-query cache entries without consuming provider records;
+- stops at daily/monthly hard limits and honors provider cooldowns;
+- records safe usage/activity and normalized private observations;
+- never writes or clears `market_values` automatically.
+
+The dashboard estimates monthly operations and returned records for the current
+active-card count before the schedule is enabled. Actual billing still depends
+on the account-confirmed Bright Data billing unit and response behavior.
 
 ## Two-stage marketplace search — Current principle, target expansion
 

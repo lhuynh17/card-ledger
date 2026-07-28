@@ -134,7 +134,7 @@ company, while the PocketBase record ID remains the storage identity.
 - normalized query and search URL;
 - market value, confidence, checked time, low/high range;
 - accepted and rejected counts;
-- up to three recent comparables for the primary UI;
+- up to five recent comparables for the primary UI;
 - source and notes;
 - append-style value history;
 - last safe error.
@@ -148,6 +148,14 @@ the owner must explicitly save an accepted value. Owner-only supporting
 collections store daily/monthly usage, bounded recent activity, short-lived
 search cache entries, and normalized observations. A scheduled server task
 removes expired cache, activity, and observation records.
+
+`marketplace_refresh_settings` stores one default-off owner schedule with a
+three-to-five comparable target and an hour/day/week/month interval.
+`marketplace_refresh_state` stores per-card due time and the last safe outcome.
+A PocketBase cron checks for due work every 15 minutes, processes only a bounded
+number of active cards, and advances each processed card independently. It
+stores evaluation observations and cache entries, never an automatic trusted
+market value.
 
 ### Portfolio history
 
@@ -235,6 +243,11 @@ Bright Data implements the retrieval side of path 3 behind a default-off
 provider contract. Synchronous requests are supported when confirmed by the
 account scraper. Asynchronous requests use outbound trigger/progress/snapshot
 polling only; no public callback is required.
+
+Scheduled checks use the same provider contract, cache, normalization,
+rejection rules, returned-record accounting, budgets, and cooldowns as a manual
+evaluation. Twelve hours represents twice daily and one day represents once
+daily; longer custom hour, week, and month intervals are supported.
 
 See `docs/Marketplace.md`.
 
