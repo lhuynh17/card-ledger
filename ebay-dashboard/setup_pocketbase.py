@@ -145,6 +145,20 @@ MARKETPLACE_REFRESH_SETTING_FIELDS = [
      "min": 1, "max": 720, "onlyInt": True},
     {"name": "last_run_at", "type": "date"},
     {"name": "next_run_at", "type": "date"},
+    {"name": "sold_enabled", "type": "bool"},
+    {"name": "sold_listing_count", "type": "number", "min": 1, "max": 2,
+     "onlyInt": True},
+    {"name": "sold_interval_unit", "type": "select", "maxSelect": 1,
+     "values": ["hours", "days", "weeks", "months"]},
+    {"name": "sold_interval_value", "type": "number", "min": 1, "max": 720,
+     "onlyInt": True},
+    {"name": "active_enabled", "type": "bool"},
+    {"name": "active_listing_count", "type": "number", "min": 3, "max": 5,
+     "onlyInt": True},
+    {"name": "active_interval_unit", "type": "select", "maxSelect": 1,
+     "values": ["hours", "days", "weeks", "months"]},
+    {"name": "active_interval_value", "type": "number", "min": 1, "max": 720,
+     "onlyInt": True},
 ]
 
 MARKETPLACE_REFRESH_STATE_FIELDS = [
@@ -154,6 +168,11 @@ MARKETPLACE_REFRESH_STATE_FIELDS = [
     {"name": "status", "type": "text", "max": 40},
     {"name": "records_used", "type": "number", "min": 0, "onlyInt": True},
     {"name": "safe_error", "type": "text", "max": 500},
+    {"name": "schedule_override", "type": "json"},
+    {"name": "sold_last_run_at", "type": "date"},
+    {"name": "sold_next_run_at", "type": "date"},
+    {"name": "active_last_run_at", "type": "date"},
+    {"name": "active_next_run_at", "type": "date"},
 ]
 
 DEBT_FIELDS = [

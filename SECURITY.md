@@ -135,6 +135,8 @@ targets unless a narrowly reviewed internal use case explicitly requires them.
 - The optional automatic scheduler runs inside PocketBase every 15 minutes,
   selects only owner-private due settings and active owner cards, and starts no
   inbound service. It processes a bounded number of cards per tick.
+- Apify sold evidence and Bright Data active listings remain separate outbound
+  adapters. Asking prices can never be promoted to completed-sale evidence.
 - Provider response aliases are confined to the Bright Data adapter. Only
   strictly validated, normalized candidates cross into the domain layer.
 - Empty, malformed, timed-out, blocked, or failed results return a safe error

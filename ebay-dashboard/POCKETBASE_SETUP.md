@@ -202,6 +202,19 @@ file.
 | `BRIGHT_DATA_RETENTION_DAYS` | `90` | Activity and observation retention |
 | `BRIGHT_DATA_SCHEDULE_MAX_CARDS_PER_TICK` | `3` | Maximum due cards processed each 15-minute scheduler pass |
 
+Apify sold evidence uses a separate default-off configuration:
+
+| Variable | Safe starting value | Purpose |
+| --- | --- | --- |
+| `APIFY_API_TOKEN` | unset | Secret server-only token; never commit or store in PocketBase |
+| `APIFY_SOLD_SCHEMA_CONFIRMED` | `0` | Blocks live calls until a sample matches the adapter |
+| `APIFY_SOLD_ENABLED` | `0` | Sold-evidence feature flag |
+| `APIFY_SOLD_KILL_SWITCH` | `1` | Immediate sold-provider stop |
+| `APIFY_SOLD_MONTHLY_ALLOWANCE` | `1400` | Safety cap below the advertised free credit |
+| `APIFY_SOLD_DAILY_CEILING` | `100` | Maximum returned sold records per day |
+| `APIFY_SOLD_HARD_STOP` | `1` | Stop before crossing an allowance |
+| `APIFY_SOLD_UNIT_COST_USD` | `0.00345` | Dashboard estimate; update if actor pricing changes |
+
 `BRIGHT_DATA_HARD_STOP=0` permits warnings without blocking after the limits are
 reached and should be used only after a deliberate budget review.
 
@@ -220,11 +233,10 @@ Only after the account details above are confirmed:
    Research before saving anything.
 
 After live validation succeeds, open **Marketplace Usage** to configure
-automatic checks. Choose three, four, or five recent sold listings and a number
-of hours, days, weeks, or months. Use 12 hours for twice daily or one day for
-once daily. Review the projected monthly returned-record count before enabling
-the schedule. The schedule starts after the selected interval; it does not
-immediately send a request when saved.
+automatic checks. Choose one or two Apify sold observations and three to five
+Bright Data active observations, each with its own hour/day/week/month
+interval. Review the projected monthly records, estimated Apify cost, and
+free-tier percentage before enabling either schedule.
 
 If the live response does not match the adapter schema, turn the kill switch on
 and leave `BRIGHT_DATA_SCHEMA_CONFIRMED=0` until the adapter is updated.

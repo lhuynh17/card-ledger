@@ -50,6 +50,26 @@ function configFromEnvironment(env) {
   };
 }
 
+function apifyConfigFromEnvironment(env) {
+  const get = (name) => String(env(name) || "");
+  return {
+    enabled: boolValue(get("APIFY_SOLD_ENABLED"), false),
+    killSwitch: boolValue(get("APIFY_SOLD_KILL_SWITCH"), true),
+    schemaConfirmed: boolValue(get("APIFY_SOLD_SCHEMA_CONFIRMED"), false),
+    apiToken: get("APIFY_API_TOKEN"),
+    monthlyAllowance: positiveInteger(get("APIFY_SOLD_MONTHLY_ALLOWANCE"), 1400, 100000),
+    dailyCeiling: positiveInteger(get("APIFY_SOLD_DAILY_CEILING"), 100, 10000),
+    hardStop: boolValue(get("APIFY_SOLD_HARD_STOP"), true),
+    timeoutSeconds: positiveInteger(get("APIFY_SOLD_TIMEOUT_SECONDS"), 30, 90),
+    maxRetries: positiveInteger(get("APIFY_SOLD_MAX_RETRIES"), 1, 2),
+    pollIntervalSeconds: positiveInteger(
+      get("APIFY_SOLD_POLL_INTERVAL_SECONDS"), 3, 30
+    ),
+    maxPolls: positiveInteger(get("APIFY_SOLD_MAX_POLLS"), 20, 40),
+    unitCostUsd: Math.max(0, Number(get("APIFY_SOLD_UNIT_COST_USD")) || 0.00345),
+  };
+}
+
 function evaluateBudget(config, usage, requestedLimit) {
   const monthUsed = Math.max(0, Number(usage.monthRecords) || 0);
   const todayUsed = Math.max(0, Number(usage.todayRecords) || 0);
@@ -175,7 +195,59 @@ function scheduleProjection(scheduleInput, activeCardCount) {
   };
 }
 
+function normalizeProviderSchedule(input, role) {
+  const schedule = input || {};
+  const sold = role === "sold";
+  const minimum = sold ? 1 : 3;
+  const maximum = sold ? 2 : 5;
+  const listingCount = Math.max(minimum, Math.min(maximum, parseInt(
+    schedule.listing_count, 10
+  ) || minimum));
+  const normalized = normalizeSchedule({
+    enabled: schedule.enabled,
+    listing_count: Math.max(3, listingCount),
+    interval_unit: schedule.interval_unit,
+    interval_value: schedule.interval_value,
+  });
+  normalized.listing_count = listingCount;
+  return normalized;
+}
+
+function providerScheduleProjection(scheduleInput, activeCardCount, options) {
+  const settings = options || {};
+  const role = settings.role === "active" ? "active" : "sold";
+  const schedule = normalizeProviderSchedule(scheduleInput, role);
+  const cards = Math.max(0, parseInt(activeCardCount, 10) || 0);
+  const hours = schedule.interval_unit === "hours"
+    ? schedule.interval_value
+    : schedule.interval_unit === "days"
+      ? schedule.interval_value * 24
+      : schedule.interval_unit === "weeks"
+        ? schedule.interval_value * 24 * 7
+        : schedule.interval_value * 24 * 30.4375;
+  const operations = schedule.enabled && cards
+    ? Math.ceil(cards * (24 * 30.4375) / hours)
+    : 0;
+  const records = operations * schedule.listing_count;
+  const unitCost = Math.max(0, Number(settings.unitCostUsd) || 0);
+  const freeAllowance = Math.max(0, Number(settings.freeAllowance) || 0);
+  const projectedCost = Math.round(records * unitCost * 100) / 100;
+  return {
+    role,
+    estimated_monthly_operations: operations,
+    estimated_monthly_records: records,
+    estimated_monthly_cost_usd: projectedCost,
+    free_allowance: freeAllowance,
+    free_remaining: Math.max(0, freeAllowance - records),
+    percent_of_free_allowance: freeAllowance
+      ? Math.round(records / freeAllowance * 1000) / 10
+      : 0,
+    fits_free_allowance: !freeAllowance || records <= freeAllowance,
+  };
+}
+
 module.exports = {
+  apifyConfigFromEnvironment,
   boolValue,
   configFromEnvironment,
   evaluateBudget,
@@ -183,7 +255,9 @@ module.exports = {
   positiveInteger,
   queryHash,
   normalizeSchedule,
+  normalizeProviderSchedule,
   nextScheduleAt,
+  providerScheduleProjection,
   scheduleProjection,
   usageProjection,
   warningThresholds,

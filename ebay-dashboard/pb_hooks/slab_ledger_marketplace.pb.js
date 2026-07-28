@@ -5,6 +5,7 @@
 // frontend code, PocketBase records, logs, or committed files.
 const providerCore = require(`${__hooks}/lib/marketplace-provider.js`);
 const brightData = require(`${__hooks}/lib/bright-data-adapter.js`);
+const apifySold = require(`${__hooks}/lib/apify-sold-adapter.js`);
 const policy = require(`${__hooks}/lib/marketplace-policy.js`);
 
 const activeOperations = {};
@@ -12,6 +13,10 @@ let providerCooldownUntil = 0;
 
 function marketplaceConfig() {
   return policy.configFromEnvironment((name) => $os.getenv(name));
+}
+
+function apifyConfig() {
+  return policy.apifyConfigFromEnvironment((name) => $os.getenv(name));
 }
 
 function nowIso() {
@@ -452,28 +457,109 @@ function scheduleRecord(owner) {
 
 function scheduleResponse(owner) {
   const record = scheduleRecord(owner);
-  const schedule = record ? {
-    enabled: record.getBool("enabled"),
-    listing_count: record.getInt("listing_count") || 3,
-    interval_unit: record.getString("interval_unit") || "days",
-    interval_value: record.getInt("interval_value") || 1,
+  const soldConfig = apifyConfig();
+  const activeConfig = marketplaceConfig();
+  const sold = record ? {
+    enabled: record.getBool("sold_enabled"),
+    listing_count: record.getInt("sold_listing_count") || 2,
+    interval_unit: record.getString("sold_interval_unit") || "days",
+    interval_value: record.getInt("sold_interval_value") || 3,
+  } : {
+    enabled: false,
+    listing_count: 2,
+    interval_unit: "days",
+    interval_value: 3,
+  };
+  const active = record ? {
+    enabled: record.getBool("active_enabled"),
+    listing_count: record.getInt("active_listing_count") || 3,
+    interval_unit: record.getString("active_interval_unit") || "weeks",
+    interval_value: record.getInt("active_interval_value") || 1,
   } : {
     enabled: false,
     listing_count: 3,
-    interval_unit: "days",
+    interval_unit: "weeks",
     interval_value: 1,
   };
-  const cards = activeCards(owner).length;
-  return Object.assign({}, schedule, {
-    active_card_count: cards,
+  const cards = activeCards(owner);
+  function aggregate(role, defaults, options) {
+    let operations = 0;
+    let records = 0;
+    let overrides = 0;
+    let overrideOperations = 0;
+    let overrideRecords = 0;
+    for (const card of cards) {
+      const state = findOwnerRecord(
+        "marketplace_refresh_state",
+        owner,
+        "card_id = {:card}",
+        { card: card.id }
+      );
+      const saved = state ? jsonValue(state, "schedule_override", {}) : {};
+      const roleOverride = saved && saved[role] || { mode: "inherit" };
+      let effective = defaults;
+      if (roleOverride.mode === "off") {
+        effective = Object.assign({}, defaults, { enabled: false });
+        overrides += 1;
+      } else if (roleOverride.mode === "custom") {
+        effective = roleOverride;
+        overrides += 1;
+      }
+      const projection = policy.providerScheduleProjection(effective, 1, options);
+      operations += projection.estimated_monthly_operations;
+      records += projection.estimated_monthly_records;
+      if (roleOverride.mode && roleOverride.mode !== "inherit") {
+        overrideOperations += projection.estimated_monthly_operations;
+        overrideRecords += projection.estimated_monthly_records;
+      }
+    }
+    const allowance = options.freeAllowance;
+    return {
+      role: role,
+      estimated_monthly_operations: operations,
+      estimated_monthly_records: records,
+      estimated_monthly_cost_usd: Math.round(
+        records * options.unitCostUsd * 100
+      ) / 100,
+      free_allowance: allowance,
+      free_remaining: Math.max(0, allowance - records),
+      percent_of_free_allowance: allowance
+        ? Math.round(records / allowance * 1000) / 10
+        : 0,
+      fits_free_allowance: !allowance || records <= allowance,
+      card_overrides: overrides,
+      inherited_cards: Math.max(0, cards.length - overrides),
+      override_operations: overrideOperations,
+      override_records: overrideRecords,
+    };
+  }
+  return {
+    active_card_count: cards.length,
     last_run_at: record ? record.getString("last_run_at") : "",
     next_run_at: record ? record.getString("next_run_at") : "",
-    projection: policy.scheduleProjection(schedule, cards),
-  });
+    sold: Object.assign({}, sold, {
+      provider: "apify",
+      unit_cost_usd: soldConfig.unitCostUsd,
+      projection: aggregate("sold", sold, {
+        role: "sold",
+        unitCostUsd: soldConfig.unitCostUsd,
+        freeAllowance: soldConfig.monthlyAllowance,
+      }),
+    }),
+    active: Object.assign({}, active, {
+      provider: "bright_data",
+      projection: aggregate("active", active, {
+        role: "active",
+        unitCostUsd: 0,
+        freeAllowance: activeConfig.monthlyAllowance,
+      }),
+    }),
+  };
 }
 
 function saveSchedule(owner, input) {
-  const schedule = policy.normalizeSchedule(input);
+  const sold = policy.normalizeProviderSchedule(input.sold, "sold");
+  const active = policy.normalizeProviderSchedule(input.active, "active");
   let record = scheduleRecord(owner);
   if (!record) {
     record = new Record($app.findCollectionByNameOrId(
@@ -481,16 +567,53 @@ function saveSchedule(owner, input) {
     ));
     record.set("owner", owner);
   }
-  record.set("enabled", schedule.enabled);
-  record.set("listing_count", schedule.listing_count);
-  record.set("interval_unit", schedule.interval_unit);
-  record.set("interval_value", schedule.interval_value);
-  record.set(
-    "next_run_at",
-    schedule.enabled ? policy.nextScheduleAt(schedule, new Date()) : null
-  );
+  record.set("sold_enabled", sold.enabled);
+  record.set("sold_listing_count", sold.listing_count);
+  record.set("sold_interval_unit", sold.interval_unit);
+  record.set("sold_interval_value", sold.interval_value);
+  record.set("active_enabled", active.enabled);
+  record.set("active_listing_count", active.listing_count);
+  record.set("active_interval_unit", active.interval_unit);
+  record.set("active_interval_value", active.interval_value);
+  // The legacy single-provider cron must stay off until both account schemas
+  // complete their separate live-validation gates.
+  record.set("enabled", false);
+  record.set("next_run_at", null);
   $app.save(record);
   return scheduleResponse(owner);
+}
+
+function cardScheduleResponse(owner, cardId) {
+  ensureOwnedCard(owner, cardId);
+  const state = refreshState(owner, cardId);
+  return {
+    card_id: cardId,
+    override: jsonValue(state, "schedule_override", {}),
+    defaults: scheduleResponse(owner),
+  };
+}
+
+function saveCardSchedule(owner, cardId, input) {
+  ensureOwnedCard(owner, cardId);
+  const state = refreshState(owner, cardId);
+  const override = {};
+  for (const role of ["sold", "active"]) {
+    const roleInput = input[role] || {};
+    const mode = String(roleInput.mode || "inherit");
+    if (!["inherit", "custom", "off"].includes(mode)) {
+      throw new Error("invalid_override");
+    }
+    override[role] = { mode: mode };
+    if (mode === "custom") {
+      override[role] = Object.assign(
+        { mode: mode },
+        policy.normalizeProviderSchedule(roleInput, role)
+      );
+    }
+  }
+  state.set("schedule_override", override);
+  $app.save(state);
+  return cardScheduleResponse(owner, cardId);
 }
 
 routerAdd("GET", "/api/slab-ledger/marketplace/usage", (e) => {
@@ -518,8 +641,28 @@ routerAdd("PUT", "/api/slab-ledger/marketplace/schedule", (e) => {
     return e.json(200, saveSchedule(e.auth.id, e.requestInfo().body || {}));
   } catch (_) {
     return e.json(400, {
-      message: "Choose 3–5 listings and a valid hour, day, week, or month interval.",
+      message: "Choose 1–2 sold and 3–5 active listings with valid intervals.",
     });
+  }
+}, $apis.requireAuth("users"));
+
+routerAdd("GET", "/api/slab-ledger/marketplace/schedule/card/{cardId}", (e) => {
+  try {
+    return e.json(200, cardScheduleResponse(e.auth.id, e.request.pathValue("cardId")));
+  } catch (_) {
+    return e.json(404, { message: "The card schedule was not found." });
+  }
+}, $apis.requireAuth("users"));
+
+routerAdd("PUT", "/api/slab-ledger/marketplace/schedule/card/{cardId}", (e) => {
+  try {
+    return e.json(200, saveCardSchedule(
+      e.auth.id,
+      e.request.pathValue("cardId"),
+      e.requestInfo().body || {}
+    ));
+  } catch (_) {
+    return e.json(400, { message: "The card schedule override is invalid." });
   }
 }, $apis.requireAuth("users"));
 

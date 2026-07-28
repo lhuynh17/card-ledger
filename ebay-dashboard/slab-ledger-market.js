@@ -96,7 +96,7 @@
   function show(card, value = values.get(idFor(card))) {
     const modal = document.getElementById("marketModal");
     const desiredComps = Math.max(3, Math.min(
-      5, Number(window.slabManagedMarketplace?.schedule?.listing_count) || 3
+      5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
     ));
     const comps = (value?.comparables || []).slice(0, desiredComps);
     const history = (value?.history || []).slice().reverse().slice(0, 8);
@@ -112,15 +112,22 @@
       <form id="manualCompForm" class="manual-comps">
       <p class="market-help">Use the PSA button to fill recent sales automatically, or enter at least one comparable price yourself. Two or three comps improve confidence.</p>
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
-      ${window.slabManagedMarketplace?.state?.enabled ? `<button id="loadManagedSales" type="button"${window.slabManagedMarketplace.state.kill_switch || !window.slabManagedMarketplace.state.configured ? " disabled" : ""}>Evaluate with managed provider</button>` : ""}
       <a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open eBay sold search ↗</a></div>
       ${Array.from({length:desiredComps}, (_, i) => `<div class="comp-row"><div class="mf"><label>Sold price ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
       <div class="mf"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="Paste the sold-listing link"></div></div>`).join("")}
-      <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","Bright Data evaluation","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
+      <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","Apify sold evidence","Bright Data evaluation","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
       <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
       <div class="mf full"><label>Notes</label><textarea id="marketNotes" placeholder="Why these comps were selected…">${safe(value?.notes || "")}</textarea></div>
       <div class="market-actions"><button class="primary" type="submit">Save average as market value</button></div>
       <div class="market-message" id="marketMessage"></div></form>
+      ${card.remoteId ? `<section class="market-history"><h3>Automatic checks for this card</h3>
+      <div class="mf"><label>Sold-listing schedule</label><select id="cardSoldSchedule">
+      <option value="inherit">Use inventory default</option><option value="off">Off</option>
+      <option value="daily">Daily</option><option value="three_days">Every 3 days</option>
+      <option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+      <p class="market-status" id="cardScheduleEstimate" style="text-align:left"></p>
+      <div class="market-actions"><button id="saveCardSchedule" type="button">Save card schedule</button></div>
+      <div class="market-message" id="cardScheduleMessage"></div></section>` : ""}
       <div class="market-history"><h3>Value history</h3>${history.length ? history.map((item) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}</span></div>`).join("") : "<p class='market-status' style='text-align:left'>No saved history yet.</p>"}</div>`;
     modal.classList.add("open"); document.body.style.overflow = "hidden";
     const priceInputs = [...document.querySelectorAll(".comp-price")];
@@ -130,6 +137,69 @@
         ? cash(valid.reduce((sum, n) => sum + n, 0) / valid.length) : "—";
     };
     priceInputs.forEach((input) => input.addEventListener("input", recalc));
+    const cardSchedule = document.getElementById("cardSoldSchedule");
+    if (cardSchedule) {
+      const scheduleDetails = {
+        inherit:{label:"Uses the inventory default shown in Marketplace Usage."},
+        off:{label:"No automatic sold checks for this card."},
+        daily:{label:"About 61 sold records/month · about $0.21."},
+        three_days:{label:"About 21 sold records/month · about $0.07."},
+        weekly:{label:"About 9 sold records/month · about $0.03."},
+        monthly:{label:"2 sold records/month · under $0.01."},
+      };
+      const estimate = document.getElementById("cardScheduleEstimate");
+      const updateCardEstimate = () => {
+        estimate.textContent = scheduleDetails[cardSchedule.value]?.label || "";
+      };
+      cardSchedule.addEventListener("change", updateCardEstimate);
+      updateCardEstimate();
+      pbRequest(
+        "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId)
+      ).then((result) => {
+        const sold = result?.override?.sold || {};
+        if (sold.mode === "off") cardSchedule.value = "off";
+        else if (sold.mode === "custom") {
+          if (sold.interval_unit === "days" && sold.interval_value === 1) {
+            cardSchedule.value = "daily";
+          } else if (sold.interval_unit === "days" && sold.interval_value === 3) {
+            cardSchedule.value = "three_days";
+          } else if (sold.interval_unit === "weeks" && sold.interval_value === 1) {
+            cardSchedule.value = "weekly";
+          } else if (sold.interval_unit === "months" && sold.interval_value === 1) {
+            cardSchedule.value = "monthly";
+          }
+        }
+        updateCardEstimate();
+      }).catch(() => {});
+      document.getElementById("saveCardSchedule").addEventListener("click", async () => {
+        const message = document.getElementById("cardScheduleMessage");
+        const presets = {
+          daily:{mode:"custom", enabled:true, listing_count:2, interval_unit:"days", interval_value:1},
+          three_days:{mode:"custom", enabled:true, listing_count:2, interval_unit:"days", interval_value:3},
+          weekly:{mode:"custom", enabled:true, listing_count:2, interval_unit:"weeks", interval_value:1},
+          monthly:{mode:"custom", enabled:true, listing_count:2, interval_unit:"months", interval_value:1},
+        };
+        const sold = cardSchedule.value === "inherit" ? {mode:"inherit"}
+          : cardSchedule.value === "off" ? {mode:"off"}
+            : presets[cardSchedule.value];
+        try {
+          await pbRequest(
+            "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId),
+            {
+              method:"PUT",
+              headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({sold, active:{mode:"inherit"}})
+            }
+          );
+          message.className = "market-message ok";
+          message.textContent = "Card schedule preference saved.";
+          await window.slabManagedMarketplace?.refresh?.(true);
+        } catch (error) {
+          message.className = "market-message error";
+          message.textContent = error.message || "Card schedule could not be saved.";
+        }
+      });
+    }
     const psaButton = document.getElementById("loadPsaSales");
     if (psaButton) psaButton.addEventListener("click", async () => {
       const message = document.getElementById("marketMessage");
@@ -164,7 +234,7 @@
     if (managedButton) managedButton.addEventListener("click", async () => {
       const message = document.getElementById("marketMessage");
       const listingCount = Math.max(3, Math.min(
-        5, Number(window.slabManagedMarketplace?.schedule?.listing_count) || 3
+        5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
       ));
       managedButton.disabled = true;
       message.className = "market-message";

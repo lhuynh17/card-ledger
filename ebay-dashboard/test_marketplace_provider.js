@@ -15,11 +15,15 @@ const {
   createBrightDataAdapter,
   normalizeRawRecord,
 } = require("./pb_hooks/lib/bright-data-adapter");
+const apifySold = require("./pb_hooks/lib/apify-sold-adapter");
 const {
+  apifyConfigFromEnvironment,
   configFromEnvironment,
   evaluateBudget,
   nextScheduleAt,
   normalizeSchedule,
+  normalizeProviderSchedule,
+  providerScheduleProjection,
   queryHash,
   scheduleProjection,
   usageProjection,
@@ -258,6 +262,15 @@ test("budget defaults are conservative and configurable", () => {
   assert.equal(config.resultLimit, 50);
 });
 
+test("Apify sold configuration defaults off with a free-tier safety cap", () => {
+  const config = apifyConfigFromEnvironment(() => "");
+  assert.equal(config.enabled, false);
+  assert.equal(config.killSwitch, true);
+  assert.equal(config.schemaConfirmed, false);
+  assert.equal(config.monthlyAllowance, 1400);
+  assert.equal(config.unitCostUsd, 0.00345);
+});
+
 test("kill switch, monthly allowance, and daily ceiling stop requests", () => {
   const base = configFromEnvironment(() => "");
   assert.equal(evaluateBudget(base, { monthRecords: 0, todayRecords: 0 }, 50).allowed, false);
@@ -333,12 +346,100 @@ test("schedule projection exposes the monthly budget impact", () => {
   });
 });
 
+test("sold and active provider schedules enforce separate result limits", () => {
+  assert.equal(normalizeProviderSchedule({
+    listing_count:5, interval_unit:"days", interval_value:1,
+  }, "sold").listing_count, 2);
+  assert.equal(normalizeProviderSchedule({
+    listing_count:1, interval_unit:"weeks", interval_value:1,
+  }, "active").listing_count, 3);
+});
+
+test("provider schedule projection shows free-tier fit before enabling", () => {
+  assert.deepEqual(providerScheduleProjection({
+    enabled:true,
+    listing_count:2,
+    interval_unit:"days",
+    interval_value:3,
+  }, 60, {
+    role:"sold",
+    unitCostUsd:0.00345,
+    freeAllowance:1400,
+  }), {
+    role:"sold",
+    estimated_monthly_operations:609,
+    estimated_monthly_records:1218,
+    estimated_monthly_cost_usd:4.2,
+    free_allowance:1400,
+    free_remaining:182,
+    percent_of_free_allowance:87,
+    fits_free_allowance:true,
+  });
+});
+
+test("Apify sold aliases stay inside its adapter", () => {
+  const normalized = apifySold.normalizeRecord({
+    itemId:"123",
+    title:"2023 Pokemon Charizard PSA 10",
+    soldPrice:25,
+    soldDate:"Jul 27, 2026",
+    shippingCost:"+$5.00 delivery",
+    condition:"Graded",
+    thumbnail:"https://i.ebayimg.com/example.jpg",
+    url:"https://www.ebay.com/itm/123",
+    scrapedAt:"2026-07-28T00:00:00Z",
+  }, "2026-07-28T00:00:00Z");
+  assert.equal(normalized.provider, "apify");
+  assert.equal(normalized.total, 30);
+  assert.equal(normalized.sold_at, "Jul 27, 2026");
+  assert.throws(() => apifySold.normalizeRecord({
+    itemId:"123", title:"No sold date", soldPrice:25, url:"https://ebay.com/itm/123",
+  }, "2026-07-28T00:00:00Z"), /confirmed sold schema/);
+});
+
+test("Apify adapter uses bounded outbound polling without a webhook", () => {
+  const calls = [];
+  const responses = [
+    {statusCode:201, json:{data:{id:"run-1", status:"RUNNING"}}},
+    {statusCode:200, json:{data:{
+      id:"run-1", status:"SUCCEEDED", defaultDatasetId:"data-1",
+    }}},
+    {statusCode:200, json:[{
+      itemId:"123", title:"2023 Pokemon Charizard PSA 10", soldPrice:25,
+      soldDate:"Jul 27, 2026", shippingCost:"Free shipping",
+      url:"https://www.ebay.com/itm/123",
+    }]},
+  ];
+  const adapter = apifySold.adapter(
+    (options) => { calls.push(options); return responses.shift(); },
+    () => {},
+    () => new Date("2026-07-28T00:00:00Z")
+  );
+  const result = adapter.search(normalizeRequest({
+    query:"2023 Pokemon Charizard PSA 10",
+    grader:"PSA",
+    grade:"10",
+    result_limit:2,
+  }), {
+    enabled:true,
+    schemaConfirmed:true,
+    apiToken:"secret",
+    timeoutSeconds:25,
+    maxPolls:3,
+    pollIntervalSeconds:1,
+  });
+  assert.equal(result.records_returned, 1);
+  assert.equal(result.candidates[0].sold_at, "Jul 27, 2026");
+  assert.equal(calls.some((call) => /webhook/i.test(JSON.stringify(call))), false);
+  assert.match(calls[0].url, /api\.apify\.com\/v2\/acts\//);
+});
+
 test("marketplace routes require app-user authentication and add no listener", () => {
   const hook = fs.readFileSync(path.join(
     __dirname, "pb_hooks", "slab_ledger_marketplace.pb.js"
   ), "utf8");
   const routes = [...hook.matchAll(/routerAdd\(([\s\S]*?)\$apis\.requireAuth\("users"\)\);/g)];
-  assert.equal(routes.length, 4);
+  assert.equal(routes.length, 6);
   assert.doesNotMatch(hook, /webhook|0\.0\.0\.0|ThreadingHTTPServer|listen\(/i);
   assert.match(
     hook,

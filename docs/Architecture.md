@@ -149,13 +149,18 @@ collections store daily/monthly usage, bounded recent activity, short-lived
 search cache entries, and normalized observations. A scheduled server task
 removes expired cache, activity, and observation records.
 
-`marketplace_refresh_settings` stores one default-off owner schedule with a
-three-to-five comparable target and an hour/day/week/month interval.
+`marketplace_refresh_settings` stores separate default-off owner schedules for
+one-to-two sold observations and three-to-five active observations.
 `marketplace_refresh_state` stores per-card due time and the last safe outcome.
 A PocketBase cron checks for due work every 15 minutes, processes only a bounded
 number of active cards, and advances each processed card independently. It
 stores evaluation observations and cache entries, never an automatic trusted
 market value.
+
+The expanded policy separates one-to-two Apify sold observations from
+three-to-five Bright Data active asking prices. Per-card overrides can inherit
+the owner default, turn a role off, or set a custom interval. Projections
+include inherited cards and overrides before the schedule is saved.
 
 ### Portfolio history
 

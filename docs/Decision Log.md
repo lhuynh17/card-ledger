@@ -329,3 +329,18 @@ monthly record use.
 cache, returned-record budgets, cooldowns, normalization, and rejection logic
 as manual evaluations. They store private observations but never overwrite a
 trusted market value automatically.
+
+## 2026-07-28 — Separate sold evidence from active asking prices
+
+**Decision:** Use a provider-role boundary: Apify may supply one or two
+completed-sale observations, while Bright Data may supply three to five active
+listing observations. Show separate schedules and estimates, including
+per-card sold overrides.
+
+**Why:** Active asking prices are useful competitive context but are not proof
+of a transaction. Separate roles prevent active listings from being treated as
+sold comparables while allowing low-cost refresh schedules.
+
+**Consequence:** Both adapters remain default-off and schema-gated. The
+dashboard forecasts Apify returned-record cost and each provider allowance
+before saving. Neither role automatically overwrites a trusted value.

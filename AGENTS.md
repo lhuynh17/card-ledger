@@ -201,9 +201,10 @@ These rules are mandatory:
   15-minute scheduler only finds due private work; each card keeps its own next
   run time. Budget limits, cache reuse, provider cooldowns, the feature flag,
   and the kill switch always take precedence over the schedule.
-- Scheduled checks may request three to five accepted sold comparables per
-  card. Preserve the configurable hour/day/week/month cadence and show its
-  estimated monthly record impact before enabling it.
+- Provider roles are now distinct: Apify is limited to one or two verified
+  sold observations, while Bright Data is limited to three to five active
+  asking-price observations. Show both forecasts and include per-card schedule
+  overrides; never represent an active asking price as a completed sale.
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
 

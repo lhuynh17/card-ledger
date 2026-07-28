@@ -15,9 +15,9 @@ The app tracks:
   routes, with private usage controls, caching, normalized observations, and a
   Marketplace Usage dashboard; live collection remains disabled until the
   owner's account-specific eBay dataset and schema are validated;
-- an owner-controlled, default-off schedule for checking each active graded
-  card for three to five recent sold listings at an hour, day, week, or month
-  interval, without automatically replacing saved values;
+- separate default-off Apify sold-evidence and Bright Data active-listing
+  schedules at hour/day/week/month intervals, with live free-tier estimates,
+  per-card sold-schedule overrides, and no automatic value replacement;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;
 - an owner profile with a synced display name and protected business

@@ -116,9 +116,9 @@ schema validation and broader provider migration.
 
 The default-off Bright Data adapter, private PocketBase boundary, outbound
 polling, usage dashboard, and side-by-side evaluation mode are implemented.
-An owner-controlled per-card scheduler for three to five sold listings and
-hour/day/week/month intervals is also implemented but remains gated with the
-provider.
+An owner-controlled scheduler with separate Apify sold evidence, Bright Data
+active asking prices, and free-tier-aware global/per-card estimates is also
+implemented but remains provider-gated.
 Before rollout:
 
 - validate current product, account, pricing, terms, and sold-listing coverage;

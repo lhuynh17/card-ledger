@@ -304,11 +304,16 @@ class PocketBaseSecurityTests(unittest.TestCase):
 
         self.assertEqual(setting["listing_count"]["min"], 3)
         self.assertEqual(setting["listing_count"]["max"], 5)
+        self.assertEqual(setting["sold_listing_count"]["min"], 1)
+        self.assertEqual(setting["sold_listing_count"]["max"], 2)
+        self.assertEqual(setting["active_listing_count"]["min"], 3)
+        self.assertEqual(setting["active_listing_count"]["max"], 5)
         self.assertEqual(
             setting["interval_unit"]["values"],
             ["hours", "days", "weeks", "months"],
         )
         self.assertTrue(state["card_id"]["required"])
+        self.assertEqual(state["schedule_override"]["type"], "json")
         self.assertLessEqual(state["safe_error"]["max"], 500)
 
 
