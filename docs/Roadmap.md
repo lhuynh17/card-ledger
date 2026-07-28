@@ -108,22 +108,24 @@ Avoid duplicating permanent dashboard sections.
 
 ### Provider abstraction
 
-Implement the provider-neutral contract in `docs/Marketplace.md` before adding
-another marketplace source.
+The provider-neutral contract, normalization/filtering foundation, cache,
+usage controls, and fixture tests are implemented. Remaining work is live
+schema validation and broader provider migration.
 
 ### Bright Data adapter
 
-Use Bright Data as the first managed provider candidate:
+The default-off Bright Data adapter, private PocketBase boundary, outbound
+polling, usage dashboard, and side-by-side evaluation mode are implemented.
+Before rollout:
 
 - validate current product, account, pricing, terms, and sold-listing coverage;
-- keep credentials server-side;
-- add budgets and a feature flag;
 - compare results against manual Product Research;
 - retain the local collector until accuracy is proven.
 
 ### Hidden Index
 
-Add a private normalized marketplace observation store:
+An owner-private normalized observation store with deduplication and bounded
+retention is implemented as the foundation. Remaining work:
 
 - deduplicate listings and identical slab searches;
 - re-run local filtering without new provider calls;

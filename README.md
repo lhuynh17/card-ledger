@@ -11,6 +11,10 @@ The app tracks:
   fallback;
 - one-tap PSA recent-sale comparables or manual market values from one to three
   sales, including links, source, notes, update date, and value history;
+- a default-off Bright Data evaluation adapter behind authenticated PocketBase
+  routes, with private usage controls, caching, normalized observations, and a
+  Marketplace Usage dashboard; live collection remains disabled until the
+  owner's account-specific eBay dataset and schema are validated;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;
 - an owner profile with a synced display name and protected business
@@ -30,6 +34,10 @@ PocketBase setup instructions are in
 [`ebay-dashboard/POCKETBASE_SETUP.md`](ebay-dashboard/POCKETBASE_SETUP.md).
 The scraper is optional; manual market tracking and the business ledger work
 without it.
+
+Bright Data is also optional. Its adapter never replaces manual values,
+Parse.bot, Product Research, cached values, or the local collector. Managed
+results only prefill a review form until the owner explicitly saves them.
 
 ## Project documentation
 

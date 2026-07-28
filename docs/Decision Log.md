@@ -296,3 +296,20 @@ confirmation before writes, provenance, budgets, and deterministic fallbacks.
 **Why:** AI may improve keyword generation, classification, and explanation,
 but it must not gain superuser access, expose private records, or autonomously
 buy, list, price, message, or alter financial records.
+
+## 2026-07-28 — Bright Data ships as a gated evaluation, not an authority
+
+**Decision:** Implement the provider-neutral marketplace foundation and Bright
+Data adapter behind authenticated PocketBase routes, a default-off feature
+flag, a default-on kill switch, explicit account/schema confirmation, returned-
+record budgets, private caching, and owner-reviewed side-by-side results.
+
+**Why:** The managed transport can be evaluated without exposing the NAS,
+committing credentials, creating a public webhook, or allowing a provider
+failure to erase a trusted valuation.
+
+**Consequence:** Live collection remains disabled until the owner's exact eBay
+dataset, input and response schema, sold/completed coverage, billing unit,
+limits, and request mode are verified. Async work uses outbound polling. The
+local collector, Parse.bot, Product Research, manual comps, and cached values
+remain available throughout evaluation.

@@ -44,6 +44,14 @@ It prepares:
 - `grading_play_cards`: stores multiple card lines, quantities, costs, and
   grading results inside each play.
 - `grading_play_sales`: stores any number of sales against each grading play.
+- `marketplace_usage`: owner-private daily/monthly returned-record counters,
+  operations, cache hits, and usage by feature.
+- `marketplace_activity`: bounded owner-private provider activity and safe error
+  summaries.
+- `marketplace_search_cache`: short-lived owner-private normalized query
+  results, including empty results.
+- `marketplace_observations`: owner-private normalized accepted/rejected listing
+  observations with rejection reasons and expiry.
 
 The three older `grading_play_*` collections are retained so upgrading does
 not delete any grading data created by earlier Slab Ledger versions.
@@ -96,6 +104,131 @@ The grading tracker loads through the authenticated
 `/api/slab-ledger/grading-items` hook route. It always filters by the signed-in
 user on the server and retains the last successful device copy as a loading
 fallback.
+
+## Optional Bright Data marketplace evaluation
+
+Bright Data is implemented as a default-off evaluation provider. It does not
+replace Parse.bot, eBay Product Research, manual comps, cached values, or the
+local collector. A managed result only fills the existing review form; the
+owner must explicitly save it.
+
+### Safety gates
+
+- All browser calls go to authenticated PocketBase routes.
+- PocketBase makes outbound HTTPS calls only to `api.brightdata.com`.
+- No public webhook, listener, Funnel, or inbound firewall rule is used.
+- The API token remains only in the PocketBase/container environment.
+- The adapter refuses live requests until the account schema is confirmed.
+- The feature flag defaults off and the kill switch defaults on.
+- Empty or failed searches never update `market_values`.
+
+### Install the server files
+
+1. Create a PocketBase backup.
+2. Run `setup_pocketbase.py`. The migration only adds the four owner-private
+   marketplace collections listed above; it does not alter or delete inventory
+   or existing market values.
+3. Copy `pb_hooks/slab_ledger_marketplace.pb.js` and the complete
+   `pb_hooks/lib/` directory beside the PocketBase executable. Preserve the
+   directory layout because the hook loads the provider modules from `lib/`.
+4. Restart PocketBase. Leave Bright Data disabled during metadata validation.
+
+### Validate the account without consuming scraper records
+
+Do not paste the token into a command argument, repository file, browser field,
+PocketBase record, screenshot, or chat. Put it temporarily in the process
+environment and run:
+
+```text
+BRIGHT_DATA_API_TOKEN=(set securely in your shell environment)
+python3 bright_data_validate.py
+```
+
+The utility calls only Bright Data's dataset-list metadata endpoint and reports
+eBay datasets available to that account. It reports `records_consumed: 0`.
+After choosing a candidate:
+
+```text
+BRIGHT_DATA_API_TOKEN=(set securely in your shell environment)
+python3 bright_data_validate.py --dataset-id=ACCOUNT_DATASET_ID
+```
+
+The selected ID is not a secret. Metadata field signals are not proof of
+sold/completed behavior. Before setting `BRIGHT_DATA_SCHEMA_CONFIRMED=1`,
+confirm in the Bright Data account scraper page:
+
+- the exact request input: eBay search URL or keyword;
+- the returned field names and types;
+- whether it supports active listings;
+- whether it supports genuinely sold/completed listings and sold timestamps;
+- the billing unit, including how empty/failed records are charged;
+- per-request and per-page record limits;
+- synchronous and asynchronous availability and typical latency;
+- current pricing and applicable marketplace/provider terms.
+
+Do not use a dataset ID copied from public examples.
+
+### Secure container configuration
+
+Enter these values in Synology Container Manager's environment settings for the
+private PocketBase container. Do not add them to frontend code or a committed
+file.
+
+| Variable | Initial value | Purpose |
+| --- | --- | --- |
+| `BRIGHT_DATA_API_TOKEN` | account token | Secret server-only bearer token |
+| `BRIGHT_DATA_DATASET_ID` | validated account ID | Exact eBay scraper/dataset |
+| `BRIGHT_DATA_INPUT_FIELD` | `url` or `keyword` | Confirmed request input |
+| `BRIGHT_DATA_REQUEST_MODE` | `sync` or `async` | Confirmed delivery mode |
+| `BRIGHT_DATA_SCHEMA_CONFIRMED` | `0`, then `1` after validation | Prevents assumed schemas |
+| `BRIGHT_DATA_ENABLED` | `0`, then `1` for evaluation | Feature flag |
+| `BRIGHT_DATA_KILL_SWITCH` | `1`, then `0` for evaluation | Immediate stop |
+| `BRIGHT_DATA_MONTHLY_ALLOWANCE` | `5000` | Returned-record monthly allowance |
+| `BRIGHT_DATA_WARNING_THRESHOLDS` | `50,75,90` | Percent-consumed warnings |
+| `BRIGHT_DATA_DAILY_CEILING` | `250` | Returned-record daily ceiling |
+| `BRIGHT_DATA_HARD_STOP` | `1` | Stop before a request could cross a limit |
+| `BRIGHT_DATA_RESULT_LIMIT` | `50` | Maximum normalized records per operation |
+| `BRIGHT_DATA_PAGE_LIMIT` | `1` | Provider discovery page limit |
+| `BRIGHT_DATA_TIMEOUT_SECONDS` | `25` | Per-request timeout |
+| `BRIGHT_DATA_MAX_RETRIES` | `1` | Bounded retry count, maximum 2 |
+| `BRIGHT_DATA_POLL_INTERVAL_SECONDS` | `5` | Async outbound polling interval |
+| `BRIGHT_DATA_MAX_POLLS` | `10` | Async polling limit |
+| `BRIGHT_DATA_COOLDOWN_MINUTES` | `15` | Cooldown after retryable failures |
+| `BRIGHT_DATA_CACHE_HOURS` | `22` | Private identical-query cache lifetime |
+| `BRIGHT_DATA_RETENTION_DAYS` | `90` | Activity and observation retention |
+
+`BRIGHT_DATA_HARD_STOP=0` permits warnings without blocking after the limits are
+reached and should be used only after a deliberate budget review.
+
+### First live validation
+
+Only after the account details above are confirmed:
+
+1. set `BRIGHT_DATA_SCHEMA_CONFIRMED=1`;
+2. keep the monthly/daily limits and result limit conservative;
+3. set `BRIGHT_DATA_ENABLED=1`;
+4. set `BRIGHT_DATA_KILL_SWITCH=0`;
+5. restart PocketBase;
+6. sign in, open **Marketplace Usage**, and confirm evaluation mode is ready;
+7. evaluate one manually reviewed card;
+8. compare candidates, rejections, record usage, and cost against eBay Product
+   Research before saving anything.
+
+If the live response does not match the adapter schema, turn the kill switch on
+and leave `BRIGHT_DATA_SCHEMA_CONFIRMED=0` until the adapter is updated.
+
+### Rollback
+
+Set `BRIGHT_DATA_KILL_SWITCH=1` or `BRIGHT_DATA_ENABLED=0` and restart
+PocketBase. The PWA immediately falls back to manual comps, cached values,
+Product Research, Parse.bot, and the local collector. Do not delete the new
+collections during rollback; they are owner-private and can be retained for
+audit or removed later only after a separate backup and explicit approval.
+
+Security impact: this feature adds one outbound provider destination and two
+authenticated PocketBase routes. It does not add a public network path, change
+existing collection ownership, expose secrets to the browser, or make managed
+results authoritative.
 
 ## Recommended PocketBase launch restrictions
 

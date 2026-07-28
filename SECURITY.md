@@ -39,7 +39,7 @@ configuration change.
    - Hosts authenticated hook routes for PSA data and image import.
 
 3. **Third-party providers**
-   - Parse.bot and future marketplace providers are untrusted external
+   - Parse.bot and Bright Data are untrusted external
      dependencies.
    - Provider credentials remain server-side.
    - Provider payloads must be validated and normalized.
@@ -119,6 +119,24 @@ accept arbitrary URLs from the browser and fetch them from the NAS. Block
 loopback, link-local, RFC1918/private, NAS, metadata-service, and non-HTTPS
 targets unless a narrowly reviewed internal use case explicitly requires them.
 
+### Bright Data boundary
+
+- Bright Data requests originate only from an authenticated PocketBase hook.
+- The integration makes outbound HTTPS requests only to
+  `api.brightdata.com`; it creates no listener, public route, webhook, Funnel,
+  or router forwarding rule.
+- Every marketplace route requires an authenticated `users` record. Searches
+  referencing a card also verify that the card belongs to that user.
+- `BRIGHT_DATA_API_TOKEN` exists only in the PocketBase/container environment.
+  It is never returned to the browser, written to PocketBase, or logged.
+- The adapter cannot make a live request unless the feature flag is enabled,
+  the kill switch is off, and account/schema confirmation is explicit.
+- Async jobs use bounded outbound polling. No inbound callback is accepted.
+- Provider response aliases are confined to the Bright Data adapter. Only
+  strictly validated, normalized candidates cross into the domain layer.
+- Empty, malformed, timed-out, blocked, or failed results return a safe error
+  and never replace a last known good value.
+
 ## Network restrictions
 
 - Keep Tailscale Serve private to the tailnet.
@@ -153,6 +171,10 @@ Supported configuration:
 | --- | --- | --- |
 | `PARSE_BOT_API_KEY` | PocketBase/container environment | Parse.bot server credential |
 | `PARSE_BOT_MONTHLY_CREDITS` | PocketBase/container environment | Optional monthly allowance override |
+| `BRIGHT_DATA_API_TOKEN` | PocketBase/container environment | Server-only Bright Data bearer token |
+| `BRIGHT_DATA_DATASET_ID` | PocketBase/container environment | Account-validated eBay scraper ID |
+| `BRIGHT_DATA_ENABLED` | PocketBase/container environment | Default-off feature flag |
+| `BRIGHT_DATA_KILL_SWITCH` | PocketBase/container environment | Immediate provider stop; defaults on |
 | `SLAB_POCKETBASE_URL` | ignored collector/setup env | PocketBase address |
 | `SLAB_POCKETBASE_EMAIL` | ignored collector env | collector app-user email |
 | `SLAB_POCKETBASE_PASSWORD` | ignored collector env | collector app-user password |
@@ -242,6 +264,12 @@ may contain session or account context.
 - private Tailscale-only access;
 - collector loopback binding;
 - request pacing, daily budget, cooldowns, and single-instance lock;
+- default-off Bright Data feature flag and default-on kill switch;
+- monthly/daily returned-record limits, warnings, hard stop, bounded retries,
+  timeouts, polling, cooldowns, cache reuse, and duplicate-operation blocking;
+- owner-only marketplace usage, activity, cache, and normalized observation
+  collections with scheduled retention cleanup;
+- side-by-side managed-provider evaluation with explicit owner save;
 - ignored secrets, caches, logs, and diagnostics;
 - local/offline fallbacks that do not replace server authorization;
 - automatic local and off-site backups.

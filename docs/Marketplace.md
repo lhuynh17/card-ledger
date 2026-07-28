@@ -58,11 +58,16 @@ The Python collector:
 
 It is deliberately slow and does not use stealth or challenge bypasses.
 
-## Provider abstraction — Target
+## Provider abstraction — Current foundation
 
 Marketplace retrieval will use a provider-neutral contract. The domain model,
 filtering engine, UI, and PocketBase records must not depend on a provider's raw
 field names.
+
+The contract, normalized candidate validation, local rejection reasons,
+valuation helper, caching policy, and fixture tests are implemented. Parse.bot
+and the legacy collector have not been migrated to this contract and remain
+unchanged.
 
 Conceptual interface:
 
@@ -125,7 +130,7 @@ ProviderSearchResult
 Provider adapters may preserve a short-lived encrypted/raw reference for
 diagnosis, but raw payloads must not become the application model.
 
-## Bright Data as the initial managed provider — Target
+## Bright Data as the initial managed provider — Current gated evaluation
 
 Bright Data is the chosen first managed marketplace provider behind the
 abstraction, subject to final account, pricing, terms, and endpoint validation.
@@ -151,6 +156,28 @@ Constraints:
 
 If Bright Data is rejected after validation, another provider can implement the
 same contract without rewriting the app.
+
+Implemented safeguards:
+
+- authenticated PocketBase usage and search routes;
+- outbound-only HTTPS calls to `api.brightdata.com`;
+- sync requests or bounded async polling without a webhook;
+- default-off feature flag, default-on kill switch, and explicit schema gate;
+- 5,000 returned-record monthly allowance by default;
+- configurable warning thresholds, daily ceiling, hard stop, result/page
+  limits, timeouts, retries, cooldown, cache lifetime, and retention;
+- owner-only usage, activity, cache, and normalized observation records;
+- duplicate-operation blocking and shared recent-query cache;
+- side-by-side UI evaluation that never writes a value automatically;
+- a Marketplace Usage dashboard.
+
+Still required before live record collection:
+
+- identify the exact eBay scraper available to the owner's account;
+- confirm its input mode, response schema, active-listing and sold/completed
+  support, billing unit, record/page limits, and sync/async behavior;
+- run metadata inspection, then one deliberately bounded live validation;
+- compare a representative card set against manual Product Research.
 
 ## Two-stage marketplace search — Current principle, target expansion
 
@@ -223,7 +250,7 @@ Future scoring may incorporate:
 Any algorithm change must be versioned in stored metadata so historical values
 remain explainable.
 
-## Hidden Index — Target
+## Hidden Index — Partial foundation
 
 The **Hidden Index** is the planned private normalized cache of marketplace
 observations. It is "hidden" because it is internal to the owner's deployment,
@@ -264,6 +291,10 @@ Safeguards:
 
 The current collector's ignored `data.json` cache is not yet the Hidden Index;
 it is a local operational cache.
+
+`marketplace_observations` is now an owner-private, normalized, deduplicated,
+retention-bounded foundation for the Hidden Index. It is not yet the completed
+cross-provider trend and re-filtering system.
 
 ## Usage tracking and budgets
 

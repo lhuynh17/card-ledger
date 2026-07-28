@@ -93,6 +93,11 @@ These rules are mandatory:
 - Current server variables include:
   - `PARSE_BOT_API_KEY`
   - `PARSE_BOT_MONTHLY_CREDITS` (optional; defaults to 200)
+  - `BRIGHT_DATA_API_TOKEN` (server-only; never persist in PocketBase)
+  - `BRIGHT_DATA_DATASET_ID` (set only after account metadata validation)
+  - `BRIGHT_DATA_ENABLED` and `BRIGHT_DATA_KILL_SWITCH`
+  - the remaining `BRIGHT_DATA_*` budget, polling, cache, and retention
+    controls documented in `ebay-dashboard/POCKETBASE_SETUP.md`
 - Never place those variables or their values in frontend code.
 - Prefer environment variables or ignored local configuration over new
   hard-coded deployment values. If the current PocketBase URL is ever made
@@ -186,6 +191,12 @@ These rules are mandatory:
 - Future managed marketplace providers must implement the provider contract in
   `docs/Marketplace.md`. Bright Data is the intended first managed provider,
   but the UI and domain model must not depend on Bright Data-specific fields.
+- Bright Data remains disabled until its account-available eBay dataset,
+  request inputs, response fields, sold/completed semantics, billing unit, and
+  limits are confirmed. Never guess or copy a dataset ID from public examples.
+- Managed-provider results run in side-by-side evaluation mode. They may fill a
+  review form but must not overwrite a saved value without explicit owner
+  action.
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
 
