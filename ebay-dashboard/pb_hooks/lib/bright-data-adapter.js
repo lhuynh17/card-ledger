@@ -92,7 +92,12 @@ function parseResponse(response, nowIso, resultLimit) {
   }
   const candidates = [];
   for (const record of records.slice(0, resultLimit)) {
-    candidates.push(normalizeRawRecord(record, nowIso));
+    try {
+      candidates.push(normalizeRawRecord(record, nowIso));
+    } catch (error) {
+      error.recordsReturned = records.length;
+      throw error;
+    }
   }
   return { candidates, recordsReturned: records.length };
 }

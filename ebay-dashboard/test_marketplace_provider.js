@@ -64,6 +64,29 @@ test("rejects malformed and changed Bright Data records", () => {
   );
 });
 
+test("schema failures preserve returned-record usage for accounting", () => {
+  const adapter = createBrightDataAdapter({
+    httpSend: () => ({
+      statusCode:200,
+      json:[raw(), { unexpected:true }],
+    }),
+  });
+  assert.throws(() => adapter.search(
+    { ...request, search_url:"https://www.ebay.com/sch/i.html?_nkw=test" },
+    {
+      enabled:true,
+      schemaConfirmed:true,
+      apiToken:"fixture-token",
+      datasetId:"fixture-dataset",
+      requestMode:"sync",
+      inputField:"url",
+      resultLimit:50,
+      pageLimit:1,
+      timeoutSeconds:25,
+    }
+  ), (error) => error.code === "schema_changed" && error.recordsReturned === 2);
+});
+
 test("rejects wrong grade, replicas, duplicates, and identity mismatches", () => {
   const candidates = [
     normalizeRawRecord(raw(), "2026-07-28T00:00:00.000Z"),

@@ -411,6 +411,12 @@ routerAdd("POST", "/api/slab-ledger/marketplace/search", (e) => {
     });
   } catch (error) {
     const safe = safeError(error);
+    const chargedRecords = Math.max(
+      0, Number(error && error.recordsReturned) || 0
+    );
+    if (chargedRecords) {
+      incrementUsage(owner, request.feature, chargedRecords, false);
+    }
     if (error && error.retryable) {
       providerCooldownUntil = Date.now() + config.cooldownMinutes * 60000;
     }
@@ -418,7 +424,7 @@ routerAdd("POST", "/api/slab-ledger/marketplace/search", (e) => {
       operation_id: operationId,
       feature: request.feature,
       status: safe.code,
-      records_used: 0,
+      records_used: chargedRecords,
       safe_message: safe.message,
     });
     return e.json(safe.code === "authentication" ? 503 : 502, {
