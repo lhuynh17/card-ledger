@@ -125,6 +125,19 @@ Before rollout:
 - compare results against manual Product Research;
 - retain the local collector until accuracy is proven.
 
+### Local sold-listing proof
+
+Validate the optional Windows collector with a default evaluation-only,
+three-card overnight run:
+
+- confirm eBay exposes a trustworthy sold price and sold date;
+- retain the latest three verified local sold candidates per card;
+- verify the optional per-card three-lowest active asking-price view remains
+  separate from sold evidence;
+- verify manual sign-in/CAPTCHA pause and automatic continuation;
+- review matching and rejection behavior before importing observations;
+- keep trusted values unchanged throughout the proof.
+
 ### Hidden Index
 
 An owner-private normalized observation store with deduplication and bounded

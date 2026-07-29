@@ -344,3 +344,23 @@ sold comparables while allowing low-cost refresh schedules.
 **Consequence:** Both adapters remain default-off and schema-gated. The
 dashboard forecasts Apify returned-record cost and each provider allowance
 before saving. Neither role automatically overwrites a trusted value.
+
+## 2026-07-28 — Validate local overnight sold collection before import
+
+**Decision:** Use the existing optional Windows collector for a three-card,
+evaluation-only proof between 2 AM and 7 AM local time. Retain the latest three
+recent candidates per card, keep the persistent browser visible, and pause for
+the owner to manually complete a normal eBay sign-in or CAPTCHA.
+
+**Why:** The owner needs unattended batch collection, but the tested hosted
+sold-listing actor was blocked by eBay. A local browser session can eliminate
+repetitive searches without introducing a public endpoint, CAPTCHA solver,
+stealth tooling, proxy rotation, or a new paid provider.
+
+**Consequence:** Proof results remain in the ignored local review file and
+cannot replace trusted PocketBase values. Full-inventory scheduling and
+normalized observation import remain gated on reviewed proof results.
+
+The owner may separately select scarce cards for one active-results request.
+Only the three lowest locally matched asking prices are retained, clearly
+labeled as active, and excluded from sold-evidence valuation.

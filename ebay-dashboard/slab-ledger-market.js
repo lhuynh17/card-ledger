@@ -125,6 +125,8 @@
       <option value="inherit">Use inventory default</option><option value="off">Off</option>
       <option value="daily">Daily</option><option value="three_days">Every 3 days</option>
       <option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+      <div class="mf"><label>Active asking-price check</label><select id="cardActiveSchedule">
+      <option value="off">Off</option><option value="three">Include 3 lowest active listings</option></select></div>
       <p class="market-status" id="cardScheduleEstimate" style="text-align:left"></p>
       <div class="market-actions"><button id="saveCardSchedule" type="button">Save card schedule</button></div>
       <div class="market-message" id="cardScheduleMessage"></div></section>` : ""}
@@ -139,6 +141,7 @@
     priceInputs.forEach((input) => input.addEventListener("input", recalc));
     const cardSchedule = document.getElementById("cardSoldSchedule");
     if (cardSchedule) {
+      const activeSchedule = document.getElementById("cardActiveSchedule");
       const scheduleDetails = {
         inherit:{label:"Uses the inventory default shown in Marketplace Usage."},
         off:{label:"No automatic sold checks for this card."},
@@ -149,14 +152,19 @@
       };
       const estimate = document.getElementById("cardScheduleEstimate");
       const updateCardEstimate = () => {
-        estimate.textContent = scheduleDetails[cardSchedule.value]?.label || "";
+        const activeNote = activeSchedule.value === "three"
+          ? " Also runs one active search and retains the 3 lowest matching asking prices."
+          : "";
+        estimate.textContent = (scheduleDetails[cardSchedule.value]?.label || "") + activeNote;
       };
       cardSchedule.addEventListener("change", updateCardEstimate);
+      activeSchedule.addEventListener("change", updateCardEstimate);
       updateCardEstimate();
       pbRequest(
         "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId)
       ).then((result) => {
         const sold = result?.override?.sold || {};
+        const active = result?.override?.active || {};
         if (sold.mode === "off") cardSchedule.value = "off";
         else if (sold.mode === "custom") {
           if (sold.interval_unit === "days" && sold.interval_value === 1) {
@@ -169,6 +177,8 @@
             cardSchedule.value = "monthly";
           }
         }
+        activeSchedule.value = active.mode === "custom" && active.enabled
+          ? "three" : "off";
         updateCardEstimate();
       }).catch(() => {});
       document.getElementById("saveCardSchedule").addEventListener("click", async () => {
@@ -182,13 +192,19 @@
         const sold = cardSchedule.value === "inherit" ? {mode:"inherit"}
           : cardSchedule.value === "off" ? {mode:"off"}
             : presets[cardSchedule.value];
+        const active = activeSchedule.value === "three"
+          ? {
+              mode:"custom", enabled:true, listing_count:3,
+              interval_unit:"days", interval_value:1
+            }
+          : {mode:"off"};
         try {
           await pbRequest(
             "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId),
             {
               method:"PUT",
               headers:{"Content-Type":"application/json"},
-              body:JSON.stringify({sold, active:{mode:"inherit"}})
+              body:JSON.stringify({sold, active})
             }
           );
           message.className = "market-message ok";

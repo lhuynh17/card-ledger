@@ -286,3 +286,11 @@ MFA and IP restriction options before exposing any additional network path.
 
 The Windows scraper is optional and is not required for manual market values or
 the business ledger.
+
+For the initial local sold-listing proof, keep
+`SLAB_COLLECTOR_EVALUATION_ONLY=1`, `SLAB_COLLECTOR_PROOF_LIMIT=3`, and
+`SLAB_BROWSER_HEADLESS=0` in the ignored Windows `collector.env`. The default
+window is 2 AM–7 AM in that computer's local time. The visible browser pauses
+for a normal manual eBay sign-in or CAPTCHA and resumes afterward; it does not
+solve or bypass the challenge. Review the ignored local results before
+deliberately enabling any PocketBase observation import.

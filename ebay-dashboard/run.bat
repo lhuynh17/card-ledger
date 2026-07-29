@@ -45,10 +45,15 @@ echo.
 echo Schedule:
 echo   - One unique inventory search every 12-20 minutes
 echo   - Each search cached for 22 hours
-echo   - Collection active from 7:00 AM to 11:00 PM
+echo   - Default proof window from 2:00 AM to 7:00 AM
+echo   - Three unique searches per overnight proof run
+echo   - Three recent sold results retained per card
+echo   - Optional three lowest active listings for selected scarce cards
+echo   - Evaluation-only: trusted PocketBase values are not replaced
 echo   - Maximum 72 requests per rolling 24 hours
 echo   - Automatic extended cooldown after a block response
-echo   - Standard persistent Chromium; no stealth or challenge bypass
+echo   - Visible persistent Chromium pauses for manual checks and resumes
+echo   - No stealth, CAPTCHA solving, proxy rotation, or challenge bypass
 echo.
 echo Keep this window open. Press Ctrl+C to stop the collector.
 %SLAB_PYTHON% scraper.py --watch

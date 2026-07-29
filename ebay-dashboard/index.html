@@ -121,7 +121,7 @@
 
     <section class="hero">
       <div>
-        <div class="eyebrow">eBay sold comparables</div>
+        <div class="eyebrow">eBay sold comparables and selected active listings</div>
         <h1>Market listings,<br>without the clutter.</h1>
         <p class="intro">Browse the eBay results collected for your inventory. Search by title, filter by slab, and open the original listing when you need the details.</p>
       </div>
@@ -179,7 +179,13 @@
         const source = card
           ? `${card.company || ""} ${card.grade || ""} · ${card.name || card.cert || "Inventory slab"}`
           : valuation.query || "Inventory search";
-        return (valuation.comparables || []).map((item) => ({ ...item, source }));
+        const sold = (valuation.comparables || []).map((item) => ({
+          ...item, source, listingRole:"sold"
+        }));
+        const active = (valuation.activeListings || []).map((item) => ({
+          ...item, source:`${source} · active asking price`, listingRole:"active"
+        }));
+        return [...sold, ...active];
       });
     }
 
@@ -212,10 +218,10 @@
           <article class="listing">
             <div class="listing-top">
               <span class="source" title="${escapeHtml(item.source)}">${escapeHtml(item.source)}</span>
-              <span class="condition">${escapeHtml(item.condition || "Sold listing")}</span>
+              <span class="condition">${escapeHtml(item.listingRole === "active" ? "Active asking price" : item.condition || "Sold listing")}</span>
             </div>
             <h2 class="title">${escapeHtml(item.title || "Untitled eBay listing")}</h2>
-            <div class="seller">${escapeHtml(item.seller || "eBay seller")}${item.soldText ? ` · ${escapeHtml(item.soldText)}` : ""}</div>
+            <div class="seller">${escapeHtml(item.listingRole === "active" ? "Current listing—not a completed sale" : item.seller || "eBay seller")}${item.soldText ? ` · ${escapeHtml(item.soldText)}` : ""}</div>
             <div class="listing-bottom">
               <div>
                 <div class="price-label">Total price</div>

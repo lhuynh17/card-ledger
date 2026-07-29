@@ -59,6 +59,7 @@ The external browser libraries are pinned and loaded with Subresource Integrity,
 - Python 3;
 - `requests`, Beautiful Soup, and Playwright;
 - standard persistent Chromium;
+- an owner-configurable overnight local window and visible manual-check pause;
 - a loopback-only `ThreadingHTTPServer`;
 - local JSON cache and rotating operational state;
 - PocketBase synchronization using an app-user account.

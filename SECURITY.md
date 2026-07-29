@@ -195,7 +195,8 @@ saves the superuser password or MFA code.
 The optional eBay collector intentionally:
 
 - processes one due unique query every 12–20 minutes;
-- runs only between 7 AM and 11 PM;
+- uses an owner-configured local collection window, defaulting to 2 AM–7 AM
+  for the three-card proof;
 - treats results as fresh for 22 hours;
 - caps requests at 72 per rolling 24 hours;
 - shares one cached result among identical searches;
@@ -203,6 +204,13 @@ The optional eBay collector intentionally:
 - increases cooldowns after HTTP 403/429 or verification responses;
 - uses standard Chromium without stealth, fingerprint disguise, proxy
   rotation, CAPTCHA solving, or challenge bypass.
+- pauses visibly for manual owner completion when eBay requests a sign-in or
+  CAPTCHA, then resumes the same queue without automating the challenge;
+- defaults to evaluation-only so proof results remain local and cannot replace
+  a trusted PocketBase market value.
+- makes a separate optional active-listing request only for cards the owner
+  selects, retains at most the three lowest matching asking prices, and never
+  treats those prices as sold evidence.
 
 Preserve these limits. A provider abstraction may change transport, but it must
 retain budgets, rate controls, observability, and an immediate kill switch.

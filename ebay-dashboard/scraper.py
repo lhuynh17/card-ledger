@@ -53,8 +53,6 @@ MIN_WATCH_INTERVAL_MINUTES = 12
 MAX_WATCH_INTERVAL_MINUTES = 20
 REFRESH_AFTER_HOURS = 22
 MAX_REQUESTS_PER_DAY = 72
-ACTIVE_START_HOUR = 7
-ACTIVE_END_HOUR = 23
 BLOCK_COOLDOWN_HOURS = (3, 12, 24, 72)
 REQUEST_TIMEOUT_SECONDS = 25
 POCKETBASE_POLL_SECONDS = 60
@@ -129,6 +127,72 @@ def load_environment(path: Path = ENV_FILE) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def environment_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)).strip())
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def environment_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name, "1" if default else "0").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def parse_clock(value: str, default: tuple[int, int]) -> tuple[int, int]:
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", str(value or ""))
+    if not match:
+        return default
+    hour, minute = int(match.group(1)), int(match.group(2))
+    return (hour, minute) if 0 <= hour <= 23 and 0 <= minute <= 59 else default
+
+
+def collector_config() -> dict:
+    minimum_delay = environment_int(
+        "SLAB_COLLECTOR_MIN_DELAY_MINUTES", MIN_WATCH_INTERVAL_MINUTES, 1, 1440
+    )
+    maximum_delay = environment_int(
+        "SLAB_COLLECTOR_MAX_DELAY_MINUTES", MAX_WATCH_INTERVAL_MINUTES, 1, 1440
+    )
+    return {
+        "start": parse_clock(os.getenv("SLAB_COLLECTOR_START_TIME", "02:00"), (2, 0)),
+        "end": parse_clock(os.getenv("SLAB_COLLECTOR_END_TIME", "07:00"), (7, 0)),
+        "minimum_delay_minutes": minimum_delay,
+        "maximum_delay_minutes": max(minimum_delay, maximum_delay),
+        "daily_ceiling": environment_int(
+            "SLAB_COLLECTOR_DAILY_CEILING", MAX_REQUESTS_PER_DAY, 1, MAX_REQUESTS_PER_DAY
+        ),
+        "result_limit": environment_int("SLAB_COLLECTOR_RESULT_LIMIT", 3, 1, 3),
+        "proof_limit": environment_int("SLAB_COLLECTOR_PROOF_LIMIT", 3, 0, 500),
+        "evaluation_only": environment_bool("SLAB_COLLECTOR_EVALUATION_ONLY", True),
+        "captcha_wait_minutes": environment_int(
+            "SLAB_COLLECTOR_CAPTCHA_WAIT_MINUTES", 720, 5, 720
+        ),
+    }
+
+
+def within_collection_window(moment: datetime, start: tuple[int, int],
+                             end: tuple[int, int]) -> bool:
+    current = moment.hour * 60 + moment.minute
+    start_minutes = start[0] * 60 + start[1]
+    end_minutes = end[0] * 60 + end[1]
+    if start_minutes == end_minutes:
+        return True
+    if start_minutes < end_minutes:
+        return start_minutes <= current < end_minutes
+    return current >= start_minutes or current < end_minutes
+
+
+def next_window_start(moment: datetime, start: tuple[int, int]) -> datetime:
+    candidate = moment.replace(
+        hour=start[0], minute=start[1], second=0, microsecond=0
+    )
+    if candidate <= moment:
+        candidate += timedelta(days=1)
+    return candidate
+
+
 def pocketbase_date(value: str) -> str:
     try:
         moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -181,11 +245,13 @@ class BrowserCollector:
         finally:
             self._playwright.stop()
 
-    def fetch(self, search: str, page_number: int) -> str:
+    def fetch(self, search: str, page_number: int, role: str = "sold") -> str:
         params = {
             "_nkw": search, "_pgn": page_number, "_ipg": 60,
-            "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
+            "_sop": 13 if role == "sold" else 15,
         }
+        if role == "sold":
+            params.update({"LH_Sold": 1, "LH_Complete": 1})
         url = f"{SEARCH_URL}?{urlencode(params)}"
         page = self._context.new_page()
         try:
@@ -211,13 +277,14 @@ class BrowserCollector:
                 )
                 page.wait_for_timeout(500)
             body = page.locator("body").inner_text(timeout=5_000).lower()
-            if any(marker in body for marker in (
-                "pardon our interruption", "verify yourself", "security check",
-                "are you a human", "unusual activity",
-            )):
-                raise RuntimeError(
-                    "eBay returned a verification page; stop and try again later"
-                )
+            if self._is_operator_check(body):
+                if os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() != "0":
+                    raise RuntimeError(
+                        "eBay requested a verification check. Set "
+                        "SLAB_BROWSER_HEADLESS=0, restart the collector, and "
+                        "complete the check in the visible browser."
+                    )
+                body = self._wait_for_operator(page, body)
             html = page.content()
             if not BeautifulSoup(html, "html.parser").select_one(
                 "li.s-item, a[href*='/itm/']"
@@ -231,6 +298,37 @@ class BrowserCollector:
             raise RuntimeError(f"Browser lookup failed: {error}") from error
         finally:
             page.close()
+
+    @staticmethod
+    def _is_operator_check(body: str) -> bool:
+        return any(marker in body for marker in (
+            "pardon our interruption", "verify yourself", "security check",
+            "are you a human", "unusual activity", "sign in to your account",
+            "captcha",
+        ))
+
+    def _wait_for_operator(self, page, body: str) -> str:
+        config = collector_config()
+        deadline = time.monotonic() + config["captcha_wait_minutes"] * 60
+        report(
+            "eBay needs a manual check or sign-in. The collector is paused. "
+            "Connect to this computer, complete the page in the visible browser, "
+            "and leave the tab open; collection will resume automatically.",
+            logging.WARNING,
+        )
+        while self._is_operator_check(body) and time.monotonic() < deadline:
+            page.wait_for_timeout(15_000)
+            body = page.locator("body").inner_text(timeout=5_000).lower()
+        if self._is_operator_check(body):
+            raise RuntimeError(
+                "Manual eBay check was not completed before the local wait limit."
+            )
+        report("Manual eBay check completed; resuming the queued search.")
+        try:
+            page.wait_for_selector("li.s-item, a[href*='/itm/']", timeout=15_000)
+        except Exception:
+            pass
+        return body
 
     def _save_failure(self, page, search: str, error: Exception) -> None:
         """Keep a small local diagnostic bundle; it is excluded from Git."""
@@ -316,6 +414,26 @@ class PocketBaseClient:
         return response
 
     def active_inventory(self) -> list[dict]:
+        active_overrides = {}
+        try:
+            preferences = self.request(
+                "GET",
+                "/api/collections/marketplace_refresh_state/records",
+                params={"perPage": 500},
+            ).json().get("items", [])
+            for preference in preferences:
+                override = preference.get("schedule_override") or {}
+                active = override.get("active") if isinstance(override, dict) else {}
+                if isinstance(active, dict) and active.get("mode") == "custom":
+                    active_overrides[str(preference.get("card_id") or "")] = min(
+                        3, max(0, int(active.get("listing_count") or 0))
+                    )
+        except (requests.RequestException, TypeError, ValueError):
+            report(
+                "Per-card active-listing choices are unavailable; sold-only "
+                "collection will continue.",
+                logging.WARNING,
+            )
         response = self.request(
             "GET",
             "/api/collections/cards/records",
@@ -334,6 +452,7 @@ class PocketBaseClient:
                 "grade": str(record.get("grade") or ""),
                 "cost": number(record.get("cost")),
                 "photo": "",
+                "active_listing_count": active_overrides.get(str(record["id"]), 0),
             })
         return cards
 
@@ -377,6 +496,22 @@ def amount(text: str) -> float:
     """Convert the first displayed dollar amount to a number."""
     match = re.search(r"(?:US\s*)?\$([\d,]+(?:\.\d{2})?)", text or "")
     return round(float(match.group(1).replace(",", "")), 2) if match else 0.0
+
+
+def sold_date(text: str) -> str:
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    match = re.search(
+        r"\bSold\s+([A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4})\b", value,
+        re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    for pattern in ("%b %d, %Y", "%b %d %Y"):
+        try:
+            return datetime.strptime(match.group(1), pattern).date().isoformat()
+        except ValueError:
+            continue
+    return ""
 
 
 def number(value) -> float:
@@ -460,18 +595,21 @@ def ebay_search_terms(card: dict) -> str:
     return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
 
 
-def fetch_page(session: requests.Session, search: str, page: int) -> str:
+def fetch_page(session: requests.Session, search: str, page: int,
+               role: str = "sold") -> str:
     backend = os.getenv("SLAB_SCRAPER_BACKEND", "browser").strip().lower()
     if backend == "browser":
-        return browser_collector().fetch(search, page)
+        return browser_collector().fetch(search, page, role)
     if backend != "requests":
         raise RuntimeError(
             "SLAB_SCRAPER_BACKEND must be 'browser' or 'requests'."
         )
     params = {
         "_nkw": search, "_pgn": page, "_ipg": 60,
-        "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
+        "_sop": 13 if role == "sold" else 15,
     }
+    if role == "sold":
+        params.update({"LH_Sold": 1, "LH_Complete": 1})
     response = session.get(
         f"{SEARCH_URL}?{urlencode(params)}",
         timeout=REQUEST_TIMEOUT_SECONDS,
@@ -503,6 +641,11 @@ def parse_listings(html: str, search: str) -> list[dict]:
         image = card.select_one(".s-item__image img")
         condition = text_of(card, ".SECONDARY_INFO", "Not specified")
         sold_text = text_of(card, ".s-item__title--tagblock, .s-item__caption")
+        completed_at = sold_date(sold_text)
+        if not completed_at or "best offer accepted" in (
+            f"{price_text} {sold_text}".lower()
+        ):
+            continue
         item_url = link.get("href", "")
         item_id_match = re.search(r"/itm/(?:[^/]+/)?(\d+)", item_url)
         listings.append({
@@ -519,6 +662,38 @@ def parse_listings(html: str, search: str) -> list[dict]:
             "image": image.get("src", "") if image else "",
             "url": item_url,
             "soldText": sold_text,
+            "soldAt": completed_at,
+        })
+    return listings
+
+
+def parse_active_listings(html: str, search: str) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    listings = []
+    for row in soup.select("li.s-item"):
+        title = text_of(row, ".s-item__title")
+        link = row.select_one("a.s-item__link")
+        price_text = text_of(row, ".s-item__price")
+        if not title or not link or title.lower() == "shop on ebay" or not price_text:
+            continue
+        shipping_text = text_of(row, ".s-item__shipping, .s-item__logisticsCost")
+        price = amount(price_text)
+        shipping = 0.0 if "free" in shipping_text.lower() else amount(shipping_text)
+        item_url = link.get("href", "")
+        item_id_match = re.search(r"/itm/(?:[^/]+/)?(\d+)", item_url)
+        if price <= 0:
+            continue
+        listings.append({
+            "id": item_id_match.group(1) if item_id_match else item_url,
+            "search": search,
+            "title": title,
+            "price": price,
+            "shipping": shipping,
+            "total": round(price + shipping, 2),
+            "currency": "USD",
+            "condition": text_of(row, ".SECONDARY_INFO", "Not specified"),
+            "url": item_url,
+            "listingRole": "active",
         })
     return listings
 
@@ -550,6 +725,13 @@ def comparable(card: dict, listing: dict) -> bool:
     return first_matches and hits / len(meaningful) >= 0.65
 
 
+def lowest_active_comparables(card: dict, listings: list[dict],
+                              limit: int = 3) -> list[dict]:
+    matches = [item for item in listings if comparable(card, item)]
+    matches.sort(key=lambda item: item["total"])
+    return matches[:max(0, min(3, limit))]
+
+
 def remove_price_outliers(listings: list[dict]) -> tuple[list[dict], int]:
     priced = [x for x in listings if x["total"] > 0]
     if len(priced) < 4:
@@ -564,12 +746,16 @@ def remove_price_outliers(listings: list[dict]) -> tuple[list[dict], int]:
     return kept, len(priced) - len(kept)
 
 
-def valuation(card: dict, search: str, raw: list[dict], error: str = "") -> dict:
+def valuation(card: dict, search: str, raw: list[dict], error: str = "",
+              result_limit: int = 3) -> dict:
     matched = [item for item in raw if comparable(card, item)]
     comps, outliers = remove_price_outliers(matched)
     values = sorted(item["total"] for item in comps)
-    recent_three = comps[:3]
-    estimate = round(sum(item["total"] for item in recent_three) / len(recent_three), 2) if recent_three else 0
+    recent_results = comps[:max(1, min(3, result_limit))]
+    estimate = (
+        round(sum(item["total"] for item in recent_results) / len(recent_results), 2)
+        if recent_results else 0
+    )
     median_value = round(statistics.median(values), 2) if values else 0
     dispersion = (statistics.pstdev(values) / estimate) if len(values) > 1 and estimate else 1
     if len(values) >= 8 and dispersion <= 0.25:
@@ -585,7 +771,8 @@ def valuation(card: dict, search: str, raw: list[dict], error: str = "") -> dict
         "confidence": confidence,
         "comparableCount": len(comps), "rejectedCount": len(raw) - len(matched) + outliers,
         "low": values[0] if values else 0, "high": values[-1] if values else 0,
-        "comparables": comps[:20], "recentComparables": recent_three, "error": error,
+        "comparables": recent_results, "recentComparables": recent_results,
+        "error": error,
         "lastChecked": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -674,14 +861,54 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
     print(f"Refreshing {representative.get('name', representative['id'])!r} "
           f"for {len(cards)} inventory slab(s)…")
     blocked = False
+    requests_made = 0
     try:
+        requests_made += 1
         found = parse_listings(fetch_page(session, search, 1), search)
-        unique = list({str(item["id"]): item for item in reversed(found)}.values())
-        results = [valuation(card, search, unique) for card in cards]
+        unique = list({str(item["id"]): item for item in found}.values())
+        result_limit = collector_config()["result_limit"]
+        results = [
+            valuation(card, search, unique, result_limit=result_limit)
+            for card in cards
+        ]
         print(f"Accepted {results[0]['comparableCount']} of {len(unique)} sold results")
+        if any(int(card.get("active_listing_count") or 0) > 0 for card in cards):
+            requests_made += 1
+            try:
+                active_found = parse_active_listings(
+                    fetch_page(session, search, 1, "active"), search
+                )
+                active_unique = list(
+                    {str(item["id"]): item for item in active_found}.values()
+                )
+                for result, card in zip(results, cards):
+                    active_limit = min(3, int(card.get("active_listing_count") or 0))
+                    result["activeListings"] = lowest_active_comparables(
+                        card, active_unique, active_limit
+                    )
+                print(
+                    "Optional active listing check completed; retained up to "
+                    "three lowest matching asking prices for selected cards."
+                )
+            except (requests.RequestException, RuntimeError) as active_error:
+                message = str(active_error)
+                blocked = any(word in message.lower() for word in (
+                    "403", "429", "verification", "captcha",
+                    "manual ebay check",
+                ))
+                payload.setdefault("errors", []).append(
+                    f"{search} active listings: {message}"
+                )
+                payload["errors"] = payload["errors"][-20:]
+                print(
+                    "The optional active-listing check failed; valid sold "
+                    "candidates were preserved."
+                )
     except (requests.RequestException, RuntimeError) as error:
         message = str(error)
-        blocked = any(word in message for word in ("403", "429", "verification"))
+        blocked = any(word in message.lower() for word in (
+            "403", "429", "verification", "captcha", "manual ebay check",
+        ))
         previous = {x["cardId"]: x for x in payload.get("valuations", [])}
         results = [
             {**previous.get(card["id"], {}), "cardId": card["id"], "query": search,
@@ -698,7 +925,7 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
     request_time = datetime.now(timezone.utc)
     log = [stamp for stamp in collector.get("requestLog", [])
            if checked_at(stamp) > request_time - timedelta(days=1)]
-    log.append(request_time.isoformat())
+    log.extend([request_time.isoformat()] * max(1, requests_made))
     block_count = int(collector.get("consecutiveBlocks", 0)) + 1 if blocked else 0
     cooldown = BLOCK_COOLDOWN_HOURS[min(block_count - 1, len(BLOCK_COOLDOWN_HOURS) - 1)] if blocked else 0
     collector.update({
@@ -722,8 +949,11 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
         item for item in payload["valuations"] if str(item.get("cardId")) in valid_ids
     ]
     write_data(payload)
-    if CLOUD_CLIENT:
+    config = collector_config()
+    if CLOUD_CLIENT and not config["evaluation_only"]:
         for result in results:
+            if result.get("error") or not result.get("recentComparables"):
+                continue
             if str(result.get("cardId")) not in valid_ids:
                 continue
             try:
@@ -731,6 +961,11 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
                 print(f"PocketBase market value saved for card {result['cardId']}.")
             except requests.RequestException as error:
                 print(f"PocketBase market-value save failed: {error}")
+    elif CLOUD_CLIENT:
+        print(
+            "Evaluation-only mode: candidates stayed in the local review file; "
+            "no PocketBase market value was changed."
+        )
     return blocked
 
 
@@ -744,10 +979,13 @@ def scrape_due_once(session: requests.Session) -> bool:
 
 
 def watch() -> None:
-    """Refresh one due slab at a time, slowly, throughout the day."""
+    """Refresh one due slab at a time inside the configured local window."""
     session = requests.Session()
     session.headers.update(headers())
+    completed_in_window = 0
+    active_window_date = None
     while True:
+        config = collector_config()
         now = datetime.now(timezone.utc)
         local_now = datetime.now()
         payload = read_data()
@@ -756,28 +994,58 @@ def watch() -> None:
                          if checked_at(stamp) > now - timedelta(days=1)]
         eligible_at = checked_at(collector.get("nextEligibleAt", ""))
 
-        if not ACTIVE_START_HOUR <= local_now.hour < ACTIVE_END_HOUR:
-            tomorrow = local_now + timedelta(days=1 if local_now.hour >= ACTIVE_END_HOUR else 0)
-            resume = tomorrow.replace(hour=ACTIVE_START_HOUR, minute=0, second=0, microsecond=0)
+        if active_window_date != local_now.date():
+            active_window_date = local_now.date()
+            completed_in_window = 0
+
+        if not within_collection_window(local_now, config["start"], config["end"]):
+            resume = next_window_start(local_now, config["start"])
             delay = max(60, (resume - local_now).total_seconds())
             print(f"Quiet hours; collection resumes at {resume.strftime('%I:%M %p')}.")
         elif now < eligible_at:
             delay = max(60, min(1800, (eligible_at - now).total_seconds()))
             print(f"Collector paused until {eligible_at.astimezone().strftime('%Y-%m-%d %I:%M %p')}.")
-        elif len(request_times) >= MAX_REQUESTS_PER_DAY:
+        elif len(request_times) >= config["daily_ceiling"]:
             delay = 60 * 60
             print("Daily request ceiling reached; checking again in one hour.")
+        elif config["proof_limit"] and completed_in_window >= config["proof_limit"]:
+            resume = next_window_start(local_now, config["start"])
+            delay = max(60, (resume - local_now).total_seconds())
+            print(
+                "Proof-of-concept limit reached; no more cards will be checked "
+                f"until {resume.strftime('%I:%M %p')}."
+            )
         else:
             due = next_due_group(payload)
             if due:
-                blocked = refresh_group(session, payload, due)
-                if blocked:
-                    updated = read_data()
-                    paused_until = checked_at(updated.get("collector", {}).get("nextEligibleAt", ""))
-                    delay = max(60, (paused_until - datetime.now(timezone.utc)).total_seconds())
+                expected_requests = 1 + int(any(
+                    int(card.get("active_listing_count") or 0) > 0 for card in due
+                ))
+                if len(request_times) + expected_requests > config["daily_ceiling"]:
+                    delay = 60 * 60
+                    print(
+                        "The next card would cross the daily request ceiling; "
+                        "checking again in one hour."
+                    )
                 else:
-                    delay = random.uniform(
-                        MIN_WATCH_INTERVAL_MINUTES * 60, MAX_WATCH_INTERVAL_MINUTES * 60)
+                    blocked = refresh_group(session, payload, due)
+                    completed_in_window += 1
+                    if blocked:
+                        updated = read_data()
+                        paused_until = checked_at(
+                            updated.get("collector", {}).get("nextEligibleAt", "")
+                        )
+                        delay = max(
+                            60,
+                            (
+                                paused_until - datetime.now(timezone.utc)
+                            ).total_seconds(),
+                        )
+                    else:
+                        delay = random.uniform(
+                            config["minimum_delay_minutes"] * 60,
+                            config["maximum_delay_minutes"] * 60,
+                        )
             else:
                 delay = 30 * 60
                 print("All unique slab searches are current; checking again in 30 minutes.")

@@ -53,10 +53,25 @@ The Python collector:
 - retrieves one rendered sold-results page through standard Chromium;
 - filters candidates locally;
 - calculates a valuation;
-- writes normalized values back to PocketBase;
+- defaults to evaluation-only so proof candidates remain local;
 - serves a separate dashboard only on `127.0.0.1`.
 
-It is deliberately slow and does not use stealth or challenge bypasses.
+The initial proof runs three unique searches between 2 AM and 7 AM local time,
+paces them 12–20 minutes apart, and retains the latest three verified sold
+candidates per card.
+The visible browser pauses when eBay requests a normal sign-in or CAPTCHA and
+resumes only after the owner manually completes it. It does not solve, route
+around, or intensify traffic after a challenge. A provider failure or unfinished
+challenge preserves the last known good data.
+
+For scarce cards selected by the owner, the collector may make one separate
+active-results request and retain the three lowest locally matched asking
+prices. These remain labeled active observations and are never used as proof of
+a completed transaction.
+
+After the proof output has been reviewed, accepted candidates can be migrated
+through the normalized owner-private observation boundary. Enabling that import
+is a separate rollout step; proof mode never overwrites a trusted value.
 
 ## Provider abstraction — Current foundation
 

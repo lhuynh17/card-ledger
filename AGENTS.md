@@ -207,6 +207,14 @@ These rules are mandatory:
   overrides; never represent an active asking price as a completed sale.
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
+- The Windows local sold-listing proof is evaluation-only by default: three
+  unique searches in an owner-configured overnight window, one or two strictly
+  dated sold candidates for hosted providers or three for the local collector,
+  visible manual sign-in/CAPTCHA handling, and no
+  trusted-value replacement. It must not automate or route around challenges.
+- Optional local active checks are per-card, use a separate active-results
+  request, retain at most the three lowest locally matched asking prices, and
+  never contribute sold evidence.
 
 ## Logging and error handling
 
