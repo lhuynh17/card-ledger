@@ -17,8 +17,9 @@ accepted comparables and market estimate back to PocketBase.
    whenever you sign in. Keep that Windows account signed in; locking the
    screen is fine.
 
-`setup-windows.bat` installs Python packages and standard Playwright Chromium.
-The browser keeps a local profile under `data/`; that folder, logs, credentials,
+`setup-windows.bat` installs the Python collector components. Install the
+current Google Chrome for Windows separately. The collector controls Chrome
+with a dedicated local profile under `data/`; that folder, logs, credentials,
 and live results are excluded from Git.
 
 ## Collection safeguards
@@ -42,7 +43,8 @@ and live results are excluded from Git.
 - Evaluation-only mode keeps proof results local and never replaces a trusted
   PocketBase market value.
 
-The collector uses normal Chromium. It does not include stealth plugins,
+The collector uses the normally installed Google Chrome with a separate
+persistent profile. It does not include stealth plugins,
 fingerprint disguises, challenge solvers, proxy rotation, or other blocking
 workarounds.
 
@@ -52,6 +54,7 @@ workarounds.
 
 ```text
 SLAB_SCRAPER_BACKEND=browser
+SLAB_BROWSER_CHANNEL=chrome
 SLAB_BROWSER_HEADLESS=0
 SLAB_COLLECTOR_START_TIME=00:00
 SLAB_COLLECTOR_END_TIME=00:00

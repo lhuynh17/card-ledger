@@ -58,7 +58,7 @@ The external browser libraries are pinned and loaded with Subresource Integrity,
 
 - Python 3;
 - `requests`, Beautiful Soup, and Playwright;
-- standard persistent Chromium;
+- installed Google Chrome with a dedicated persistent collector profile;
 - an owner-configurable local window, all-day default, and visible
   manual-check pause;
 - a loopback-only `ThreadingHTTPServer`;

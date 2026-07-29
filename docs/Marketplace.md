@@ -50,7 +50,8 @@ The Python collector:
 
 - reads active PocketBase inventory;
 - builds normalized searches;
-- retrieves one rendered sold-results page through standard Chromium;
+- retrieves one rendered sold-results page through installed Google Chrome
+  using a dedicated persistent collector profile;
 - filters candidates locally;
 - calculates a valuation;
 - defaults to evaluation-only so proof candidates remain local;
@@ -59,7 +60,7 @@ The Python collector:
 The initial proof runs three unique searches throughout the day on the
 dedicated computer, paces them 12–20 minutes apart, and retains the latest three verified sold
 candidates per card.
-The visible browser pauses when eBay requests a normal sign-in or CAPTCHA and
+The visible Chrome window pauses when eBay requests a normal sign-in or CAPTCHA and
 resumes only after the owner manually completes it. It does not solve, route
 around, or intensify traffic after a challenge. A provider failure or unfinished
 challenge preserves the last known good data.

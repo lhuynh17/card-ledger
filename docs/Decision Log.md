@@ -365,3 +365,17 @@ normalized observation import remain gated on reviewed proof results.
 The owner may separately select scarce cards for one active-results request.
 Only the three lowest locally matched asking prices are retained, clearly
 labeled as active, and excluded from sold-evidence valuation.
+
+## 2026-07-29 — Use installed Chrome for manual verification compatibility
+
+**Decision:** Run the local collector through the dedicated profile of the
+normally installed Google Chrome rather than bundled Playwright Chromium.
+
+**Why:** The live proof reached eBay, but bundled Chromium received HTTP 403
+and could not render eBay's hCaptcha verification page. Installed Chrome lets
+the owner complete a normal supported-browser challenge without adding a
+solver, stealth tooling, fingerprint changes, or proxy rotation.
+
+**Consequence:** Chrome must be installed on the Windows collector computer.
+The collector still uses an isolated ignored profile and preserves all pacing,
+cooldown, evaluation-only, and localhost restrictions.

@@ -185,6 +185,7 @@ Supported configuration:
 | `SLAB_POCKETBASE_PASSWORD` | ignored collector env | collector app-user password |
 | `SLAB_POCKETBASE_SUPERUSER_EMAIL` | ignored setup env | non-secret setup convenience |
 | `SLAB_SCRAPER_BACKEND` | ignored collector env | `browser` normally; `requests` for troubleshooting |
+| `SLAB_BROWSER_CHANNEL` | ignored collector env | `chrome` for the dedicated installed-browser profile |
 | `SLAB_BROWSER_HEADLESS` | ignored collector env | background or visible diagnostic browser |
 
 The setup utility saves only the PocketBase URL and superuser email. It never
@@ -202,7 +203,8 @@ The optional eBay collector intentionally:
 - shares one cached result among identical searches;
 - uses a single-instance lock;
 - increases cooldowns after HTTP 403/429 or verification responses;
-- uses standard Chromium without stealth, fingerprint disguise, proxy
+- uses installed Google Chrome with a dedicated profile and without stealth,
+  fingerprint disguise, proxy
   rotation, CAPTCHA solving, or challenge bypass.
 - pauses visibly for manual owner completion when eBay requests a sign-in or
   CAPTCHA, then resumes the same queue without automating the challenge;

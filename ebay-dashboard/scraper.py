@@ -223,20 +223,32 @@ class BrowserCollector:
         PROFILE_DIR.mkdir(parents=True, exist_ok=True)
         self._playwright = sync_playwright().start()
         headless = os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() != "0"
+        channel = os.getenv("SLAB_BROWSER_CHANNEL", "chrome").strip()
         try:
+            options = {
+                "headless": headless,
+                "locale": "en-US",
+                "timezone_id": "America/Chicago",
+                "viewport": {"width": 1440, "height": 900},
+            }
+            if channel:
+                options["channel"] = channel
             self._context = self._playwright.chromium.launch_persistent_context(
-                str(PROFILE_DIR),
-                headless=headless,
-                locale="en-US",
-                timezone_id="America/Chicago",
-                viewport={"width": 1440, "height": 900},
+                str(PROFILE_DIR), **options
             )
-        except Exception:
+        except Exception as error:
             self._playwright.stop()
+            if channel == "chrome":
+                raise RuntimeError(
+                    "Google Chrome could not be started. Install the current "
+                    "Google Chrome for Windows, then restart the collector."
+                ) from error
             raise
         report(
             "Browser collector ready "
-            f"({'background' if headless else 'visible'} Chromium, persistent profile)."
+            f"({'background' if headless else 'visible'} "
+            f"{'Google Chrome' if channel == 'chrome' else 'Chromium'}, "
+            "persistent profile)."
         )
 
     def close(self) -> None:
