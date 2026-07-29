@@ -128,7 +128,7 @@ Before rollout:
 ### Local sold-listing proof
 
 Validate the optional Windows collector with a default evaluation-only,
-three-card overnight run:
+three-card all-day run:
 
 - confirm eBay exposes a trustworthy sold price and sold date;
 - retain the latest three verified local sold candidates per card;

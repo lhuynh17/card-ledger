@@ -56,8 +56,8 @@ The Python collector:
 - defaults to evaluation-only so proof candidates remain local;
 - serves a separate dashboard only on `127.0.0.1`.
 
-The initial proof runs three unique searches between 2 AM and 7 AM local time,
-paces them 12–20 minutes apart, and retains the latest three verified sold
+The initial proof runs three unique searches throughout the day on the
+dedicated computer, paces them 12–20 minutes apart, and retains the latest three verified sold
 candidates per card.
 The visible browser pauses when eBay requests a normal sign-in or CAPTCHA and
 resumes only after the owner manually completes it. It does not solve, route

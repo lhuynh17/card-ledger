@@ -345,10 +345,11 @@ sold comparables while allowing low-cost refresh schedules.
 dashboard forecasts Apify returned-record cost and each provider allowance
 before saving. Neither role automatically overwrites a trusted value.
 
-## 2026-07-28 — Validate local overnight sold collection before import
+## 2026-07-28 — Validate local paced sold collection before import
 
 **Decision:** Use the existing optional Windows collector for a three-card,
-evaluation-only proof between 2 AM and 7 AM local time. Retain the latest three
+evaluation-only proof spread throughout the day on the dedicated computer.
+Retain the latest three
 recent candidates per card, keep the persistent browser visible, and pause for
 the owner to manually complete a normal eBay sign-in or CAPTCHA.
 

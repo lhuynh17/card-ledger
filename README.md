@@ -19,7 +19,7 @@ The app tracks:
   schedules at hour/day/week/month intervals, with live free-tier estimates,
   per-card sold-schedule overrides, and no automatic value replacement;
 - an optional evaluation-only Windows sold-listing collector that can run a
-  three-card overnight proof, pause for a manual browser check, and retain one
+  three-card all-day proof, pause for a manual browser check, and retain one
   to three candidates locally without replacing trusted values;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;

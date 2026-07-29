@@ -25,8 +25,8 @@ and live results are excluded from Git.
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
 - Identical slab searches share a cached result.
-- The default proof runs from 2 AM to 7 AM in the Windows computer's local
-  time, with one due search every 12–20 minutes.
+- The default proof can run throughout the day on the dedicated Windows
+  computer, with one due search every 12–20 minutes.
 - The proof stops after three unique searches and retains the latest three
   sold candidates per card.
 - Cards explicitly selected in Slab Ledger can also retain their three lowest
@@ -53,8 +53,8 @@ workarounds.
 ```text
 SLAB_SCRAPER_BACKEND=browser
 SLAB_BROWSER_HEADLESS=0
-SLAB_COLLECTOR_START_TIME=02:00
-SLAB_COLLECTOR_END_TIME=07:00
+SLAB_COLLECTOR_START_TIME=00:00
+SLAB_COLLECTOR_END_TIME=00:00
 SLAB_COLLECTOR_MIN_DELAY_MINUTES=12
 SLAB_COLLECTOR_MAX_DELAY_MINUTES=20
 SLAB_COLLECTOR_RESULT_LIMIT=3

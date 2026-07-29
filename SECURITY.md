@@ -195,8 +195,8 @@ saves the superuser password or MFA code.
 The optional eBay collector intentionally:
 
 - processes one due unique query every 12–20 minutes;
-- uses an owner-configured local collection window, defaulting to 2 AM–7 AM
-  for the three-card proof;
+- uses an owner-configured local collection window, defaulting to all day on
+  the dedicated computer for the three-card proof;
 - treats results as fresh for 22 hours;
 - caps requests at 72 per rolling 24 hours;
 - shares one cached result among identical searches;

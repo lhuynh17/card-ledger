@@ -12,16 +12,21 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
-    def test_default_proof_is_overnight_local_and_evaluation_only(self):
+    def test_default_proof_is_all_day_local_and_evaluation_only(self):
         with patch.dict(os.environ, {}, clear=True):
             config = scraper.collector_config()
-        self.assertEqual(config["start"], (2, 0))
-        self.assertEqual(config["end"], (7, 0))
+        self.assertEqual(config["start"], (0, 0))
+        self.assertEqual(config["end"], (0, 0))
         self.assertEqual(config["result_limit"], 3)
         self.assertEqual(config["proof_limit"], 3)
         self.assertTrue(config["evaluation_only"])
 
     def test_collection_window_supports_day_and_cross_midnight_ranges(self):
+        self.assertTrue(
+            scraper.within_collection_window(
+                datetime(2026, 7, 28, 18, 30), (0, 0), (0, 0)
+            )
+        )
         self.assertTrue(
             scraper.within_collection_window(
                 datetime(2026, 7, 28, 4, 30), (4, 0), (7, 0)

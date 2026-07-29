@@ -208,7 +208,8 @@ These rules are mandatory:
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
 - The Windows local sold-listing proof is evaluation-only by default: three
-  unique searches in an owner-configured overnight window, one or two strictly
+  unique searches in an owner-configured window that defaults to all day on a
+  dedicated computer, one or two strictly
   dated sold candidates for hosted providers or three for the local collector,
   visible manual sign-in/CAPTCHA handling, and no
   trusted-value replacement. It must not automate or route around challenges.

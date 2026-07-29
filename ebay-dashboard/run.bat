@@ -45,8 +45,8 @@ echo.
 echo Schedule:
 echo   - One unique inventory search every 12-20 minutes
 echo   - Each search cached for 22 hours
-echo   - Default proof window from 2:00 AM to 7:00 AM
-echo   - Three unique searches per overnight proof run
+echo   - Available throughout the day on the dedicated computer
+echo   - Three unique searches per evaluation proof run
 echo   - Three recent sold results retained per card
 echo   - Optional three lowest active listings for selected scarce cards
 echo   - Evaluation-only: trusted PocketBase values are not replaced

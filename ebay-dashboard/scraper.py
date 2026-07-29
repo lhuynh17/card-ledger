@@ -156,8 +156,8 @@ def collector_config() -> dict:
         "SLAB_COLLECTOR_MAX_DELAY_MINUTES", MAX_WATCH_INTERVAL_MINUTES, 1, 1440
     )
     return {
-        "start": parse_clock(os.getenv("SLAB_COLLECTOR_START_TIME", "02:00"), (2, 0)),
-        "end": parse_clock(os.getenv("SLAB_COLLECTOR_END_TIME", "07:00"), (7, 0)),
+        "start": parse_clock(os.getenv("SLAB_COLLECTOR_START_TIME", "00:00"), (0, 0)),
+        "end": parse_clock(os.getenv("SLAB_COLLECTOR_END_TIME", "00:00"), (0, 0)),
         "minimum_delay_minutes": minimum_delay,
         "maximum_delay_minutes": max(minimum_delay, maximum_delay),
         "daily_ceiling": environment_int(
