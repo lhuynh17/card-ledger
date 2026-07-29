@@ -994,6 +994,11 @@ def watch() -> None:
     """Refresh one due slab at a time inside the configured local window."""
     session = requests.Session()
     session.headers.update(headers())
+    if (
+        os.getenv("SLAB_SCRAPER_BACKEND", "browser").strip().lower() == "browser"
+        and os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() == "0"
+    ):
+        browser_collector()
     completed_in_window = 0
     active_window_date = None
     while True:
