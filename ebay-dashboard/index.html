@@ -90,6 +90,7 @@
     }
     .ebay-link:hover { background: #0f3d29; }
     .ebay-link:focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
+    .verification-needed { color:#8a5a00; font-weight:750; }
 
     .state {
       grid-column: 1 / -1; padding: 70px 24px; border: 1px dashed #cdd3cc;
@@ -182,10 +183,14 @@
         const sold = (valuation.comparables || []).map((item) => ({
           ...item, source, listingRole:"sold"
         }));
+        const pending = (valuation.pendingBestOffers || []).map((item) => ({
+          ...item, source:`${source} · verification needed`,
+          listingRole:"best_offer_pending"
+        }));
         const active = (valuation.activeListings || []).map((item) => ({
           ...item, source:`${source} · active asking price`, listingRole:"active"
         }));
-        return [...sold, ...active];
+        return [...sold, ...pending, ...active];
       });
     }
 
@@ -218,15 +223,15 @@
           <article class="listing">
             <div class="listing-top">
               <span class="source" title="${escapeHtml(item.source)}">${escapeHtml(item.source)}</span>
-              <span class="condition">${escapeHtml(item.listingRole === "active" ? "Active asking price" : item.condition || "Sold listing")}</span>
+              <span class="condition">${escapeHtml(item.listingRole === "active" ? "Active asking price" : item.listingRole === "best_offer_pending" ? "Best Offer · verify price" : item.condition || "Sold listing")}</span>
             </div>
             <h2 class="title">${escapeHtml(item.title || "Untitled eBay listing")}</h2>
-            <div class="seller">${escapeHtml(item.listingRole === "active" ? "Current listing—not a completed sale" : item.seller || "eBay seller")}${item.soldText ? ` · ${escapeHtml(item.soldText)}` : ""}</div>
+            <div class="seller ${item.listingRole === "best_offer_pending" ? "verification-needed" : ""}">${escapeHtml(item.listingRole === "active" ? "Current listing—not a completed sale" : item.listingRole === "best_offer_pending" ? "Actual accepted price must be checked in Product Research" : item.seller || "eBay seller")}${item.soldText ? ` · ${escapeHtml(item.soldText)}` : ""}</div>
             <div class="listing-bottom">
               <div>
                 <div class="price-label">Total price</div>
-                <div class="price">${money(total, item.currency || "USD")}</div>
-                <div class="shipping">${shipping ? `${money(price, item.currency || "USD")} + ${money(shipping, item.currency || "USD")} shipping` : "Shipping included or free"}</div>
+                <div class="price">${item.listingRole === "best_offer_pending" ? "Price unknown" : money(total, item.currency || "USD")}</div>
+                <div class="shipping">${item.listingRole === "best_offer_pending" ? "Displayed asking price is not used" : shipping ? `${money(price, item.currency || "USD")} + ${money(shipping, item.currency || "USD")} shipping` : "Shipping included or free"}</div>
               </div>
               <a class="ebay-link" href="${escapeHtml(item.url || "#")}" target="_blank" rel="noopener noreferrer" aria-label="View ${escapeHtml(item.title || "listing")} on eBay">View on eBay ↗</a>
             </div>

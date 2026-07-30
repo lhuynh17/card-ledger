@@ -70,6 +70,10 @@ REPLICA_WORDS = {
     "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
     "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
 }
+LANGUAGE_WORDS = {
+    "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
+    "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
+}
 
 
 def configure_logging() -> logging.Logger:
@@ -603,7 +607,7 @@ def card_keywords(name: str) -> str:
 
 
 def ebay_search_terms(card: dict) -> str:
-    """Build the same clean query currently used by Slab Ledger."""
+    """Build a concise query without losing price-critical edition markers."""
     company = str(card.get("company") or "PSA").upper()
     grade = grade_number(str(card.get("grade") or ""))
     exact_grade = f'"{company} {grade}"' if grade else company
@@ -612,7 +616,36 @@ def ebay_search_terms(card: dict) -> str:
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
     keywords = str(card.get("ebay_search") or "").strip() or card_keywords(card.get("name", ""))
+    words = keywords.split()
+    concise = [
+        word for word in words
+        if word.upper() not in LANGUAGE_WORDS
+        and not re.fullmatch(r"(?:19|20)\d{2}", word)
+    ]
+    if len(concise) >= 2:
+        keywords = " ".join(concise)
     return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
+
+
+def edition_identity(card: dict) -> str:
+    identity = " ".join([
+        str(card.get("name") or ""),
+        str(card.get("ebay_search") or ""),
+    ]).upper()
+    if re.search(r"\b(?:1ST|FIRST)\s+(?:ED|EDITION)\b", identity):
+        return "first_edition"
+    if re.search(r"\bUNLIMITED\b", identity):
+        return "unlimited"
+    return "not_specified"
+
+
+def listing_edition(title: str) -> str:
+    identity = str(title or "").upper()
+    if re.search(r"\b(?:1ST|FIRST)\s+(?:ED|EDITION)\b", identity):
+        return "first_edition"
+    if re.search(r"\bUNLIMITED\b", identity):
+        return "unlimited"
+    return "unknown"
 
 
 def fetch_page(session: requests.Session, search: str, page: int,
@@ -727,9 +760,18 @@ def comparable(card: dict, listing: dict) -> bool:
     grade = grade_number(str(card.get("grade") or ""))
     if company not in title or (grade and not re.search(rf"\b{re.escape(grade)}\b", title)):
         return False
+    expected_edition = edition_identity(card)
+    found_edition = listing_edition(title)
+    if expected_edition == "first_edition" and found_edition != "first_edition":
+        return False
+    if expected_edition == "unlimited" and found_edition != "unlimited":
+        return False
     meaningful = [
         word for word in card_keywords(card.get("name", "")).split()
         if len(word) > 1
+        and word not in LANGUAGE_WORDS
+        and not re.fullmatch(r"(?:19|20)\d{2}", word)
+        and word not in {"1ST", "FIRST", "ED", "EDITION", "UNLIMITED"}
     ]
     if not meaningful:
         return True
@@ -769,27 +811,42 @@ def remove_price_outliers(listings: list[dict]) -> tuple[list[dict], int]:
 def valuation(card: dict, search: str, raw: list[dict], error: str = "",
               result_limit: int = 3) -> dict:
     matched = [item for item in raw if comparable(card, item)]
-    comps, outliers = remove_price_outliers(matched)
-    values = sorted(item["total"] for item in comps)
-    recent_results = comps[:max(1, min(3, result_limit))]
-    estimate = (
-        round(sum(item["total"] for item in recent_results) / len(recent_results), 2)
-        if recent_results else 0
+    pending_offers = [
+        item for item in matched if item.get("priceVerificationRequired")
+    ][:3]
+    verified = [
+        item for item in matched
+        if not item.get("priceVerificationRequired") and item.get("total", 0) > 0
+    ]
+    recent_results = verified[:max(1, min(3, result_limit))]
+    values = sorted(item["total"] for item in recent_results if item["total"] > 0)
+    estimate = round(statistics.median(values), 2) if values else 0
+    confidence = (
+        "high" if len(values) >= 3
+        else "medium" if len(values) == 2
+        else "low"
     )
-    median_value = round(statistics.median(values), 2) if values else 0
-    dispersion = (statistics.pstdev(values) / estimate) if len(values) > 1 and estimate else 1
-    if len(values) >= 8 and dispersion <= 0.25:
-        confidence = "high"
-    elif len(values) >= 3 and dispersion <= 0.5:
-        confidence = "medium"
-    else:
-        confidence = "low"
+    volatility = "unknown"
+    if len(values) >= 2 and estimate:
+        spread_ratio = (values[-1] - values[0]) / estimate
+        volatility = (
+            "high" if spread_ratio > 0.5
+            else "moderate" if spread_ratio > 0.2
+            else "stable"
+        )
     return {
         "cardId": card["id"], "query": search,
         "searchUrl": f"{SEARCH_URL}?{urlencode({'_nkw': search, 'LH_Sold': 1, 'LH_Complete': 1, '_sop': 13})}",
-        "marketValue": estimate, "lastThreeAverage": estimate, "medianValue": median_value,
+        "marketValue": estimate, "lastThreeAverage": (
+            round(sum(values) / len(values), 2) if values else 0
+        ), "medianValue": estimate,
         "confidence": confidence,
-        "comparableCount": len(comps), "rejectedCount": len(raw) - len(matched) + outliers,
+        "identityConfidence": confidence, "volatility": volatility,
+        "edition": edition_identity(card),
+        "comparableCount": len(verified),
+        "pendingVerificationCount": len(pending_offers),
+        "pendingBestOffers": pending_offers,
+        "rejectedCount": len(raw) - len(matched),
         "low": values[0] if values else 0, "high": values[-1] if values else 0,
         "comparables": recent_results, "recentComparables": recent_results,
         "error": error,
@@ -905,14 +962,25 @@ def normalize_extension_items(items, role: str, search: str) -> list[dict]:
         if role == "sold":
             sold_text = str(raw.get("soldText") or "")[:200]
             completed_at = sold_date(sold_text)
-            if (
-                not completed_at
-                or "best offer accepted" in (
-                    f"{raw.get('priceText', '')} {sold_text}".lower()
-                )
-            ):
+            if not completed_at:
                 continue
-            item.update({"soldText": sold_text, "soldAt": completed_at})
+            best_offer = bool(raw.get("bestOfferAccepted")) or (
+                "best offer accepted" in
+                f"{raw.get('priceText', '')} {sold_text}".lower()
+            )
+            item.update({
+                "soldText": sold_text,
+                "soldAt": completed_at,
+                "priceVerificationRequired": best_offer,
+            })
+            if best_offer:
+                item.update({
+                    "displayedAskingPrice": item["price"],
+                    "price": 0,
+                    "shipping": 0,
+                    "total": 0,
+                    "verificationReason": "best_offer_actual_price_unknown",
+                })
         else:
             item["listingRole"] = "active"
         normalized.append(item)

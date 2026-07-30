@@ -99,6 +99,20 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["soldAt"], "2026-07-27")
 
+    def test_best_offer_is_retained_without_using_displayed_price(self):
+        items = scraper.normalize_extension_items([{
+            "id":"123",
+            "title":"Gengar EX 090 PSA 10 1st Edition",
+            "priceText":"$7,200.00",
+            "soldText":"Sold Jul 27, 2026",
+            "bestOfferAccepted":True,
+            "url":"https://www.ebay.com/itm/123",
+        }], "sold", "gengar")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["priceVerificationRequired"])
+        self.assertEqual(items[0]["total"], 0)
+        self.assertEqual(items[0]["displayedAskingPrice"], 7200)
+
     def test_extension_completion_stays_in_local_evaluation_file(self):
         card = {
             "id":"card-1", "company":"PSA", "grade":"10",
@@ -171,6 +185,53 @@ class SoldResultTests(unittest.TestCase):
         )
         self.assertEqual(len(result["recentComparables"]), 3)
         self.assertEqual(result["marketValue"], 110)
+
+    def test_query_drops_year_and_language_but_keeps_edition(self):
+        card = {
+            "company":"PSA", "grade":"10",
+            "ebay_search":"2014 JAPANESE 090 GENGAR EX 1ST ED",
+        }
+        query = scraper.ebay_search_terms(card)
+        self.assertNotIn("2014", query)
+        self.assertNotIn("JAPANESE", query)
+        self.assertIn("090 GENGAR EX 1ST ED", query)
+
+    def test_first_edition_and_unlimited_are_not_interchangeable(self):
+        first = {
+            "company":"PSA", "grade":"10",
+            "name":"2014 Pokemon #090 Gengar EX 1st Ed",
+        }
+        unlimited = {
+            "company":"PSA", "grade":"10",
+            "name":"2014 Pokemon #090 Gengar EX Unlimited",
+        }
+        base = {"id":"1", "total":100}
+        self.assertTrue(scraper.comparable(
+            first, {**base, "title":"Gengar EX 090 PSA 10 1st Edition"}
+        ))
+        self.assertFalse(scraper.comparable(
+            first, {**base, "title":"Gengar EX 090 PSA 10 Unlimited"}
+        ))
+        self.assertFalse(scraper.comparable(
+            unlimited, {**base, "title":"Gengar EX 090 PSA 10 1st Edition"}
+        ))
+        self.assertTrue(scraper.comparable(
+            unlimited, {**base, "title":"Gengar EX 090 PSA 10 Unlimited"}
+        ))
+
+    def test_real_price_swing_is_labeled_not_removed(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"Pokemon #090 Gengar EX",
+        }
+        listings = [
+            {"id":str(index), "title":"Gengar EX 090 PSA 10", "total":total}
+            for index, total in enumerate((8000, 4000, 3900), start=1)
+        ]
+        result = scraper.valuation(card, "Gengar EX 090 PSA 10", listings)
+        self.assertEqual(result["comparableCount"], 3)
+        self.assertEqual(result["marketValue"], 4000)
+        self.assertEqual(result["volatility"], "high")
 
     def test_empty_results_never_create_a_positive_or_blank_estimate(self):
         card = {
