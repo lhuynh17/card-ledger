@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Slab Ledger Collector",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Processes the private Slab Ledger eBay research queue in normal Chrome.",
   "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [

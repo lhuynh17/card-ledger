@@ -24,6 +24,16 @@ async function setBadge(text, color) {
   if (color) await chrome.action.setBadgeBackgroundColor({ color });
 }
 
+async function closeJobTab(tabId) {
+  if (!tabId) return;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) return;
+    await chrome.tabs.remove(tabId).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 async function poll() {
   const config = await settings();
   if (!config.enabled || !config.pairingKey) return;
@@ -83,7 +93,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     await chrome.storage.session.remove("activeJob");
-    if (sender.tab?.id) await chrome.tabs.remove(sender.tab.id).catch(() => {});
+    await closeJobTab(job.tabId);
     await setBadge("", "#357a50");
     setTimeout(poll, 3000);
   })().then(() => sendResponse({ ok:true })).catch(() => {
