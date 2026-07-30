@@ -52,7 +52,7 @@ echo   - Optional three lowest active listings for selected scarce cards
 echo   - Evaluation-only: trusted PocketBase values are not replaced
 echo   - Maximum 72 requests per rolling 24 hours
 echo   - Automatic extended cooldown after a block response
-echo   - Visible dedicated Google Chrome pauses for manual checks and resumes
+echo   - Normal-Chrome extension pauses for manual checks and resumes
 echo   - No stealth, CAPTCHA solving, proxy rotation, or challenge bypass
 echo.
 echo Keep this window open. Press Ctrl+C to stop the collector.

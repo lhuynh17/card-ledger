@@ -289,8 +289,9 @@ the business ledger.
 
 For the initial local sold-listing proof, keep
 `SLAB_COLLECTOR_EVALUATION_ONLY=1`, `SLAB_COLLECTOR_PROOF_LIMIT=3`, and
-`SLAB_BROWSER_HEADLESS=0` in the ignored Windows `collector.env`. The default
-window is all day on that dedicated computer. The visible browser pauses
-for a normal manual eBay sign-in or CAPTCHA and resumes afterward; it does not
-solve or bypass the challenge. Review the ignored local results before
-deliberately enabling any PocketBase observation import.
+`SLAB_SCRAPER_BACKEND=extension` in the ignored Windows `collector.env`. The
+default window is all day on that dedicated computer. The paired extension in
+the owner's normal Chrome profile activates the eBay tab for a manual sign-in
+or CAPTCHA and resumes afterward; it does not solve or bypass the challenge.
+Review the ignored local results before deliberately enabling any PocketBase
+observation import.

@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Slab Ledger Collector",
+  "version": "0.1.0",
+  "description": "Processes the private Slab Ledger eBay research queue in normal Chrome.",
+  "permissions": ["alarms", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "https://www.ebay.com/*",
+    "https://signin.ebay.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.ebay.com/*",
+        "https://signin.ebay.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Slab Ledger Collector"
+  }
+}

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,13 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_pairing_key_state_is_outside_dashboard_document_root(self):
+        self.assertFalse(
+            str(scraper.EXTENSION_PAIRING_FILE).startswith(
+                str(scraper.ROOT) + os.sep
+            )
+        )
+
     def test_default_proof_is_all_day_local_and_evaluation_only(self):
         with patch.dict(os.environ, {}, clear=True):
             config = scraper.collector_config()
@@ -64,6 +72,67 @@ class CollectorConfigurationTests(unittest.TestCase):
 
 
 class SoldResultTests(unittest.TestCase):
+    def test_extension_items_require_ebay_url_price_and_sold_date(self):
+        items = scraper.normalize_extension_items([
+            {
+                "id":"123",
+                "title":"2023 Pokemon 199 Charizard PSA 10",
+                "priceText":"$100.00",
+                "shippingText":"Free shipping",
+                "soldText":"Sold Jul 27, 2026",
+                "url":"https://www.ebay.com/itm/123",
+            },
+            {
+                "id":"124",
+                "title":"Missing sold date",
+                "priceText":"$10.00",
+                "url":"https://www.ebay.com/itm/124",
+            },
+            {
+                "id":"125",
+                "title":"Wrong host",
+                "priceText":"$10.00",
+                "soldText":"Sold Jul 27, 2026",
+                "url":"https://example.com/itm/125",
+            },
+        ], "sold", "charizard")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["soldAt"], "2026-07-27")
+
+    def test_extension_completion_stays_in_local_evaluation_file(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"2023 Pokemon #199 Charizard",
+            "active_listing_count":0,
+        }
+        payload = {
+            "inventory":[card], "valuations":[], "collector":{},
+            "extensionJobs":[],
+        }
+        job = {
+            "id":"job-1", "role":"sold", "status":"running",
+            "search":"2023 Pokemon 199 Charizard PSA 10",
+            "cards":[card],
+        }
+        payload["extensionJobs"].append(job)
+        items = [{
+            "id":"123",
+            "title":"2023 Pokemon 199 Charizard PSA 10",
+            "priceText":"$100.00",
+            "shippingText":"Free shipping",
+            "soldText":"Sold Jul 27, 2026",
+            "url":"https://www.ebay.com/itm/123",
+        }]
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "data.json"
+            with patch.object(scraper, "OUTPUT", output):
+                scraper.finish_extension_job(payload, job, items)
+                saved = scraper.read_data()
+        self.assertEqual(job["status"], "complete")
+        self.assertEqual(saved["valuations"][0]["marketValue"], 100)
+        self.assertEqual(saved["valuations"][0]["recentComparables"][0]["soldAt"],
+                         "2026-07-27")
+
     def test_sold_date_requires_explicit_completed_sale_text(self):
         self.assertEqual(
             scraper.sold_date("Sold Jul 27, 2026"), "2026-07-27"

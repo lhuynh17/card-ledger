@@ -47,9 +47,9 @@ optional provider, collector, or network connection is unavailable.
   third-party APIs and protected relays.
 - The optional eBay collector is a separate Python companion. It must remain
   optional and localhost-only.
-- The collector uses installed Google Chrome with an ignored dedicated profile
-  so the owner can complete normal browser verification. Do not attach it to
-  the owner's everyday Chrome profile.
+- The default collector uses an unpacked extension in the owner's normal
+  signed-in Chrome profile so normal verification renders. It pairs only with
+  the loopback collector and must never receive PocketBase credentials.
 - Do not silently remove legacy PocketBase collections or user records.
   Migrations must be additive and non-destructive unless the user explicitly
   authorizes a separately backed-up destructive migration.

@@ -379,3 +379,20 @@ solver, stealth tooling, fingerprint changes, or proxy rotation.
 **Consequence:** Chrome must be installed on the Windows collector computer.
 The collector still uses an isolated ignored profile and preserves all pacing,
 cooldown, evaluation-only, and localhost restrictions.
+
+## 2026-07-29 — Replace controlled-browser proof with normal-Chrome extension
+
+**Decision:** Make an unpacked extension in the owner's ordinary signed-in
+Chrome profile the default local collection transport. Pair it to the
+localhost-only companion with a random local key.
+
+**Why:** Both bundled Chromium and Playwright-controlled installed Chrome were
+rejected by the Google/eBay sign-in flow and could not render eBay's hCaptcha.
+The normal browser profile already supports the owner's sign-in and manual
+verification without weakening the collector boundary.
+
+**Consequence:** The extension receives only a bounded research job and returns
+structured listing text to the local validator. It never receives PocketBase
+credentials, never writes trusted values, and activates a tab for owner action
+instead of automating CAPTCHA. The Playwright transport remains disabled by
+default as a troubleshooting fallback.

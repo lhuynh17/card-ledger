@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Slab Ledger Collector</title>
+  <style>
+    body { margin:0; background:#f4f5f0; color:#17211b;
+      font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { width:min(560px,calc(100% - 32px)); margin:48px auto; padding:28px;
+      background:white; border:1px solid #dfe3dd; border-radius:16px; }
+    h1 { margin:0 0 8px; } p { color:#5e6962; }
+    label { display:block; margin:22px 0 6px; font-weight:700; }
+    input[type=password] { width:100%; box-sizing:border-box; padding:12px;
+      border:1px solid #aeb7b1; border-radius:9px; font:inherit; }
+    .toggle { display:flex; align-items:center; gap:10px; margin:18px 0; }
+    button { padding:11px 18px; border:0; border-radius:9px;
+      background:#184f37; color:white; font-weight:700; cursor:pointer; }
+    #message { min-height:24px; margin-top:14px; font-weight:650; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Slab Ledger Collector</h1>
+    <p>This extension connects only to the collector running on this computer.</p>
+    <label for="pairingKey">Pairing code</label>
+    <input id="pairingKey" type="password" autocomplete="off"
+      placeholder="Copy the code from the collector window">
+    <label class="toggle"><input id="enabled" type="checkbox">
+      Enable automatic queued searches</label>
+    <button id="save" type="button">Save and test</button>
+    <div id="message" role="status"></div>
+    <script src="options.js"></script>
+  </main>
+</body>
+</html>

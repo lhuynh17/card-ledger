@@ -6,10 +6,10 @@ Install once on Windows:
 Run continuously and serve the dashboard:
     py scraper.py --watch
 
-The default browser backend uses standard Playwright Chromium with a persistent
-local profile. It does not use stealth plugins or attempt to solve challenges.
-Review eBay's terms before use. HTML can change, so selectors may occasionally
-need updates.
+The default transport pairs with an unpacked extension in the owner's normal
+Chrome profile. Playwright remains a disabled troubleshooting fallback. Neither
+path uses stealth plugins or attempts to solve challenges. Review eBay's terms
+before use. HTML can change, so selectors may occasionally need updates.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ import logging
 import os
 import random
 import re
+import secrets
 import statistics
 import threading
 import time
@@ -35,6 +36,12 @@ import requests
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parent
+WINDOWS_LOCAL_STATE = os.getenv("LOCALAPPDATA", "").strip()
+LOCAL_STATE_DIR = (
+    Path(WINDOWS_LOCAL_STATE) / "SlabLedgerCollector"
+    if WINDOWS_LOCAL_STATE
+    else ROOT.parent / ".slab-ledger-collector"
+)
 OUTPUT = ROOT / "data.json"
 SEARCH_URL = "https://www.ebay.com/sch/i.html"
 DATA_LOCK = threading.RLock()
@@ -42,7 +49,8 @@ ENV_FILE = ROOT / "collector.env"
 CLOUD_CLIENT = None
 LOG_DIR = ROOT / "logs"
 FAILURE_DIR = LOG_DIR / "scraper-failures"
-PROFILE_DIR = ROOT / "data" / "ebay-browser-profile"
+PROFILE_DIR = LOCAL_STATE_DIR / "ebay-browser-profile"
+EXTENSION_PAIRING_FILE = LOCAL_STATE_DIR / "extension-pairing-key.txt"
 LOCK_FILE = ROOT / "collector.lock"
 BROWSER_COLLECTOR = None
 
@@ -802,6 +810,205 @@ def write_data(payload: dict) -> None:
         temporary.replace(OUTPUT)
 
 
+def extension_pairing_key() -> str:
+    EXTENSION_PAIRING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not EXTENSION_PAIRING_FILE.exists():
+        temporary = EXTENSION_PAIRING_FILE.with_suffix(".tmp")
+        temporary.write_text(secrets.token_urlsafe(24), encoding="ascii")
+        temporary.replace(EXTENSION_PAIRING_FILE)
+        try:
+            EXTENSION_PAIRING_FILE.chmod(0o600)
+        except OSError:
+            pass
+    return EXTENSION_PAIRING_FILE.read_text(encoding="ascii").strip()
+
+
+def extension_jobs(payload: dict) -> list[dict]:
+    jobs = payload.setdefault("extensionJobs", [])
+    if not isinstance(jobs, list):
+        jobs = []
+        payload["extensionJobs"] = jobs
+    return jobs
+
+
+def active_extension_job(payload: dict) -> Optional[dict]:
+    return next(
+        (
+            job for job in extension_jobs(payload)
+            if job.get("status") in ("pending", "running", "operator_required")
+        ),
+        None,
+    )
+
+
+def queue_extension_group(payload: dict, cards: list[dict]) -> None:
+    latest_active_ids = {str(card["id"]) for card in read_data().get("inventory", [])}
+    cards = [card for card in cards if str(card["id"]) in latest_active_ids]
+    if not cards:
+        return
+    representative = cards[0]
+    search = ebay_search_terms(representative)
+    search_params = {
+        "_nkw": search, "_pgn": 1, "_ipg": 60,
+        "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
+    }
+    job = {
+        "id": secrets.token_urlsafe(12),
+        "role": "sold",
+        "status": "pending",
+        "search": search,
+        "url": f"{SEARCH_URL}?{urlencode(search_params)}",
+        "cards": cards,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    jobs = extension_jobs(payload)
+    jobs.append(job)
+    payload["extensionJobs"] = jobs[-20:]
+    collector = payload.setdefault("collector", {})
+    collector["extensionLastQueuedAt"] = job["createdAt"]
+    write_data(payload)
+    print(
+        f"Queued {representative.get('name', representative['id'])!r} for "
+        "the normal-Chrome extension."
+    )
+
+
+def normalize_extension_items(items, role: str, search: str) -> list[dict]:
+    if not isinstance(items, list):
+        raise ValueError("items must be an array")
+    normalized = []
+    for raw in items[:60]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or "").strip()[:500]
+        url = str(raw.get("url") or "").strip()
+        listing_id = str(raw.get("id") or "").strip()[:200]
+        price = amount(str(raw.get("priceText") or ""))
+        shipping_text = str(raw.get("shippingText") or "")
+        shipping = 0.0 if "free" in shipping_text.lower() else amount(shipping_text)
+        if (
+            not title or price <= 0 or not listing_id
+            or not re.match(r"^https://www\.ebay\.com/", url)
+        ):
+            continue
+        item = {
+            "id": listing_id,
+            "search": search,
+            "title": title,
+            "price": price,
+            "shipping": shipping,
+            "total": round(price + shipping, 2),
+            "currency": "USD",
+            "condition": str(raw.get("condition") or "Not specified")[:200],
+            "url": url,
+        }
+        if role == "sold":
+            sold_text = str(raw.get("soldText") or "")[:200]
+            completed_at = sold_date(sold_text)
+            if (
+                not completed_at
+                or "best offer accepted" in (
+                    f"{raw.get('priceText', '')} {sold_text}".lower()
+                )
+            ):
+                continue
+            item.update({"soldText": sold_text, "soldAt": completed_at})
+        else:
+            item["listingRole"] = "active"
+        normalized.append(item)
+    return normalized
+
+
+def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
+    role = str(job.get("role") or "sold")
+    search = str(job.get("search") or "")
+    cards = [
+        card for card in job.get("cards", [])
+        if isinstance(card, dict) and card.get("id")
+    ]
+    unique = list(
+        {str(item["id"]): item for item in normalize_extension_items(
+            items, role, search
+        )}.values()
+    )
+    previous = {
+        str(item.get("cardId")): item for item in payload.get("valuations", [])
+    }
+    updated = []
+    if role == "sold":
+        for card in cards:
+            result = valuation(
+                card, search, unique,
+                result_limit=collector_config()["result_limit"],
+            )
+            if result.get("recentComparables"):
+                old_active = previous.get(str(card["id"]), {}).get(
+                    "activeListings", []
+                )
+                result["activeListings"] = old_active
+                updated.append(result)
+        if not updated:
+            payload.setdefault("errors", []).append(
+                f"{search}: the extension returned no verified sold results"
+            )
+        active_cards = [
+            card for card in cards
+            if int(card.get("active_listing_count") or 0) > 0
+        ]
+        if active_cards:
+            params = {
+                "_nkw": search, "_pgn": 1, "_ipg": 60, "_sop": 15,
+            }
+            extension_jobs(payload).append({
+                "id": secrets.token_urlsafe(12),
+                "role": "active",
+                "status": "pending",
+                "search": search,
+                "url": f"{SEARCH_URL}?{urlencode(params)}",
+                "cards": active_cards,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+    else:
+        for card in cards:
+            old = previous.get(str(card["id"]))
+            if not old:
+                continue
+            old["activeListings"] = lowest_active_comparables(
+                card, unique, int(card.get("active_listing_count") or 0)
+            )
+            updated.append(old)
+
+    if updated:
+        updated_ids = {str(item["cardId"]) for item in updated}
+        payload["valuations"] = [
+            item for item in payload.get("valuations", [])
+            if str(item.get("cardId")) not in updated_ids
+        ] + updated
+    job["status"] = "complete"
+    job["completedAt"] = datetime.now(timezone.utc).isoformat()
+    job["acceptedCount"] = len(unique)
+    payload["errors"] = payload.get("errors", [])[-20:]
+    collector = payload.setdefault("collector", {})
+    request_time = datetime.now(timezone.utc)
+    request_log = [
+        stamp for stamp in collector.get("requestLog", [])
+        if checked_at(stamp) > request_time - timedelta(days=1)
+    ]
+    request_log.append(request_time.isoformat())
+    collector.update({
+        "requestLog": request_log,
+        "lastRequestAt": request_time.isoformat(),
+        "nextEligibleAt": (
+            request_time + timedelta(
+                minutes=collector_config()["minimum_delay_minutes"]
+            )
+        ).isoformat(),
+        "pausedReason": "",
+        "consecutiveBlocks": 0,
+    })
+    write_data(payload)
+
+
 def sync_inventory_from_cloud(client: PocketBaseClient) -> int:
     cards = client.active_inventory()
     payload = read_data()
@@ -994,11 +1201,18 @@ def watch() -> None:
     """Refresh one due slab at a time inside the configured local window."""
     session = requests.Session()
     session.headers.update(headers())
+    backend = os.getenv("SLAB_SCRAPER_BACKEND", "extension").strip().lower()
     if (
-        os.getenv("SLAB_SCRAPER_BACKEND", "browser").strip().lower() == "browser"
+        backend == "browser"
         and os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() == "0"
     ):
         browser_collector()
+    if backend == "extension":
+        print(
+            "Chrome extension pairing code: "
+            f"{extension_pairing_key()}\n"
+            "Enter this code only in the Slab Ledger Collector extension."
+        )
     completed_in_window = 0
     active_window_date = None
     while True:
@@ -1010,6 +1224,12 @@ def watch() -> None:
         request_times = [checked_at(stamp) for stamp in collector.get("requestLog", [])
                          if checked_at(stamp) > now - timedelta(days=1)]
         eligible_at = checked_at(collector.get("nextEligibleAt", ""))
+        extension_job = active_extension_job(payload) if backend == "extension" else None
+        extension_completed = len([
+            job for job in extension_jobs(payload)
+            if job.get("role") == "sold" and job.get("status") == "complete"
+            and checked_at(job.get("completedAt", "")) > now - timedelta(days=1)
+        ])
 
         if active_window_date != local_now.date():
             active_window_date = local_now.date()
@@ -1025,7 +1245,16 @@ def watch() -> None:
         elif len(request_times) >= config["daily_ceiling"]:
             delay = 60 * 60
             print("Daily request ceiling reached; checking again in one hour.")
-        elif config["proof_limit"] and completed_in_window >= config["proof_limit"]:
+        elif extension_job:
+            delay = 60
+            print(
+                "Waiting for the Chrome extension to finish the current "
+                f"{extension_job.get('role', 'sold')} search."
+            )
+        elif config["proof_limit"] and (
+            extension_completed >= config["proof_limit"]
+            if backend == "extension" else completed_in_window >= config["proof_limit"]
+        ):
             resume = next_window_start(local_now, config["start"])
             delay = max(60, (resume - local_now).total_seconds())
             print(
@@ -1044,6 +1273,10 @@ def watch() -> None:
                         "The next card would cross the daily request ceiling; "
                         "checking again in one hour."
                     )
+                elif backend == "extension":
+                    queue_extension_group(payload, due)
+                    completed_in_window += 1
+                    delay = 60
                 else:
                     blocked = refresh_group(session, payload, due)
                     completed_in_window += 1
@@ -1076,9 +1309,22 @@ def serve(port: int) -> None:
             pass
 
         def end_headers(self):
-            self.send_header("Access-Control-Allow-Origin", "*")
+            origin = self.headers.get("Origin", "")
+            allowed_origin = os.getenv(
+                "SLAB_COLLECTOR_ALLOWED_ORIGIN",
+                "https://lhuynh17.github.io",
+            ).strip()
+            if (
+                origin.startswith("chrome-extension://")
+                or origin == allowed_origin
+            ):
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-Slab-Collector-Key",
+            )
             self.send_header("Cache-Control", "no-store")
             super().end_headers()
 
@@ -1086,7 +1332,131 @@ def serve(port: int) -> None:
             self.send_response(204)
             self.end_headers()
 
+        def extension_authorized(self) -> bool:
+            supplied = self.headers.get("X-Slab-Collector-Key", "")
+            expected = extension_pairing_key()
+            return bool(supplied) and secrets.compare_digest(supplied, expected)
+
+        def send_json(self, status: int, payload: dict) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            private_path = self.path.split("?", 1)[0].lower()
+            if (
+                private_path.startswith("/data/")
+                or private_path.startswith("/logs/")
+                or private_path in ("/collector.env", "/collector.lock")
+            ):
+                self.send_error(404)
+                return
+            if self.path not in (
+                "/api/extension/health", "/api/extension/next"
+            ):
+                return super().do_GET()
+            if not self.extension_authorized():
+                self.send_json(401, {"ok": False, "error": "pairing_required"})
+                return
+            if self.path == "/api/extension/health":
+                self.send_json(200, {
+                    "ok": True,
+                    "mode": "evaluation_only",
+                })
+                return
+            payload = read_data()
+            job = next(
+                (
+                    item for item in extension_jobs(payload)
+                    if item.get("status") in (
+                        "pending", "running", "operator_required"
+                    )
+                ),
+                None,
+            )
+            if not job:
+                self.send_json(200, {"ok": True, "job": None})
+                return
+            job["status"] = "running"
+            job["startedAt"] = datetime.now(timezone.utc).isoformat()
+            write_data(payload)
+            self.send_json(200, {
+                "ok": True,
+                "job": {
+                    "id": job["id"],
+                    "role": job["role"],
+                    "url": job["url"],
+                },
+            })
+
         def do_POST(self):
+            if self.path == "/api/extension/result":
+                if not self.extension_authorized():
+                    self.send_json(401, {
+                        "ok": False, "error": "pairing_required",
+                    })
+                    return
+                try:
+                    if "application/json" not in self.headers.get(
+                        "Content-Type", ""
+                    ).lower():
+                        self.send_json(415, {
+                            "ok": False, "error": "json_required",
+                        })
+                        return
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length <= 0 or length > 1_000_000:
+                        self.send_json(413, {
+                            "ok": False, "error": "invalid_body_size",
+                        })
+                        return
+                    incoming = json.loads(
+                        self.rfile.read(length).decode("utf-8")
+                    )
+                    payload = read_data()
+                    job = next(
+                        (
+                            item for item in extension_jobs(payload)
+                            if secrets.compare_digest(
+                                str(item.get("id") or ""),
+                                str(incoming.get("jobId") or ""),
+                            )
+                        ),
+                        None,
+                    )
+                    if not job:
+                        raise ValueError("unknown job")
+                    status = str(incoming.get("status") or "")
+                    if status == "operator_required":
+                        job["status"] = "operator_required"
+                        job["safeError"] = "eBay requires a manual browser check."
+                        write_data(payload)
+                    elif status == "complete":
+                        finish_extension_job(
+                            payload, job, incoming.get("items", [])
+                        )
+                    else:
+                        job["status"] = "failed"
+                        job["safeError"] = str(
+                            incoming.get("error")
+                            or "The extension could not read this eBay page."
+                        )[:300]
+                        payload.setdefault("errors", []).append(
+                            f"{job.get('search', '')}: {job['safeError']}"
+                        )
+                        payload.setdefault("collector", {})["nextEligibleAt"] = (
+                            datetime.now(timezone.utc) + timedelta(hours=3)
+                        ).isoformat()
+                        write_data(payload)
+                    self.send_json(200, {"ok": True})
+                except (ValueError, json.JSONDecodeError) as error:
+                    self.send_json(400, {
+                        "ok": False, "error": str(error),
+                    })
+                return
             if self.path != "/api/inventory":
                 self.send_error(404)
                 return
@@ -1105,6 +1475,8 @@ def serve(port: int) -> None:
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 1_000_000:
+                    raise ValueError("inventory body size is invalid")
                 incoming = json.loads(self.rfile.read(length).decode("utf-8"))
                 cards = incoming.get("inventory", incoming) if isinstance(incoming, dict) else incoming
                 if not isinstance(cards, list):

@@ -184,9 +184,10 @@ Supported configuration:
 | `SLAB_POCKETBASE_EMAIL` | ignored collector env | collector app-user email |
 | `SLAB_POCKETBASE_PASSWORD` | ignored collector env | collector app-user password |
 | `SLAB_POCKETBASE_SUPERUSER_EMAIL` | ignored setup env | non-secret setup convenience |
-| `SLAB_SCRAPER_BACKEND` | ignored collector env | `browser` normally; `requests` for troubleshooting |
+| `SLAB_SCRAPER_BACKEND` | ignored collector env | `extension` normally; other transports only for troubleshooting |
 | `SLAB_BROWSER_CHANNEL` | ignored collector env | `chrome` for the dedicated installed-browser profile |
 | `SLAB_BROWSER_HEADLESS` | ignored collector env | background or visible diagnostic browser |
+| `SLAB_COLLECTOR_ALLOWED_ORIGIN` | ignored collector env | exact static-app origin allowed to use the legacy local inventory fallback |
 
 The setup utility saves only the PocketBase URL and superuser email. It never
 saves the superuser password or MFA code.
@@ -203,8 +204,8 @@ The optional eBay collector intentionally:
 - shares one cached result among identical searches;
 - uses a single-instance lock;
 - increases cooldowns after HTTP 403/429 or verification responses;
-- uses installed Google Chrome with a dedicated profile and without stealth,
-  fingerprint disguise, proxy
+- uses a normal-Chrome extension by default and without stealth, fingerprint
+  disguise, proxy
   rotation, CAPTCHA solving, or challenge bypass.
 - pauses visibly for manual owner completion when eBay requests a sign-in or
   CAPTCHA, then resumes the same queue without automating the challenge;
@@ -216,6 +217,23 @@ The optional eBay collector intentionally:
 
 Preserve these limits. A provider abstraction may change transport, but it must
 retain budgets, rate controls, observability, and an immediate kill switch.
+
+### Chrome extension boundary
+
+- The unpacked extension runs only in the owner's normal Chrome profile and
+  requests access only to eBay and `http://127.0.0.1:8000`.
+- A randomly generated local pairing key authenticates bridge calls. It is
+  stored only in the Windows user's local application-data folder and Chrome
+  extension-local storage; it is not a provider or PocketBase credential.
+- The bridge stays bound to `127.0.0.1`, restricts extension API CORS to
+  `chrome-extension://` origins, bounds request bodies, and validates returned
+  URLs, prices, sold dates, card matches, and result counts.
+- The localhost file server explicitly denies collector environment, lock,
+  log, browser-profile, and private state paths.
+- The extension never receives PocketBase credentials and cannot write trusted
+  values. Evaluation results remain in the ignored local review file.
+- Verification pages activate the tab and require the owner to complete the
+  challenge manually. The extension does not inspect or automate it.
 
 ## Logging and privacy
 

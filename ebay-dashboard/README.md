@@ -18,9 +18,28 @@ accepted comparables and market estimate back to PocketBase.
    screen is fine.
 
 `setup-windows.bat` installs the Python collector components. Install the
-current Google Chrome for Windows separately. The collector controls Chrome
-with a dedicated local profile under `data/`; that folder, logs, credentials,
-and live results are excluded from Git.
+current Google Chrome for Windows separately. The default proof uses the
+unpacked extension under `chrome-extension/` in the owner's normal signed-in
+Chrome profile. Local pairing data, logs, credentials, and live results are
+excluded from Git.
+
+## Install the normal-Chrome extension
+
+1. Open `chrome://extensions` in the normal Chrome profile that can sign in to
+   eBay.
+2. Turn on **Developer mode**.
+3. Choose **Load unpacked**.
+4. Select the repository's `ebay-dashboard/chrome-extension` folder.
+5. Set `SLAB_SCRAPER_BACKEND=extension` in ignored `collector.env`.
+6. Start `run.bat` and copy the displayed pairing code.
+7. Open the extension's **Details → Extension options**, enter the pairing
+   code, check **Enable automatic queued searches**, and choose **Save and
+   test**.
+
+The pairing code authorizes only the loopback bridge on this computer. It is
+stored in the Windows user's private local application-data folder, not under
+the dashboard server. It is not a PocketBase, eBay, or provider credential. Do
+not share it.
 
 ## Collection safeguards
 
@@ -43,8 +62,9 @@ and live results are excluded from Git.
 - Evaluation-only mode keeps proof results local and never replaces a trusted
   PocketBase market value.
 
-The collector uses the normally installed Google Chrome with a separate
-persistent profile. It does not include stealth plugins,
+The default collector uses an unpacked extension in normal Google Chrome.
+Playwright remains a disabled troubleshooting fallback. Neither path includes
+stealth plugins,
 fingerprint disguises, challenge solvers, proxy rotation, or other blocking
 workarounds.
 
@@ -53,7 +73,7 @@ workarounds.
 `collector.env` is never committed. The supported optional settings are:
 
 ```text
-SLAB_SCRAPER_BACKEND=browser
+SLAB_SCRAPER_BACKEND=extension
 SLAB_BROWSER_CHANNEL=chrome
 SLAB_BROWSER_HEADLESS=0
 SLAB_COLLECTOR_START_TIME=00:00
