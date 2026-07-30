@@ -438,9 +438,19 @@ test("marketplace routes require app-user authentication and add no listener", (
   const hook = fs.readFileSync(path.join(
     __dirname, "pb_hooks", "slab_ledger_marketplace.pb.js"
   ), "utf8");
+  const service = fs.readFileSync(path.join(
+    __dirname, "pb_hooks", "lib", "marketplace-service.js"
+  ), "utf8");
   const routes = [...hook.matchAll(/routerAdd\(([\s\S]*?)\$apis\.requireAuth\("users"\)\);/g)];
   assert.equal(routes.length, 6);
+  assert.doesNotMatch(hook, /^const .*require\(/m);
+  assert.equal(
+    [...hook.matchAll(/require\(`\$\{__hooks\}\/lib\/marketplace-service\.js`\)/g)].length,
+    8
+  );
+  assert.match(service, /module\.exports = \{/);
   assert.doesNotMatch(hook, /webhook|0\.0\.0\.0|ThreadingHTTPServer|listen\(/i);
+  assert.doesNotMatch(service, /webhook|0\.0\.0\.0|ThreadingHTTPServer|listen\(/i);
   assert.match(
     hook,
     /cronAdd\("slab-ledger-marketplace-schedule", "\*\/15 \* \* \* \*"/
