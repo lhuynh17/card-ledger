@@ -300,6 +300,36 @@ class SoldResultTests(unittest.TestCase):
             scraper.next_due_group(payload)[0]["id"], "card-1"
         )
 
+    def test_high_confidence_auto_update_preserves_history(self):
+        result = {
+            "cardId":"card-1", "marketValue":5000, "confidence":"high",
+            "identityConfidence":"high", "volatility":"high",
+            "lastChecked":"2026-07-30T12:00:00+00:00",
+            "recentComparables":[{"id":"sale-1", "total":5000}],
+        }
+        previous = {
+            "market_value":4200, "source":"Manual",
+            "history":[{"date":"2026-07-01", "value":4200, "source":"Manual"}],
+        }
+        payload = scraper.automatic_market_payload(result, previous, "owner-1")
+        self.assertEqual(payload["market_value"], 5000)
+        self.assertEqual(payload["auto_status"], "automatic")
+        self.assertEqual(payload["history"][-1]["value"], 5000)
+        self.assertEqual(payload["algorithm_version"], "local-ebay-v2")
+
+    def test_low_confidence_is_provisional_and_keeps_trusted_value(self):
+        result = {
+            "cardId":"card-1", "marketValue":5000, "confidence":"low",
+            "lastChecked":"2026-07-30T12:00:00+00:00",
+            "recentComparables":[{"id":"sale-1", "total":5000}],
+        }
+        payload = scraper.automatic_market_payload(
+            result, {"market_value":4200, "source":"Manual"}, "owner-1"
+        )
+        self.assertEqual(payload["market_value"], 4200)
+        self.assertEqual(payload["suggested_value"], 5000)
+        self.assertEqual(payload["auto_status"], "provisional")
+
 
 if __name__ == "__main__":
     unittest.main()

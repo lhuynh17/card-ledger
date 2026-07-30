@@ -71,6 +71,7 @@ REPLICA_WORDS = {
     "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
     "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
 }
+VALUATION_ALGORITHM_VERSION = "local-ebay-v2"
 LANGUAGE_WORDS = {
     "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
     "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
@@ -496,21 +497,8 @@ class PocketBaseClient:
             },
         )
         items = response.json().get("items", [])
-        body = {
-            "owner": self.user_id,
-            "card_id": card_id,
-            "query": result.get("query", ""),
-            "search_url": result.get("searchUrl", ""),
-            "market_value": number(result.get("marketValue")),
-            "confidence": result.get("confidence", "low"),
-            "checked_at": pocketbase_date(result.get("lastChecked", "")),
-            "comparable_count": int(result.get("comparableCount", 0)),
-            "rejected_count": int(result.get("rejectedCount", 0)),
-            "low": number(result.get("low")),
-            "high": number(result.get("high")),
-            "comparables": result.get("recentComparables", result.get("comparables", []))[:3],
-            "error": result.get("error", ""),
-        }
+        previous = items[0] if items else {}
+        body = automatic_market_payload(result, previous, self.user_id)
         if items:
             self.request(
                 "PATCH",
@@ -519,6 +507,51 @@ class PocketBaseClient:
             )
         else:
             self.request("POST", "/api/collections/market_values/records", json=body)
+
+
+def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dict:
+    """Build a reversible automatic update without promoting weak evidence."""
+    confidence = str(result.get("confidence") or "low")
+    suggested = number(result.get("marketValue"))
+    previous_value = number(previous.get("market_value"))
+    promote = confidence in ("high", "medium") and suggested > 0
+    market_value = suggested if promote else previous_value
+    history = previous.get("history") if isinstance(previous.get("history"), list) else []
+    checked = pocketbase_date(result.get("lastChecked", ""))
+    if promote and (not history or number(history[-1].get("value")) != market_value):
+        history = [*history, {
+            "date": checked,
+            "value": market_value,
+            "source": "Local eBay collector",
+            "confidence": confidence,
+            "volatility": result.get("volatility", "unknown"),
+            "algorithmVersion": VALUATION_ALGORITHM_VERSION,
+        }][-100:]
+    return {
+            "owner": owner_id,
+            "card_id": str(result["cardId"]),
+            "query": result.get("query", ""),
+            "search_url": result.get("searchUrl", ""),
+            "market_value": market_value,
+            "suggested_value": suggested,
+            "confidence": confidence,
+            "identity_confidence": result.get("identityConfidence", confidence),
+            "volatility": result.get("volatility", "unknown"),
+            "auto_status": "automatic" if promote else "provisional",
+            "checked_at": checked,
+            "comparable_count": int(result.get("comparableCount", 0)),
+            "rejected_count": int(result.get("rejectedCount", 0)),
+            "low": number(result.get("low")),
+            "high": number(result.get("high")),
+            "comparables": result.get("recentComparables", result.get("comparables", []))[:3],
+            "pending_best_offers": result.get("pendingBestOffers", [])[:3],
+            "active_listings": result.get("activeListings", [])[:3],
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+            "source": "Local eBay collector" if promote else previous.get("source", ""),
+            "notes": previous.get("notes", ""),
+            "history": history,
+            "error": result.get("error", ""),
+        }
 
 
 def amount(text: str) -> float:
