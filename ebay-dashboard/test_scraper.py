@@ -280,6 +280,26 @@ class SoldResultTests(unittest.TestCase):
         selected = scraper.lowest_active_comparables(card, listings, 3)
         self.assertEqual([item["total"] for item in selected], [90, 100, 110])
 
+    def test_empty_recent_result_is_retried_before_verified_cache(self):
+        now = datetime.now().astimezone()
+        old_enough_for_empty = (
+            now.replace(microsecond=0)
+            - scraper.timedelta(hours=scraper.EMPTY_RESULT_RETRY_HOURS + 1)
+        ).isoformat()
+        payload = {
+            "inventory":[{
+                "id":"card-1", "company":"PSA", "grade":"10",
+                "name":"Pokemon #400 Pikachu",
+            }],
+            "valuations":[{
+                "cardId":"card-1", "lastChecked":old_enough_for_empty,
+                "recentComparables":[], "pendingBestOffers":[],
+            }],
+        }
+        self.assertEqual(
+            scraper.next_due_group(payload)[0]["id"], "card-1"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

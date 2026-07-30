@@ -60,6 +60,7 @@ PAGES_PER_SEARCH = 1
 MIN_WATCH_INTERVAL_MINUTES = 12
 MAX_WATCH_INTERVAL_MINUTES = 20
 REFRESH_AFTER_HOURS = 22
+EMPTY_RESULT_RETRY_HOURS = 1
 MAX_REQUESTS_PER_DAY = 72
 BLOCK_COOLDOWN_HOURS = (3, 12, 24, 72)
 REQUEST_TIMEOUT_SECONDS = 25
@@ -394,6 +395,7 @@ class PocketBaseClient:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
         self.user_id = ""
+        self.active_preferences_warning_reported = False
 
     @classmethod
     def from_environment(cls) -> Optional["PocketBaseClient"]:
@@ -452,12 +454,15 @@ class PocketBaseClient:
                     active_overrides[str(preference.get("card_id") or "")] = min(
                         3, max(0, int(active.get("listing_count") or 0))
                     )
+            self.active_preferences_warning_reported = False
         except (requests.RequestException, TypeError, ValueError):
-            report(
-                "Per-card active-listing choices are unavailable; sold-only "
-                "collection will continue.",
-                logging.WARNING,
-            )
+            if not self.active_preferences_warning_reported:
+                report(
+                    "Per-card active-listing choices are unavailable; sold-only "
+                    "collection will continue.",
+                    logging.WARNING,
+                )
+                self.active_preferences_warning_reported = True
         response = self.request(
             "GET",
             "/api/collections/cards/records",
@@ -1127,12 +1132,35 @@ def query_groups(payload: dict) -> dict[str, list[dict]]:
 
 def next_due_group(payload: dict) -> Optional[list[dict]]:
     valuations = {item["cardId"]: item for item in payload.get("valuations", [])}
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=REFRESH_AFTER_HOURS)
+    now = datetime.now(timezone.utc)
+    evidence_cutoff = now - timedelta(hours=REFRESH_AFTER_HOURS)
+    empty_cutoff = now - timedelta(hours=EMPTY_RESULT_RETRY_HOURS)
     due = []
     for cards in query_groups(payload).values():
-        oldest = min(checked_at(valuations.get(card["id"], {}).get("lastChecked", "")) for card in cards)
-        if oldest <= cutoff:
-            due.append((oldest, cards))
+        records = [valuations.get(card["id"], {}) for card in cards]
+        has_evidence = all(
+            record.get("recentComparables") or record.get("pendingBestOffers")
+            for record in records
+        )
+        oldest = min(
+            checked_at(record.get("lastChecked", "")) for record in records
+        )
+        if has_evidence and oldest > evidence_cutoff:
+            continue
+        search = ebay_search_terms(cards[0]).casefold()
+        latest_attempt = max(
+            (
+                checked_at(job.get("completedAt", ""))
+                for job in extension_jobs(payload)
+                if str(job.get("role") or "sold") == "sold"
+                and str(job.get("status") or "") == "complete"
+                and str(job.get("search") or "").casefold() == search
+            ),
+            default=datetime.min.replace(tzinfo=timezone.utc),
+        )
+        if latest_attempt > empty_cutoff:
+            continue
+        due.append((max(oldest, latest_attempt), cards))
     return min(due, key=lambda item: item[0], default=(None, None))[1]
 
 
