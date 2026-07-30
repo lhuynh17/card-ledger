@@ -270,6 +270,16 @@ Current automated valuation uses the most recent accepted comparables and stores
 supporting range and confidence. Parse.bot's sales estimate uses the median of
 up to three returned sales.
 
+The local collector uses the median of up to three newest verified sales.
+Identity confidence, evidence level, and volatility are separate. First
+Edition, Unlimited, language, set, variation, grader, and grade are not
+interchangeable. Unknown Best Offer prices remain visible but do not affect
+valuation until manually verified through Product Research.
+
+After evaluation mode is deliberately disabled, medium/high-confidence local
+evidence may update the current value with rollback history. Low-confidence
+evidence remains a provisional suggestion.
+
 The normalized valuation record includes:
 
 - source/provider;

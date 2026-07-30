@@ -289,7 +289,8 @@ class PocketBaseSecurityTests(unittest.TestCase):
                 "marketplace_search_cache",
                 "marketplace_observations",
                 "marketplace_refresh_settings",
-                "marketplace_refresh_state"):
+                "marketplace_refresh_state",
+                "marketplace_collector_status"):
             self.assertIn(name, created_names)
 
     def test_marketplace_schedule_is_owner_private_and_bounded(self):
@@ -315,6 +316,23 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertTrue(state["card_id"]["required"])
         self.assertEqual(state["schedule_override"]["type"], "json")
         self.assertLessEqual(state["safe_error"]["max"], 500)
+
+    def test_collector_status_is_bounded_and_contains_no_secret_field(self):
+        fields = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_COLLECTOR_STATUS_FIELDS
+        }
+        self.assertTrue(fields["collector_id"]["required"])
+        self.assertTrue(fields["heartbeat_at"]["required"])
+        self.assertLessEqual(fields["safe_message"]["max"], 500)
+        self.assertEqual(
+            fields["status"]["values"],
+            ["starting", "ready", "working", "attention", "cooldown",
+             "offline", "error"],
+        )
+        self.assertFalse(
+            {"token", "password", "credential", "secret"} & set(fields)
+        )
 
 
 if __name__ == "__main__":

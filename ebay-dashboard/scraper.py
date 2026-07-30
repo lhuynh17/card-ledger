@@ -103,6 +103,16 @@ def report(message: str, level: int = logging.INFO) -> None:
     LOGGER.log(level, message)
 
 
+def report_cloud_status(status: str, message: str = "", **kwargs) -> None:
+    if not CLOUD_CLIENT:
+        return
+    try:
+        CLOUD_CLIENT.report_collector_status(status, message, **kwargs)
+    except requests.RequestException:
+        # Status reporting is optional and must never stop collection.
+        pass
+
+
 def acquire_instance_lock() -> None:
     """Prevent two collector windows from scraping the same queue."""
     try:
@@ -397,6 +407,7 @@ class PocketBaseClient:
         self.session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
         self.user_id = ""
         self.active_preferences_warning_reported = False
+        self.collector_status_id = ""
 
     @classmethod
     def from_environment(cls) -> Optional["PocketBaseClient"]:
@@ -485,6 +496,56 @@ class PocketBaseClient:
                 "active_listing_count": active_overrides.get(str(record["id"]), 0),
             })
         return cards
+
+    def report_collector_status(
+        self, status: str, message: str = "", card_id: str = "",
+        next_check_at: str = "", action_required: bool = False,
+    ) -> None:
+        now = pocketbase_date(datetime.now(timezone.utc).isoformat())
+        body = {
+            "owner": self.user_id,
+            "collector_id": "windows-market-collector",
+            "status": status,
+            "safe_message": str(message or "")[:500],
+            "card_id": str(card_id or "")[:100],
+            "heartbeat_at": now,
+            "next_check_at": pocketbase_date(next_check_at) if next_check_at else "",
+            "action_required_at": now if action_required else "",
+        }
+        if status == "ready":
+            body["last_success_at"] = now
+        if not self.collector_status_id:
+            response = self.request(
+                "GET", "/api/collections/marketplace_collector_status/records",
+                params={"perPage":1, "filter":
+                        f'owner = "{self.user_id}" && collector_id = "windows-market-collector"'},
+            ).json()
+            items = response.get("items", [])
+            self.collector_status_id = str(items[0]["id"]) if items else ""
+        if self.collector_status_id:
+            self.request(
+                "PATCH",
+                f"/api/collections/marketplace_collector_status/records/{self.collector_status_id}",
+                json=body,
+            )
+        else:
+            created = self.request(
+                "POST", "/api/collections/marketplace_collector_status/records",
+                json=body,
+            ).json()
+            self.collector_status_id = str(created["id"])
+
+    def touch_collector_heartbeat(self) -> None:
+        if not self.collector_status_id:
+            self.report_collector_status("starting", "Collector connected.")
+            return
+        self.request(
+            "PATCH",
+            f"/api/collections/marketplace_collector_status/records/{self.collector_status_id}",
+            json={"heartbeat_at":pocketbase_date(
+                datetime.now(timezone.utc).isoformat()
+            )},
+        )
 
     def upsert_valuation(self, result: dict) -> None:
         card_id = str(result["cardId"])
@@ -966,6 +1027,9 @@ def queue_extension_group(payload: dict, cards: list[dict]) -> None:
         f"Queued {representative.get('name', representative['id'])!r} for "
         "the normal-Chrome extension."
     )
+    report_cloud_status(
+        "working", "Checking sold listings.", card_id=str(representative["id"])
+    )
 
 
 def normalize_extension_items(items, role: str, search: str) -> list[dict]:
@@ -1047,7 +1111,7 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
                 card, search, unique,
                 result_limit=collector_config()["result_limit"],
             )
-            if result.get("recentComparables"):
+            if result.get("recentComparables") or result.get("pendingBestOffers"):
                 old_active = previous.get(str(card["id"]), {}).get(
                     "activeListings", []
                 )
@@ -1113,6 +1177,24 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
         "consecutiveBlocks": 0,
     })
     write_data(payload)
+    if any(result.get("recentComparables") for result in updated):
+        report_cloud_status(
+            "ready", "Marketplace evidence was collected successfully.",
+            card_id=str(cards[0]["id"]) if cards else "",
+            last_success=True,
+        )
+    elif any(result.get("pendingBestOffers") for result in updated):
+        report_cloud_status(
+            "attention",
+            "A Best Offer price needs verification in Product Research.",
+            card_id=str(cards[0]["id"]) if cards else "",
+            action_required=True,
+        )
+    else:
+        report_cloud_status(
+            "error", "No verified marketplace evidence was found.",
+            card_id=str(cards[0]["id"]) if cards else "",
+        )
 
 
 def sync_inventory_from_cloud(client: PocketBaseClient) -> int:
@@ -1142,6 +1224,10 @@ def cloud_sync_loop(client: PocketBaseClient) -> None:
             sync_inventory_from_cloud(client)
         except requests.RequestException as error:
             print(f"PocketBase inventory sync failed: {error}")
+        try:
+            client.touch_collector_heartbeat()
+        except requests.RequestException:
+            pass
         time.sleep(POCKETBASE_POLL_SECONDS)
 
 
@@ -1561,6 +1647,12 @@ def serve(port: int) -> None:
                     status = str(incoming.get("status") or "")
                     if status == "operator_required":
                         job["status"] = "operator_required"
+                        report_cloud_status(
+                            "attention",
+                            "eBay needs a sign-in or verification in Chrome.",
+                            card_id=str((job.get("cards") or [{}])[0].get("id") or ""),
+                            action_required=True,
+                        )
                         job["safeError"] = "eBay requires a manual browser check."
                         write_data(payload)
                     elif status == "complete":

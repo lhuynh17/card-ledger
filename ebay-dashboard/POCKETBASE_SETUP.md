@@ -56,6 +56,8 @@ It prepares:
   listing count and interval.
 - `marketplace_refresh_state`: owner-private per-card due time and last safe
   scheduler result.
+- `marketplace_collector_status`: owner-private collector heartbeat and safe
+  attention status.
 
 The three older `grading_play_*` collections are retained so upgrading does
 not delete any grading data created by earlier Slab Ledger versions.

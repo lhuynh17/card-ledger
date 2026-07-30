@@ -396,3 +396,26 @@ structured listing text to the local validator. It never receives PocketBase
 credentials, never writes trusted values, and activates a tab for owner action
 instead of automating CAPTCHA. The Playwright transport remains disabled by
 default as a troubleshooting fallback.
+
+## 2026-07-30 — Guarded automatic values with reversible evidence
+
+**Decision:** After the evaluation gate is deliberately disabled, allow
+identity-matched medium- and high-confidence sold evidence to update the
+current market value automatically. Low-confidence results remain provisional,
+empty or failed searches preserve the trusted value, and every promoted value
+keeps bounded evidence history that the owner can restore.
+
+Treat identity confidence and market volatility as separate signals. Enforce
+edition and variant markers such as First Edition versus Unlimited. Retain
+Best Offer results with an unknown price and require the owner to verify the
+accepted price in eBay Product Research before using it as a comparable.
+
+**Why:** A private daily collector is only useful if reliable results can flow
+into inventory without approving every card, but scarce cards and hidden Best
+Offer prices require visible uncertainty rather than false precision.
+
+**Consequence:** The collector remains evaluation-only during rollout.
+Production promotion requires the additive PocketBase migration and a final
+reviewed test. The owner receives an in-app status notice for verification,
+offline, cooldown, and error states. Manual values, cached evidence, Product
+Research, and history rollback remain available.

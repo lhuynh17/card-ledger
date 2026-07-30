@@ -160,6 +160,9 @@ number of active cards, and advances each processed card independently. It
 stores evaluation observations and cache entries, never an automatic trusted
 market value.
 
+`marketplace_collector_status` stores an owner-private heartbeat and safe
+attention state for offline, cooldown, CAPTCHA/sign-in, and collector errors.
+
 The expanded policy separates one-to-two Apify sold observations from
 three-to-five Bright Data active asking prices. Per-card overrides can inherit
 the owner default, turn a role off, or set a custom interval. Projections
@@ -243,7 +246,9 @@ There are three related but distinct search paths:
    - broad structured query retrieves candidate sold listings;
    - local normalization/filtering verifies grader, grade, card keywords, and
      replica exclusions;
-   - statistical filtering removes price outliers;
+   - identity and edition rules reject mismatches;
+   - genuine price dispersion is labeled as volatility rather than silently
+     deleting scarce-card sales;
    - current estimate uses the most recent accepted comparables;
    - the record stores confidence, range, counts, source, and error context.
 

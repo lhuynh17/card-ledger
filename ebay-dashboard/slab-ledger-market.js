@@ -84,7 +84,7 @@
       .market-research-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:9px}.market-research-actions a,.market-research-actions button,.market-actions button{box-sizing:border-box;min-height:42px;padding:10px 13px;border:1px solid #d5ddd7;border-radius:9px;background:#f5f7f4;color:#17462f;font-weight:750;text-decoration:none;cursor:pointer}.market-research-actions .primary,.market-actions .primary{background:#17663e;color:#fff}.market-research-actions button:disabled{opacity:.55;cursor:wait}
       .market-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.market-message{grid-column:1/-1;min-height:17px;color:#52675a;font-size:12px}.market-message.error{color:#8a332a}.market-message.ok{color:#24633d}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
       .market-signals{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.market-signal{padding:5px 8px;border-radius:999px;background:#f0f3f0;color:#405248;font-size:11px;font-weight:750}.market-signal.warn{background:#fff1c9;color:#785500}.market-signal.bad{background:#ffe1dc;color:#8a332a}
-      .market-evidence{margin-top:18px}.market-evidence h3{margin:0 0 9px;font-size:14px}.market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}
+      .market-evidence{margin-top:18px}.market-evidence h3{margin:0 0 9px;font-size:14px}.market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}.market-evidence-row button,.history-row button{margin-top:5px;padding:6px 8px;border:1px solid #d5ddd7;border-radius:7px;background:#fff;color:#17462f;font-weight:750;cursor:pointer}
       @media(max-width:620px){.market-modal{padding:6px}.market-body{padding:15px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}}
     `;
     document.head.appendChild(style);
@@ -111,14 +111,14 @@
     const history = (value?.history || []).slice().reverse().slice(0, 8);
     const state = age(value);
     const query = ebaySearchTerms(card);
-    const evidenceRows = (items, kind) => items.map((item) => {
+    const evidenceRows = (items, kind) => items.map((item, index) => {
       const pending = kind === "pending";
       const active = kind === "active";
       const amount = pending ? "Price unknown" : cash(item.total || item.price);
       const detail = pending ? "Best Offer · verify in Product Research"
         : active ? "Active asking price—not a completed sale"
           : `Sold ${safe(shortDate(item.soldAt) || "date unavailable")}`;
-      return `<div class="market-evidence-row${pending ? " attention" : ""}><div><strong>${safe(item.title || "eBay listing")}</strong><small>${detail}</small></div><div><span>${amount}</span>${item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}</div></div>`;
+      return `<div class="market-evidence-row${pending ? " attention" : ""}><div><strong>${safe(item.title || "eBay listing")}</strong><small>${detail}</small></div><div><span>${amount}</span>${pending ? `<button class="verify-best-offer" type="button" data-index="${index}">Verify price</button>` : item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}</div></div>`;
     }).join("");
     const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
       _nkw:query, LH_Sold:"1", LH_Complete:"1", LH_TitleDesc:"1", _ipg:"240", _sop:"13"
@@ -157,7 +157,7 @@
       <p class="market-status" id="cardScheduleEstimate" style="text-align:left"></p>
       <div class="market-actions"><button id="saveCardSchedule" type="button">Save card schedule</button></div>
       <div class="market-message" id="cardScheduleMessage"></div></section>` : ""}
-      <div class="market-history"><h3>Value history</h3>${history.length ? history.map((item) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}</span></div>`).join("") : "<p class='market-status' style='text-align:left'>No saved history yet.</p>"}</div>`;
+      <div class="market-history"><h3>Value history</h3>${history.length ? history.map((item, index) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}<button class="rollback-market-value" type="button" data-index="${index}">Restore</button></span></div>`).join("") : "<p class='market-status' style='text-align:left'>No saved history yet.</p>"}</div>`;
     modal.classList.add("open"); document.body.style.overflow = "hidden";
     const priceInputs = [...document.querySelectorAll(".comp-price")];
     const recalc = () => {
@@ -166,6 +166,55 @@
         ? cash(valid.reduce((sum, n) => sum + n, 0) / valid.length) : "—";
     };
     priceInputs.forEach((input) => input.addEventListener("input", recalc));
+    document.querySelectorAll(".verify-best-offer").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pending = value?.pendingBestOffers?.[Number(button.dataset.index)];
+        if (!pending) return;
+        window.open(ebayResearchUrl(card), "_blank", "noopener,noreferrer");
+        const target = priceInputs.findIndex((input) => !Number(input.value));
+        const index = target >= 0 ? target : 0;
+        const urlInputs = [...document.querySelectorAll(".comp-url")];
+        priceInputs[index].value = "";
+        priceInputs[index].dataset.title = pending.title || "";
+        urlInputs[index].value = pending.url || "";
+        priceInputs[index].placeholder = "Enter actual Product Research price";
+        priceInputs[index].focus();
+        document.getElementById("marketMessage").textContent =
+          "Enter the actual accepted price from Product Research, then save.";
+      });
+    });
+    document.querySelectorAll(".rollback-market-value").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const selected = history[Number(button.dataset.index)];
+        if (!selected || !value?.recordId) return;
+        button.disabled = true;
+        try {
+          const checked = new Date().toISOString();
+          const nextHistory = [...(value.history || []), {
+            date:checked, value:Number(selected.value),
+            source:"History rollback", restoredFrom:selected.date || ""
+          }].slice(-100);
+          const row = await pbRequest(
+            `/api/collections/market_values/records/${value.recordId}`,
+            {
+              method:"PATCH", headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({
+                market_value:Number(selected.value), source:"History rollback",
+                checked_at:checked, auto_status:"manual", history:nextHistory
+              })
+            }
+          );
+          const restored = fromRecord(row);
+          values.set(restored.cardId, restored);
+          render();
+          show(card, restored);
+        } catch (error) {
+          button.disabled = false;
+          document.getElementById("marketMessage").textContent =
+            error.message || "The previous value could not be restored.";
+        }
+      });
+    });
     const cardSchedule = document.getElementById("cardSoldSchedule");
     if (cardSchedule) {
       const activeSchedule = document.getElementById("cardActiveSchedule");
@@ -342,6 +391,7 @@
     const source = document.getElementById("marketSource").value;
     const checked = document.getElementById("marketDate").value + " 12:00:00.000Z";
     const history = [...(previous?.history || []), { date:checked, value:average, source, comparables:comps }].slice(-100);
+    const verifiedUrls = new Set(comps.map((comp) => comp.url).filter(Boolean));
     const payload = {
       owner:cloudSession.record.id, card_id:String(card.remoteId), query:ebaySearchTerms(card),
       search_url:comps.find((comp) => comp.url)?.url || "", market_value:average,
@@ -349,7 +399,8 @@
       checked_at:checked, comparable_count:comps.length, rejected_count:0,
       low:Math.min(...comps.map((comp) => comp.price)), high:Math.max(...comps.map((comp) => comp.price)),
       comparables:comps, source, notes:document.getElementById("marketNotes").value.trim(),
-      pending_best_offers:previous?.pendingBestOffers || [],
+      pending_best_offers:(previous?.pendingBestOffers || [])
+        .filter((offer) => !verifiedUrls.has(offer.url)),
       active_listings:previous?.activeListings || [],
       identity_confidence:previous?.identityConfidence || (comps.length >= 3 ? "high" : comps.length === 2 ? "medium" : "low"),
       volatility:previous?.volatility || "unknown", auto_status:"manual",

@@ -47,6 +47,11 @@ optional provider, collector, or network connection is unavailable.
   third-party APIs and protected relays.
 - The optional eBay collector is a separate Python companion. It must remain
   optional and localhost-only.
+- Keep the collector in evaluation-only mode through schema migration and
+  rollout validation. Once the owner deliberately enables guarded production
+  mode, only identity-matched medium/high-confidence sold evidence may promote
+  a value. Low confidence, empty results, failures, and unverified Best Offers
+  must preserve the existing trusted value.
 - The default collector uses an unpacked extension in the owner's normal
   signed-in Chrome profile so normal verification renders. It pairs only with
   the loopback collector and must never receive PocketBase credentials.

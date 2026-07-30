@@ -22,6 +22,9 @@ The app tracks:
   normal-Chrome extension; it can run a three-card all-day proof, pause for a
   manual browser check, and retain up to three candidates locally without
   replacing trusted values;
+- guarded local rollout with edition-aware matching, provisional
+  low-confidence estimates, reversible automatic values, Best Offer
+  verification, and owner-private collector alerts;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;
 - an owner profile with a synced display name and protected business
@@ -45,6 +48,8 @@ without it.
 Bright Data is also optional. Its adapter never replaces manual values,
 Parse.bot, Product Research, cached values, or the local collector. Managed
 results only prefill a review form until the owner explicitly saves them.
+The local collector may promote medium/high-confidence verified sales only
+after evaluation mode is deliberately disabled; every change retains history.
 
 ## Project documentation
 

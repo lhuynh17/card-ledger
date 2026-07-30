@@ -113,6 +113,33 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(items[0]["total"], 0)
         self.assertEqual(items[0]["displayedAskingPrice"], 7200)
 
+    def test_best_offer_only_search_is_saved_for_manual_verification(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"Gengar EX #090 1st Edition", "active_listing_count":0,
+        }
+        payload = {
+            "inventory":[card], "valuations":[], "collector":{},
+            "extensionJobs":[],
+        }
+        job = {
+            "id":"job-1", "role":"sold", "status":"running",
+            "search":"Gengar EX 090 PSA 10 1st Edition", "cards":[card],
+        }
+        items = [{
+            "id":"123", "title":"Gengar EX 090 PSA 10 1st Edition",
+            "priceText":"$7,200.00", "soldText":"Sold Jul 27, 2026",
+            "bestOfferAccepted":True,
+            "url":"https://www.ebay.com/itm/123",
+        }]
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "data.json"
+            with patch.object(scraper, "OUTPUT", output):
+                scraper.finish_extension_job(payload, job, items)
+                saved = scraper.read_data()
+        self.assertEqual(saved["valuations"][0]["recentComparables"], [])
+        self.assertEqual(len(saved["valuations"][0]["pendingBestOffers"]), 1)
+
     def test_recent_verified_sales_are_sorted_by_sold_date(self):
         card = {
             "id":"card-1", "company":"PSA", "grade":"10",

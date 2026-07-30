@@ -185,6 +185,19 @@ MARKETPLACE_REFRESH_STATE_FIELDS = [
     {"name": "active_next_run_at", "type": "date"},
 ]
 
+MARKETPLACE_COLLECTOR_STATUS_FIELDS = [
+    {"name": "collector_id", "type": "text", "required": True, "max": 80},
+    {"name": "status", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["starting", "ready", "working", "attention", "cooldown",
+                "offline", "error"]},
+    {"name": "safe_message", "type": "text", "max": 500},
+    {"name": "card_id", "type": "text", "max": 100},
+    {"name": "heartbeat_at", "type": "date", "required": True},
+    {"name": "last_success_at", "type": "date"},
+    {"name": "next_check_at", "type": "date"},
+    {"name": "action_required_at", "type": "date"},
+]
+
 DEBT_FIELDS = [
     {"name": "direction", "type": "select", "required": True, "maxSelect": 1,
      "values": ["owed_to_me", "i_owe"]},
@@ -602,6 +615,14 @@ def configure_schema(base_url: str, token: str):
              "ON `marketplace_refresh_state` (`owner`, `card_id`)",
              "CREATE INDEX `idx_marketplace_refresh_state_owner_next` "
              "ON `marketplace_refresh_state` (`owner`, `next_run_at`)"],
+        ),
+        (
+            "marketplace_collector_status",
+            MARKETPLACE_COLLECTOR_STATUS_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_collector_owner_id` "
+             "ON `marketplace_collector_status` (`owner`, `collector_id`)",
+             "CREATE INDEX `idx_marketplace_collector_owner_heartbeat` "
+             "ON `marketplace_collector_status` (`owner`, `heartbeat_at`)"],
         ),
     ]
     for name, fields, indexes in marketplace_collections:

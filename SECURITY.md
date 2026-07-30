@@ -231,7 +231,11 @@ retain budgets, rate controls, observability, and an immediate kill switch.
 - The localhost file server explicitly denies collector environment, lock,
   log, browser-profile, and private state paths.
 - The extension never receives PocketBase credentials and cannot write trusted
-  values. Evaluation results remain in the ignored local review file.
+  values directly. The localhost companion may write guarded normalized values
+  with its app-user credential only after evaluation mode is deliberately
+  disabled; low-confidence results remain provisional and history is retained.
+- Owner-private collector status contains no cookies, credentials, pairing
+  keys, screenshots, or raw authenticated pages.
 - Verification pages activate the tab and require the owner to complete the
   challenge manually. The extension does not inspect or automate it.
 

@@ -847,6 +847,19 @@ select option{ background: var(--surface-2); color: var(--text); }
   .sync-btn{ padding:6px 9px; }
   .owner-chip strong{ max-width:min(44vw,230px); }
   .parse-credit-chip{ flex:0 0 auto; }
+  .account-bar{
+    box-sizing:border-box; justify-content:flex-start;
+    overflow:hidden;
+  }
+  #ownerChipSlot{ min-width:0; flex:1 1 auto; }
+  .owner-chip{ gap:6px; }
+  .owner-avatar{ width:30px; height:30px; }
+  .owner-chip strong{ max-width:24vw; }
+  .parse-credit-chip{ padding-inline:8px; }
+  .parse-credit-chip svg{ display:none; }
+  .parse-credit-copy strong{ max-width:88px; overflow:hidden; text-overflow:ellipsis; }
+  #marketUsageButton{ width:70px; font-size:0; justify-content:center; }
+  #marketUsageButton::after{ content:"Market"; font:650 11px var(--font-body); }
 }
 </style>
 </head>
@@ -3147,6 +3160,7 @@ async function init() {
 init();
 </script>
 <script src="ebay-dashboard/slab-ledger-marketplace-usage.js?v=marketplace-usage-3"></script>
+<script src="ebay-dashboard/slab-ledger-collector-status.js?v=collector-status-1"></script>
 <script src="ebay-dashboard/slab-ledger-market.js?v=market-18"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>

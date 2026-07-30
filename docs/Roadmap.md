@@ -127,6 +127,11 @@ Before rollout:
 
 ### Local sold-listing proof
 
+Normal-Chrome transport has been validated. Guarded rollout work now includes
+edition-aware matching, Best Offer verification, volatility labels, reversible
+automatic values, and private collector alerts. Production remains gated on
+the additive migration and a post-migration evaluation cycle.
+
 Validate the optional Windows collector with a default evaluation-only,
 three-card all-day run:
 
