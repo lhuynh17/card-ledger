@@ -113,6 +113,24 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(items[0]["total"], 0)
         self.assertEqual(items[0]["displayedAskingPrice"], 7200)
 
+    def test_recent_verified_sales_are_sorted_by_sold_date(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"Pokemon #400 Pikachu",
+        }
+        listings = [
+            {
+                "id":"old", "title":"Pikachu 400 PSA 10", "total":4609,
+                "soldAt":"2026-05-06",
+            },
+            {
+                "id":"new", "title":"Pikachu 400 PSA 10", "total":5100,
+                "soldAt":"2026-07-16",
+            },
+        ]
+        result = scraper.valuation(card, "Pikachu 400 PSA 10", listings)
+        self.assertEqual(result["recentComparables"][0]["id"], "new")
+
     def test_extension_completion_stays_in_local_evaluation_file(self):
         card = {
             "id":"card-1", "company":"PSA", "grade":"10",

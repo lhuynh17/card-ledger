@@ -138,6 +138,7 @@
         <option value="">All inventory searches</option>
       </select>
       <select class="control" id="sortSelect" aria-label="Sort listings">
+        <option value="date-desc">Sold: newest first</option>
         <option value="price-asc">Price: low to high</option>
         <option value="price-desc">Price: high to low</option>
         <option value="title">Title: A to Z</option>
@@ -205,6 +206,10 @@
 
       visible.sort((a, b) => {
         if (sortKey === "title") return String(a.title).localeCompare(String(b.title));
+        if (sortKey === "date") {
+          return String(a.soldAt || "").localeCompare(String(b.soldAt || "")) *
+            (direction === "desc" ? -1 : 1);
+        }
         return ((Number(a.total ?? a.price) || 0) - (Number(b.total ?? b.price) || 0)) *
           (direction === "desc" ? -1 : 1);
       });

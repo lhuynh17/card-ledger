@@ -811,13 +811,13 @@ def remove_price_outliers(listings: list[dict]) -> tuple[list[dict], int]:
 def valuation(card: dict, search: str, raw: list[dict], error: str = "",
               result_limit: int = 3) -> dict:
     matched = [item for item in raw if comparable(card, item)]
-    pending_offers = [
+    pending_offers = sorted([
         item for item in matched if item.get("priceVerificationRequired")
-    ][:3]
-    verified = [
+    ], key=lambda item: item.get("soldAt", ""), reverse=True)[:3]
+    verified = sorted([
         item for item in matched
         if not item.get("priceVerificationRequired") and item.get("total", 0) > 0
-    ]
+    ], key=lambda item: item.get("soldAt", ""), reverse=True)
     recent_results = verified[:max(1, min(3, result_limit))]
     values = sorted(item["total"] for item in recent_results if item["total"] > 0)
     estimate = round(statistics.median(values), 2) if values else 0

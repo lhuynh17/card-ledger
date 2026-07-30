@@ -86,7 +86,9 @@ function collect() {
         "[class*='condition']",
       ]),
       soldText:soldLabel(row),
-      bestOfferAccepted:/\bbest offer accepted\b/i.test(row.innerText || ""),
+      bestOfferAccepted:/\b(?:or\s+)?best offer(?:\s+accepted)?\b/i.test(
+        row.innerText || ""
+      ),
       url,
     };
   }).filter(Boolean);
