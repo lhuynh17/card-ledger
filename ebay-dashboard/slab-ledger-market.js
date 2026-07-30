@@ -28,8 +28,15 @@
       lastChecked:record.checked_at || record.updated || "",
       source:record.source || "eBay Product Research",
       notes:record.notes || "", comparables,
+      pendingBestOffers:jsonArray(record.pending_best_offers),
+      activeListings:jsonArray(record.active_listings),
       history:jsonArray(record.history), searchUrl:record.search_url || "",
-      confidence:record.confidence || "low"
+      confidence:record.confidence || "low",
+      identityConfidence:record.identity_confidence || record.confidence || "low",
+      volatility:record.volatility || "unknown",
+      autoStatus:record.auto_status || "manual",
+      suggestedValue:Number(record.suggested_value) || 0,
+      algorithmVersion:record.algorithm_version || ""
     };
   }
 
@@ -76,6 +83,8 @@
       .mf input,.mf select,.mf textarea{box-sizing:border-box;width:100%;min-height:42px;padding:9px;border:1px solid #d7e0d9;border-radius:9px;background:#fff;color:#17211b;font:inherit}.mf textarea{min-height:70px}
       .market-research-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:9px}.market-research-actions a,.market-research-actions button,.market-actions button{box-sizing:border-box;min-height:42px;padding:10px 13px;border:1px solid #d5ddd7;border-radius:9px;background:#f5f7f4;color:#17462f;font-weight:750;text-decoration:none;cursor:pointer}.market-research-actions .primary,.market-actions .primary{background:#17663e;color:#fff}.market-research-actions button:disabled{opacity:.55;cursor:wait}
       .market-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.market-message{grid-column:1/-1;min-height:17px;color:#52675a;font-size:12px}.market-message.error{color:#8a332a}.market-message.ok{color:#24633d}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
+      .market-signals{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.market-signal{padding:5px 8px;border-radius:999px;background:#f0f3f0;color:#405248;font-size:11px;font-weight:750}.market-signal.warn{background:#fff1c9;color:#785500}.market-signal.bad{background:#ffe1dc;color:#8a332a}
+      .market-evidence{margin-top:18px}.market-evidence h3{margin:0 0 9px;font-size:14px}.market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}
       @media(max-width:620px){.market-modal{padding:6px}.market-body{padding:15px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}}
     `;
     document.head.appendChild(style);
@@ -83,7 +92,7 @@
     modal.id = "marketModal"; modal.className = "market-modal";
     modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
     modal.innerHTML = `<section class="market-panel"><header class="market-head">
-      <div><div class="market-kicker">Manual market research</div><h2 id="marketModalTitle">Market details</h2></div>
+      <div><div class="market-kicker">Inventory card details</div><h2 id="marketModalTitle">Market details</h2></div>
       <button class="market-close" type="button" aria-label="Close market details">×</button>
       </header><div class="market-body" id="marketModalBody"></div></section>`;
     document.body.appendChild(modal);
@@ -102,6 +111,15 @@
     const history = (value?.history || []).slice().reverse().slice(0, 8);
     const state = age(value);
     const query = ebaySearchTerms(card);
+    const evidenceRows = (items, kind) => items.map((item) => {
+      const pending = kind === "pending";
+      const active = kind === "active";
+      const amount = pending ? "Price unknown" : cash(item.total || item.price);
+      const detail = pending ? "Best Offer · verify in Product Research"
+        : active ? "Active asking price—not a completed sale"
+          : `Sold ${safe(shortDate(item.soldAt) || "date unavailable")}`;
+      return `<div class="market-evidence-row${pending ? " attention" : ""}><div><strong>${safe(item.title || "eBay listing")}</strong><small>${detail}</small></div><div><span>${amount}</span>${item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}</div></div>`;
+    }).join("");
     const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
       _nkw:query, LH_Sold:"1", LH_Complete:"1", LH_TitleDesc:"1", _ipg:"240", _sop:"13"
     });
@@ -109,6 +127,15 @@
     document.getElementById("marketModalBody").innerHTML = `
       <div class="market-summary"><div><small>Assumed market price</small><div class="market-price" id="marketAverage">${value?.marketValue ? cash(value.marketValue) : "—"}</div></div>
       <div class="market-status">${safe(state.text)}<br>${safe(value?.source || "No market value saved")}</div></div>
+      <div class="market-signals">
+      <span class="market-signal">Match ${safe(value?.identityConfidence || "unknown")}</span>
+      <span class="market-signal${value?.confidence === "low" ? " warn" : ""}">Evidence ${safe(value?.confidence || "low")}</span>
+      <span class="market-signal${value?.volatility === "high" ? " warn" : ""}">Volatility ${safe(value?.volatility || "unknown")}</span>
+      ${value?.autoStatus === "provisional" ? `<span class="market-signal bad">Review suggested${value.suggestedValue ? ` · ${cash(value.suggestedValue)}` : ""}</span>` : ""}
+      </div>
+      <section class="market-evidence"><h3>Recent verified sales</h3><div class="market-evidence-list">${evidenceRows(value?.comparables || [], "sold") || "<p class='market-status' style='text-align:left'>No verified sold comparables yet.</p>"}</div></section>
+      <section class="market-evidence"><h3>Best Offers needing verification</h3><div class="market-evidence-list">${evidenceRows(value?.pendingBestOffers || [], "pending") || "<p class='market-status' style='text-align:left'>No pending Best Offers.</p>"}</div>${value?.pendingBestOffers?.length ? `<div class="market-research-actions"><a href="${safe(ebayResearchUrl(card))}" target="_blank" rel="noopener noreferrer">Verify in Product Research ↗</a></div>` : ""}</section>
+      <section class="market-evidence"><h3>Lowest active listings</h3><div class="market-evidence-list">${evidenceRows(value?.activeListings || [], "active") || "<p class='market-status' style='text-align:left'>Active-listing checks are off or no matches were found.</p>"}</div></section>
       <form id="manualCompForm" class="manual-comps">
       <p class="market-help">Use the PSA button to fill recent sales automatically, or enter at least one comparable price yourself. Two or three comps improve confidence.</p>
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
@@ -322,6 +349,11 @@
       checked_at:checked, comparable_count:comps.length, rejected_count:0,
       low:Math.min(...comps.map((comp) => comp.price)), high:Math.max(...comps.map((comp) => comp.price)),
       comparables:comps, source, notes:document.getElementById("marketNotes").value.trim(),
+      pending_best_offers:previous?.pendingBestOffers || [],
+      active_listings:previous?.activeListings || [],
+      identity_confidence:previous?.identityConfidence || (comps.length >= 3 ? "high" : comps.length === 2 ? "medium" : "low"),
+      volatility:previous?.volatility || "unknown", auto_status:"manual",
+      suggested_value:average, algorithm_version:previous?.algorithmVersion || "manual",
       history, error:""
     };
     const row = await pbRequest("/api/collections/market_values/records" + (previous?.recordId ? "/" + previous.recordId : ""), {
