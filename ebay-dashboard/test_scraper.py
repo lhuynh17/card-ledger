@@ -375,6 +375,18 @@ class SoldResultTests(unittest.TestCase):
             unlimited, {**base, "title":"Gengar EX 090 PSA 10 Unlimited"}
         ))
 
+    def test_explicit_card_number_must_match(self):
+        card = {
+            "company":"PSA", "grade":"10",
+            "name":"2016 Pokemon Japanese XY Promo #279 Pikachu Festa",
+        }
+        self.assertTrue(scraper.comparable(card, {
+            "title":"2016 Pokemon XY Promo 279 Pikachu Festa PSA 10"
+        }))
+        self.assertFalse(scraper.comparable(card, {
+            "title":"2016 Pokemon XY Promo 224 Pikachu PSA 10"
+        }))
+
     def test_real_price_swing_is_labeled_not_removed(self):
         card = {
             "id":"card-1", "company":"PSA", "grade":"10",
@@ -453,7 +465,7 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["market_value"], 5000)
         self.assertEqual(payload["auto_status"], "automatic")
         self.assertEqual(payload["history"][-1]["value"], 5000)
-        self.assertEqual(payload["algorithm_version"], "local-ebay-v2")
+        self.assertEqual(payload["algorithm_version"], "local-ebay-v3")
 
     def test_low_confidence_is_provisional_and_keeps_trusted_value(self):
         result = {
@@ -466,6 +478,23 @@ class SoldResultTests(unittest.TestCase):
         )
         self.assertEqual(payload["market_value"], 4200)
         self.assertEqual(payload["suggested_value"], 5000)
+        self.assertEqual(payload["auto_status"], "provisional")
+
+    def test_dramatic_price_change_requires_review(self):
+        result = {
+            "cardId":"card-1", "marketValue":167, "confidence":"high",
+            "lastChecked":"2026-07-31T12:00:00+00:00",
+            "recentComparables":[
+                {"id":"sale-1", "total":160},
+                {"id":"sale-2", "total":167},
+                {"id":"sale-3", "total":175},
+            ],
+        }
+        payload = scraper.automatic_market_payload(
+            result, {"market_value":3500, "source":"Manual"}, "owner-1"
+        )
+        self.assertEqual(payload["market_value"], 3500)
+        self.assertEqual(payload["suggested_value"], 167)
         self.assertEqual(payload["auto_status"], "provisional")
 
 

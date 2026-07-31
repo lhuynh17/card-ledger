@@ -419,3 +419,24 @@ Production promotion requires the additive PocketBase migration and a final
 reviewed test. The owner receives an in-app status notice for verification,
 offline, cooldown, and error states. Manual values, cached evidence, Product
 Research, and history rollback remain available.
+
+## 2026-07-31 — Require identity and price-change safeguards
+
+**Decision:** A listing must contain an inventory card's explicit printed card
+number when one is known. Even medium- or high-confidence evidence remains
+provisional when its suggested value is less than half or more than one and a
+half times the current trusted value.
+
+Present card-level marketplace information as a short evidence summary, with
+automatic schedules, manual correction, and value history behind clearly
+labeled expandable sections.
+
+**Why:** A broadly similar graded card can share many title words while having
+a radically different value. Confidence based only on title overlap is not a
+sufficient reason to replace a trusted valuation, and recovery controls must be
+visible and understandable when a suspect value has already been saved.
+
+**Consequence:** Suspect results cannot automatically replace the current
+value. Existing large changes are labeled for review and, when history is
+available, expose a one-click restoration action. No provider, credential,
+network boundary, or fallback behavior changes.
