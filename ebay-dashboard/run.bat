@@ -46,10 +46,9 @@ echo Schedule:
 echo   - One unique inventory search every 12-20 minutes
 echo   - Each search cached for 22 hours
 echo   - Available throughout the day on the dedicated computer
-echo   - Three unique searches per evaluation proof run
 echo   - Three recent sold results retained per card
 echo   - Optional three lowest active listings for selected scarce cards
-echo   - Evaluation-only: trusted PocketBase values are not replaced
+echo   - Actual evaluation/production mode is confirmed below from collector.env
 echo   - Maximum 72 requests per rolling 24 hours
 echo   - Automatic extended cooldown after a block response
 echo   - Normal-Chrome extension pauses for manual checks and resumes

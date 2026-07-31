@@ -297,3 +297,10 @@ the owner's normal Chrome profile activates the eBay tab for a manual sign-in
 or CAPTCHA and resumes afterward; it does not solve or bypass the challenge.
 Review the ignored local results before deliberately enabling any PocketBase
 observation import.
+
+For guarded production after the proof is approved, set both
+`SLAB_COLLECTOR_EVALUATION_ONLY=0` and `SLAB_COLLECTOR_PROOF_LIMIT=0`.
+The first setting allows accepted medium/high-confidence evidence to update a
+value with history and rollback; the second removes only the three-search proof
+cap. The rolling 24-hour request ceiling, pacing, cache, cooldowns, strict
+matching, and failure fallbacks remain active.

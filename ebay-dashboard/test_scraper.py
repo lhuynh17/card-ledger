@@ -51,6 +51,18 @@ class CollectorConfigurationTests(unittest.TestCase):
         self.assertEqual(config["proof_limit"], 3)
         self.assertTrue(config["evaluation_only"])
 
+    def test_mode_summary_distinguishes_evaluation_and_production(self):
+        evaluation = scraper.collector_mode_summary({
+            "evaluation_only": True, "proof_limit": 3,
+        })
+        production = scraper.collector_mode_summary({
+            "evaluation_only": False, "proof_limit": 0,
+        })
+        self.assertIn("EVALUATION ONLY", evaluation[0])
+        self.assertIn("3 unique", evaluation[1])
+        self.assertIn("GUARDED PRODUCTION", production[0])
+        self.assertIn("disabled", production[1])
+
     def test_collection_window_supports_day_and_cross_midnight_ranges(self):
         self.assertTrue(
             scraper.within_collection_window(
