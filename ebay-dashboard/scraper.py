@@ -71,7 +71,7 @@ REPLICA_WORDS = {
     "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
     "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
 }
-VALUATION_ALGORITHM_VERSION = "local-ebay-v2"
+VALUATION_ALGORITHM_VERSION = "local-ebay-v3"
 LANGUAGE_WORDS = {
     "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
     "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
@@ -637,7 +637,16 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
     confidence = str(result.get("confidence") or "low")
     suggested = number(result.get("marketValue"))
     previous_value = number(previous.get("market_value"))
-    promote = confidence in ("high", "medium") and suggested > 0
+    dramatic_change = bool(
+        previous_value > 0
+        and suggested > 0
+        and (suggested < previous_value * 0.5 or suggested > previous_value * 1.5)
+    )
+    promote = (
+        confidence in ("high", "medium")
+        and suggested > 0
+        and not dramatic_change
+    )
     market_value = suggested if promote else previous_value
     history = previous.get("history") if isinstance(previous.get("history"), list) else []
     checked = pocketbase_date(result.get("lastChecked", ""))
@@ -927,6 +936,20 @@ def comparable(card: dict, listing: dict) -> bool:
         return False
     if expected_edition == "unlimited" and found_edition != "unlimited":
         return False
+    identity = " ".join([
+        str(card.get("name") or ""), str(card.get("ebay_search") or "")
+    ]).upper()
+    numbered = re.search(
+        r"#\s*([A-Z0-9]+)(?:\s*/\s*([A-Z0-9]+))?", identity
+    )
+    if numbered:
+        primary = numbered.group(1).lstrip("0") or "0"
+        title_numbers = {
+            token.lstrip("0") or "0"
+            for token in re.findall(r"\b\d+\b", title)
+        }
+        if primary not in title_numbers:
+            return False
     meaningful = [
         word for word in card_keywords(card.get("name", "")).split()
         if len(word) > 1
