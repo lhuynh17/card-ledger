@@ -614,7 +614,10 @@ def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
         if (
             str(result.get("cardId") or "") not in valid_ids
             or result.get("error")
-            or not result.get("recentComparables")
+            or not (
+                result.get("recentComparables")
+                or result.get("pendingBestOffers")
+            )
         ):
             continue
         try:
@@ -1236,6 +1239,22 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
         "consecutiveBlocks": 0,
     })
     write_data(payload)
+    config = collector_config()
+    if CLOUD_CLIENT and not config["evaluation_only"]:
+        for result in updated:
+            if not (
+                result.get("recentComparables")
+                or result.get("pendingBestOffers")
+            ):
+                continue
+            try:
+                if CLOUD_CLIENT.upsert_valuation(result):
+                    print(
+                        "PocketBase market evidence saved for card "
+                        f"{result['cardId']}."
+                    )
+            except requests.RequestException as error:
+                print(f"PocketBase market-evidence save failed: {error}")
     if any(result.get("recentComparables") for result in updated):
         report_cloud_status(
             "ready", "Marketplace evidence was collected successfully.",

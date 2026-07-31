@@ -265,6 +265,44 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(saved["valuations"][0]["recentComparables"][0]["soldAt"],
                          "2026-07-27")
 
+    def test_extension_completion_saves_evidence_in_guarded_production(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"2023 Pokemon #199 Charizard",
+            "active_listing_count":0,
+        }
+        payload = {
+            "inventory":[card], "valuations":[], "collector":{},
+            "extensionJobs":[],
+        }
+        job = {
+            "id":"job-1", "role":"sold", "status":"running",
+            "search":"2023 Pokemon 199 Charizard PSA 10",
+            "cards":[card],
+        }
+        payload["extensionJobs"].append(job)
+        items = [{
+            "id":"123", "title":"2023 Pokemon 199 Charizard PSA 10",
+            "priceText":"$100.00", "shippingText":"Free shipping",
+            "soldText":"Sold Jul 27, 2026",
+            "url":"https://www.ebay.com/itm/123",
+        }]
+        client = MagicMock()
+        client.upsert_valuation.return_value = True
+        config = {"result_limit":3, "minimum_delay_minutes":12,
+                  "evaluation_only":False}
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / "data.json"
+            with patch.object(scraper, "OUTPUT", output), \
+                    patch.object(scraper, "CLOUD_CLIENT", client), \
+                    patch.object(scraper, "collector_config",
+                                 return_value=config):
+                scraper.finish_extension_job(payload, job, items)
+        client.upsert_valuation.assert_called_once()
+        result = client.upsert_valuation.call_args.args[0]
+        self.assertEqual(result["cardId"], "card-1")
+        self.assertEqual(result["marketValue"], 100)
+
     def test_sold_date_requires_explicit_completed_sale_text(self):
         self.assertEqual(
             scraper.sold_date("Sold Jul 27, 2026"), "2026-07-27"
