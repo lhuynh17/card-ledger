@@ -108,9 +108,12 @@ def report_cloud_status(status: str, message: str = "", **kwargs) -> None:
         return
     try:
         CLOUD_CLIENT.report_collector_status(status, message, **kwargs)
-    except requests.RequestException:
+    except Exception as error:
         # Status reporting is optional and must never stop collection.
-        pass
+        LOGGER.warning(
+            "Collector status update failed safely (%s).",
+            type(error).__name__,
+        )
 
 
 def acquire_instance_lock() -> None:
@@ -1181,7 +1184,6 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
         report_cloud_status(
             "ready", "Marketplace evidence was collected successfully.",
             card_id=str(cards[0]["id"]) if cards else "",
-            last_success=True,
         )
     elif any(result.get("pendingBestOffers") for result in updated):
         report_cloud_status(

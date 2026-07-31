@@ -13,6 +13,13 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_optional_status_failure_never_stops_collection(self):
+        client = MagicMock()
+        client.report_collector_status.side_effect = TypeError("bad status")
+        with patch.object(scraper, "CLOUD_CLIENT", client):
+            scraper.report_cloud_status("ready", "Safe message")
+        client.report_collector_status.assert_called_once()
+
     def test_pairing_key_state_is_outside_dashboard_document_root(self):
         self.assertFalse(
             str(scraper.EXTENSION_PAIRING_FILE).startswith(
