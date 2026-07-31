@@ -585,8 +585,12 @@ def configure_schema(base_url: str, token: str):
         (
             "marketplace_activity",
             MARKETPLACE_ACTIVITY_FIELDS,
-            ["CREATE INDEX `idx_marketplace_activity_owner_created` "
-             "ON `marketplace_activity` (`owner`, `created`)"],
+            # Some PocketBase versions cannot reference the automatic
+            # `created` column in the same request that creates a collection.
+            # Owner scoping is the important lookup boundary; retention keeps
+            # this collection bounded.
+            ["CREATE INDEX `idx_marketplace_activity_owner` "
+             "ON `marketplace_activity` (`owner`)"],
         ),
         (
             "marketplace_search_cache",

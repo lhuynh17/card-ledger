@@ -292,6 +292,12 @@ class PocketBaseSecurityTests(unittest.TestCase):
                 "marketplace_refresh_state",
                 "marketplace_collector_status"):
             self.assertIn(name, created_names)
+        activity_call = next(
+            call for call in create.call_args_list
+            if call.args[3] == "marketplace_activity"
+        )
+        self.assertNotIn("`created`", " ".join(activity_call.args[5]))
+        self.assertIn("(`owner`)", activity_call.args[5][0])
 
     def test_marketplace_schedule_is_owner_private_and_bounded(self):
         setting = {
