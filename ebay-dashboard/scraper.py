@@ -470,11 +470,11 @@ class PocketBaseClient:
                         3, max(0, int(active.get("listing_count") or 0))
                     )
             self.active_preferences_warning_reported = False
-        except (requests.RequestException, TypeError, ValueError):
+        except (requests.RequestException, TypeError, ValueError) as error:
             if not self.active_preferences_warning_reported:
                 report(
                     "Per-card active-listing choices are unavailable; sold-only "
-                    "collection will continue.",
+                    f"collection will continue. ({str(error)[:200]})",
                     logging.WARNING,
                 )
                 self.active_preferences_warning_reported = True

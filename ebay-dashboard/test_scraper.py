@@ -20,6 +20,21 @@ class CollectorConfigurationTests(unittest.TestCase):
             scraper.report_cloud_status("ready", "Safe message")
         client.report_collector_status.assert_called_once()
 
+    def test_active_preference_error_is_safe_and_actionable(self):
+        client = scraper.PocketBaseClient(
+            "https://example.test", "owner@example.test", "unused"
+        )
+        client.request = MagicMock(side_effect=[
+            TypeError("PocketBase 404: Not Found"),
+            MagicMock(json=lambda: {"items": []}),
+        ])
+        with patch.object(scraper.requests, "RequestException", Exception), \
+                patch.object(scraper, "report") as report_mock:
+            self.assertEqual(client.active_inventory(), [])
+        message = report_mock.call_args.args[0]
+        self.assertIn("PocketBase 404", message)
+        self.assertNotIn("owner@example.test", message)
+
     def test_pairing_key_state_is_outside_dashboard_document_root(self):
         self.assertFalse(
             str(scraper.EXTENSION_PAIRING_FILE).startswith(
