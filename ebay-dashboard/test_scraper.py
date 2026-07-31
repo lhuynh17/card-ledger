@@ -63,6 +63,45 @@ class CollectorConfigurationTests(unittest.TestCase):
         self.assertIn("GUARDED PRODUCTION", production[0])
         self.assertIn("disabled", production[1])
 
+    def test_cached_values_stay_local_in_evaluation_mode(self):
+        client = MagicMock()
+        with patch.object(
+            scraper, "collector_config", return_value={"evaluation_only": True}
+        ), patch.object(scraper, "read_data") as read_data:
+            self.assertEqual(
+                scraper.sync_cached_valuations_to_cloud(client), 0
+            )
+        read_data.assert_not_called()
+        client.upsert_valuation.assert_not_called()
+
+    def test_production_reconciles_only_safe_current_inventory_cache(self):
+        client = MagicMock()
+        client.upsert_valuation.return_value = True
+        payload = {
+            "inventory":[{"id":"card-1"}],
+            "valuations":[
+                {
+                    "cardId":"card-1", "error":"",
+                    "recentComparables":[{"id":"sale-1", "total":5000}],
+                },
+                {
+                    "cardId":"card-1", "error":"empty response",
+                    "recentComparables":[{"id":"sale-2", "total":0}],
+                },
+                {
+                    "cardId":"removed-card", "error":"",
+                    "recentComparables":[{"id":"sale-3", "total":100}],
+                },
+            ],
+        }
+        with patch.object(
+            scraper, "collector_config", return_value={"evaluation_only": False}
+        ), patch.object(scraper, "read_data", return_value=payload):
+            self.assertEqual(
+                scraper.sync_cached_valuations_to_cloud(client), 1
+            )
+        client.upsert_valuation.assert_called_once_with(payload["valuations"][0])
+
     def test_collection_window_supports_day_and_cross_midnight_ranges(self):
         self.assertTrue(
             scraper.within_collection_window(
