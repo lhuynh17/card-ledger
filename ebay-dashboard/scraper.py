@@ -570,7 +570,7 @@ class PocketBaseClient:
             )},
         )
 
-    def upsert_valuation(self, result: dict) -> None:
+    def upsert_valuation(self, result: dict) -> bool:
         card_id = str(result["cardId"])
         response = self.request(
             "GET",
@@ -582,6 +582,12 @@ class PocketBaseClient:
         )
         items = response.json().get("items", [])
         previous = items[0] if items else {}
+        result_checked = checked_at(result.get("lastChecked", ""))
+        previous_checked = checked_at(
+            previous.get("checked_at") or previous.get("updated") or ""
+        )
+        if previous and result_checked <= previous_checked:
+            return False
         body = automatic_market_payload(result, previous, self.user_id)
         if items:
             self.request(
@@ -591,6 +597,36 @@ class PocketBaseClient:
             )
         else:
             self.request("POST", "/api/collections/market_values/records", json=body)
+        return True
+
+
+def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
+    """Publish safe local evidence after the owner enables production mode."""
+    config = collector_config()
+    if config["evaluation_only"]:
+        return 0
+    payload = read_data()
+    valid_ids = {
+        str(card.get("id") or "") for card in payload.get("inventory", [])
+    }
+    saved = 0
+    for result in payload.get("valuations", []):
+        if (
+            str(result.get("cardId") or "") not in valid_ids
+            or result.get("error")
+            or not result.get("recentComparables")
+        ):
+            continue
+        try:
+            if client.upsert_valuation(result):
+                saved += 1
+        except requests.RequestException as error:
+            report(
+                f"Cached market-value reconciliation paused: {str(error)[:200]}",
+                logging.WARNING,
+            )
+            break
+    return saved
 
 
 def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dict:
@@ -1792,6 +1828,12 @@ if __name__ == "__main__":
         try:
             CLOUD_CLIENT.authenticate()
             sync_inventory_from_cloud(CLOUD_CLIENT)
+            cached_saved = sync_cached_valuations_to_cloud(CLOUD_CLIENT)
+            if cached_saved:
+                print(
+                    f"PocketBase received {cached_saved} safe cached market "
+                    "value(s)."
+                )
             threading.Thread(target=cloud_sync_loop, args=(CLOUD_CLIENT,), daemon=True).start()
             print("PocketBase cloud connection ready.")
         except requests.RequestException as error:

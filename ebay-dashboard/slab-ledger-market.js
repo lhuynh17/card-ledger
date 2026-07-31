@@ -74,10 +74,11 @@
       .market-age.current{background:#e3f5e9;color:#24633d}.market-age.aging{background:#fff3d2;color:#765b10}
       .market-age.stale{background:#ffe5e1;color:#8a352c}.market-age.missing{background:var(--surface-2);color:var(--muted)}
       .market-modal{position:fixed;inset:0;z-index:1200;display:none;place-items:center;padding:16px;background:rgba(7,13,10,.75);backdrop-filter:blur(5px)}
-      .market-modal.open{display:grid}.market-panel{width:min(800px,100%);max-height:94vh;overflow:auto;border-radius:17px;background:#fff;color:#17211b;box-shadow:0 28px 90px #0006}
-      .market-head{display:flex;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid #e2e8e3}.market-head h2{margin:4px 0 0;font-size:20px}
-      .market-kicker{color:#52705d;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.market-close{width:38px;height:38px;border:1px solid #dce3dd;border-radius:10px;background:#f5f7f4;font-size:21px;cursor:pointer}
-      .market-body{padding:22px}.market-summary{display:flex;justify-content:space-between;gap:15px;padding:17px;border-radius:13px;background:#eaf2ed}
+      .market-modal.open{display:grid}.market-panel{display:flex;width:min(800px,100%);max-height:94vh;flex-direction:column;overflow:hidden;border-radius:17px;background:#fff;color:#17211b;box-shadow:0 28px 90px #0006}
+      .market-head{display:flex;flex:none;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;border-bottom:1px solid #e2e8e3;background:#fff}.market-head h2{margin:4px 0 0;font-size:20px}
+      .market-kicker{color:#52705d;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.market-close,.market-back{min-height:42px;border:1px solid #dce3dd;border-radius:10px;background:#f5f7f4;color:#17462f;font-weight:800;cursor:pointer}.market-close{padding:9px 13px;font-size:13px}
+      .market-body{padding:22px;overflow:auto;overscroll-behavior:contain}.market-summary{display:flex;justify-content:space-between;gap:15px;padding:17px;border-radius:13px;background:#eaf2ed}
+      .market-footer{display:flex;flex:none;justify-content:flex-end;padding:11px 18px;border-top:1px solid #e2e8e3;background:#fff}.market-back{padding:9px 16px}
       .market-summary small{display:block;color:#5e6d63;font-weight:750;text-transform:uppercase}.market-price{color:#2f8b56;font-size:36px;font-weight:850}.market-status{text-align:right;color:#52675a;font-size:12px}
       .manual-comps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:11px;margin-top:18px}.market-help{grid-column:1/-1;margin:0;color:#52675a;font-size:12px}.comp-row{grid-column:1/-1;display:grid;grid-template-columns:minmax(120px,140px) minmax(0,1fr);align-items:start;gap:11px;padding:11px;border:1px solid #e1e7e2;border-radius:11px;background:#fafbfa}.mf{display:grid;min-width:0;grid-template-rows:minmax(28px,auto) auto;align-content:start;gap:5px}.mf.full{grid-column:1/-1}.mf label{display:flex;min-height:28px;align-items:flex-end;font-size:11px;font-weight:750;line-height:1.2;color:#536159}
       .mf input,.mf select,.mf textarea{box-sizing:border-box;width:100%;min-height:42px;padding:9px;border:1px solid #d7e0d9;border-radius:9px;background:#fff;color:#17211b;font:inherit}.mf textarea{min-height:70px}
@@ -85,7 +86,7 @@
       .market-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.market-message{grid-column:1/-1;min-height:17px;color:#52675a;font-size:12px}.market-message.error{color:#8a332a}.market-message.ok{color:#24633d}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
       .market-signals{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.market-signal{padding:5px 8px;border-radius:999px;background:#f0f3f0;color:#405248;font-size:11px;font-weight:750}.market-signal.warn{background:#fff1c9;color:#785500}.market-signal.bad{background:#ffe1dc;color:#8a332a}
       .market-evidence{margin-top:18px}.market-evidence h3{margin:0 0 9px;font-size:14px}.market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}.market-evidence-row button,.history-row button{margin-top:5px;padding:6px 8px;border:1px solid #d5ddd7;border-radius:7px;background:#fff;color:#17462f;font-weight:750;cursor:pointer}
-      @media(max-width:620px){.market-modal{padding:6px}.market-body{padding:15px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}}
+      @media(max-width:620px){.market-modal{padding:0}.market-panel{width:100%;max-height:100vh;height:100%;border-radius:0}.market-head{padding:12px 14px}.market-head h2{font-size:17px}.market-body{padding:15px}.market-footer{padding:10px 14px}.market-back{width:100%}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}}
     `;
     document.head.appendChild(style);
     const modal = document.createElement("div");
@@ -93,17 +94,27 @@
     modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
     modal.innerHTML = `<section class="market-panel"><header class="market-head">
       <div><div class="market-kicker">Inventory card details</div><h2 id="marketModalTitle">Market details</h2></div>
-      <button class="market-close" type="button" aria-label="Close market details">×</button>
-      </header><div class="market-body" id="marketModalBody"></div></section>`;
+      <button class="market-close" type="button" aria-label="Back to inventory">← Back</button>
+      </header><div class="market-body" id="marketModalBody"></div>
+      <footer class="market-footer"><button class="market-back" type="button">Back to inventory</button></footer></section>`;
     document.body.appendChild(modal);
-    const close = () => { modal.classList.remove("open"); document.body.style.overflow = ""; };
+    let returnFocus = null;
+    const close = () => {
+      modal.classList.remove("open");
+      document.body.style.overflow = "";
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
+    modal.closeMarketDetails = close;
+    modal.rememberMarketFocus = () => { returnFocus = document.activeElement; };
     modal.querySelector(".market-close").addEventListener("click", close);
+    modal.querySelector(".market-back").addEventListener("click", close);
     modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
   }
 
   function show(card, value = values.get(idFor(card))) {
     const modal = document.getElementById("marketModal");
+    modal.rememberMarketFocus?.();
     const desiredComps = Math.max(3, Math.min(
       5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
     ));
@@ -159,6 +170,7 @@
       <div class="market-message" id="cardScheduleMessage"></div></section>` : ""}
       <div class="market-history"><h3>Value history</h3>${history.length ? history.map((item, index) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}<button class="rollback-market-value" type="button" data-index="${index}">Restore</button></span></div>`).join("") : "<p class='market-status' style='text-align:left'>No saved history yet.</p>"}</div>`;
     modal.classList.add("open"); document.body.style.overflow = "hidden";
+    modal.querySelector(".market-close")?.focus();
     const priceInputs = [...document.querySelectorAll(".comp-price")];
     const recalc = () => {
       const valid = priceInputs.map((input) => Number(input.value)).filter((n) => n > 0);
@@ -419,12 +431,18 @@
     const shown = visibleInventory();
     [...document.querySelectorAll("#inventoryList > .slab:not(.editing)")].forEach((tile, index) => {
       const card = shown[index]; if (!card || card.sold) return;
-      const status = age(values.get(idFor(card)));
+      const value = values.get(idFor(card));
+      const status = age(value);
       tile.dataset.marketCard = idFor(card);
       const main = tile.querySelector(".slab-main");
       if (main && !main.querySelector(".market-age")) {
         const badge = document.createElement("div");
-        badge.className = "market-age " + status.kind; badge.textContent = status.text;
+        badge.className = "market-age " + status.kind;
+        badge.textContent = value?.marketValue
+          ? `Market ${cash(value.marketValue)} · ${status.text}`
+          : value?.suggestedValue
+            ? `Review ${cash(value.suggestedValue)} · ${status.text}`
+            : status.text;
         main.insertBefore(badge, main.querySelector(".slab-actions"));
       }
       tile.addEventListener("click", (event) => {
