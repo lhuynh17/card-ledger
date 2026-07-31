@@ -199,6 +199,26 @@ def collector_config() -> dict:
     }
 
 
+def collector_mode_summary(config: dict) -> list[str]:
+    if config["evaluation_only"]:
+        mode = (
+            "Collector mode: EVALUATION ONLY; trusted PocketBase values "
+            "are not replaced."
+        )
+    else:
+        mode = (
+            "Collector mode: GUARDED PRODUCTION; only accepted medium/high "
+            "confidence evidence may update values."
+        )
+    proof_limit = int(config.get("proof_limit") or 0)
+    proof = (
+        f"Daily proof limit: {proof_limit} unique sold searches."
+        if proof_limit
+        else "Daily proof limit: disabled; the rolling request ceiling remains active."
+    )
+    return [mode, proof]
+
+
 def within_collection_window(moment: datetime, start: tuple[int, int],
                              end: tuple[int, int]) -> bool:
     current = moment.hour * 60 + moment.minute
@@ -1419,6 +1439,8 @@ def watch() -> None:
     session = requests.Session()
     session.headers.update(headers())
     backend = os.getenv("SLAB_SCRAPER_BACKEND", "extension").strip().lower()
+    for line in collector_mode_summary(collector_config()):
+        print(line)
     if (
         backend == "browser"
         and os.getenv("SLAB_BROWSER_HEADLESS", "1").strip() == "0"
