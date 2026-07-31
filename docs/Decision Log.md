@@ -296,3 +296,126 @@ confirmation before writes, provenance, budgets, and deterministic fallbacks.
 **Why:** AI may improve keyword generation, classification, and explanation,
 but it must not gain superuser access, expose private records, or autonomously
 buy, list, price, message, or alter financial records.
+
+## 2026-07-28 — Bright Data ships as a gated evaluation, not an authority
+
+**Decision:** Implement the provider-neutral marketplace foundation and Bright
+Data adapter behind authenticated PocketBase routes, a default-off feature
+flag, a default-on kill switch, explicit account/schema confirmation, returned-
+record budgets, private caching, and owner-reviewed side-by-side results.
+
+**Why:** The managed transport can be evaluated without exposing the NAS,
+committing credentials, creating a public webhook, or allowing a provider
+failure to erase a trusted valuation.
+
+**Consequence:** Live collection remains disabled until the owner's exact eBay
+dataset, input and response schema, sold/completed coverage, billing unit,
+limits, and request mode are verified. Async work uses outbound polling. The
+local collector, Parse.bot, Product Research, manual comps, and cached values
+remain available throughout evaluation.
+
+## 2026-07-28 — Scheduled marketplace checks remain bounded evaluations
+
+**Decision:** Let the owner schedule three to five recent sold-listing checks
+per active graded card using hour, day, week, or month intervals. Keep the
+schedule off by default, track each card independently, and process only a
+bounded number of due cards every 15 minutes.
+
+**Why:** Cards need different refresh timing without creating a request burst
+or forcing manual refreshes, while the owner needs a visible estimate of
+monthly record use.
+
+**Consequence:** Scheduled runs use the same authenticated outbound boundary,
+cache, returned-record budgets, cooldowns, normalization, and rejection logic
+as manual evaluations. They store private observations but never overwrite a
+trusted market value automatically.
+
+## 2026-07-28 — Separate sold evidence from active asking prices
+
+**Decision:** Use a provider-role boundary: Apify may supply one or two
+completed-sale observations, while Bright Data may supply three to five active
+listing observations. Show separate schedules and estimates, including
+per-card sold overrides.
+
+**Why:** Active asking prices are useful competitive context but are not proof
+of a transaction. Separate roles prevent active listings from being treated as
+sold comparables while allowing low-cost refresh schedules.
+
+**Consequence:** Both adapters remain default-off and schema-gated. The
+dashboard forecasts Apify returned-record cost and each provider allowance
+before saving. Neither role automatically overwrites a trusted value.
+
+## 2026-07-28 — Validate local paced sold collection before import
+
+**Decision:** Use the existing optional Windows collector for a three-card,
+evaluation-only proof spread throughout the day on the dedicated computer.
+Retain the latest three
+recent candidates per card, keep the persistent browser visible, and pause for
+the owner to manually complete a normal eBay sign-in or CAPTCHA.
+
+**Why:** The owner needs unattended batch collection, but the tested hosted
+sold-listing actor was blocked by eBay. A local browser session can eliminate
+repetitive searches without introducing a public endpoint, CAPTCHA solver,
+stealth tooling, proxy rotation, or a new paid provider.
+
+**Consequence:** Proof results remain in the ignored local review file and
+cannot replace trusted PocketBase values. Full-inventory scheduling and
+normalized observation import remain gated on reviewed proof results.
+
+The owner may separately select scarce cards for one active-results request.
+Only the three lowest locally matched asking prices are retained, clearly
+labeled as active, and excluded from sold-evidence valuation.
+
+## 2026-07-29 — Use installed Chrome for manual verification compatibility
+
+**Decision:** Run the local collector through the dedicated profile of the
+normally installed Google Chrome rather than bundled Playwright Chromium.
+
+**Why:** The live proof reached eBay, but bundled Chromium received HTTP 403
+and could not render eBay's hCaptcha verification page. Installed Chrome lets
+the owner complete a normal supported-browser challenge without adding a
+solver, stealth tooling, fingerprint changes, or proxy rotation.
+
+**Consequence:** Chrome must be installed on the Windows collector computer.
+The collector still uses an isolated ignored profile and preserves all pacing,
+cooldown, evaluation-only, and localhost restrictions.
+
+## 2026-07-29 — Replace controlled-browser proof with normal-Chrome extension
+
+**Decision:** Make an unpacked extension in the owner's ordinary signed-in
+Chrome profile the default local collection transport. Pair it to the
+localhost-only companion with a random local key.
+
+**Why:** Both bundled Chromium and Playwright-controlled installed Chrome were
+rejected by the Google/eBay sign-in flow and could not render eBay's hCaptcha.
+The normal browser profile already supports the owner's sign-in and manual
+verification without weakening the collector boundary.
+
+**Consequence:** The extension receives only a bounded research job and returns
+structured listing text to the local validator. It never receives PocketBase
+credentials, never writes trusted values, and activates a tab for owner action
+instead of automating CAPTCHA. The Playwright transport remains disabled by
+default as a troubleshooting fallback.
+
+## 2026-07-30 — Guarded automatic values with reversible evidence
+
+**Decision:** After the evaluation gate is deliberately disabled, allow
+identity-matched medium- and high-confidence sold evidence to update the
+current market value automatically. Low-confidence results remain provisional,
+empty or failed searches preserve the trusted value, and every promoted value
+keeps bounded evidence history that the owner can restore.
+
+Treat identity confidence and market volatility as separate signals. Enforce
+edition and variant markers such as First Edition versus Unlimited. Retain
+Best Offer results with an unknown price and require the owner to verify the
+accepted price in eBay Product Research before using it as a comparable.
+
+**Why:** A private daily collector is only useful if reliable results can flow
+into inventory without approving every card, but scarce cards and hidden Best
+Offer prices require visible uncertainty rather than false precision.
+
+**Consequence:** The collector remains evaluation-only during rollout.
+Production promotion requires the additive PocketBase migration and a final
+reviewed test. The owner receives an in-app status notice for verification,
+offline, cooldown, and error states. Manual values, cached evidence, Product
+Research, and history rollback remain available.

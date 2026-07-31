@@ -232,6 +232,114 @@ class PocketBaseSecurityTests(unittest.TestCase):
         self.assertEqual(photo["maxSelect"], 1)
         self.assertLessEqual(photo["maxSize"], 10 * 1024 * 1024)
 
+    def test_marketplace_usage_fields_are_bounded_and_private(self):
+        fields = {
+            field["name"]: field for field in SETUP.MARKETPLACE_USAGE_FIELDS
+        }
+
+        self.assertTrue(fields["records_used"]["onlyInt"])
+        self.assertEqual(fields["records_used"]["min"], 0)
+        self.assertLessEqual(fields["usage_by_feature"]["maxSize"], 100000)
+
+    def test_marketplace_observations_have_retention_and_match_fields(self):
+        fields = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_OBSERVATION_FIELDS
+        }
+
+        self.assertTrue(fields["expires_at"]["required"])
+        self.assertEqual(
+            fields["match_status"]["values"], ["accepted", "rejected"]
+        )
+        self.assertLessEqual(fields["listing_id"]["max"], 2000)
+
+    @patch.object(SETUP, "collection")
+    @patch.object(SETUP, "secure_existing_owner_collection")
+    @patch.object(SETUP, "ensure_fields")
+    @patch.object(SETUP, "protect_card_photo")
+    @patch.object(SETUP, "create_owner_collection")
+    def test_marketplace_collections_are_created_with_owner_rules(
+            self, create, protect, ensure, secure, collection):
+        users = {"id": "users_collection"}
+        cards = {
+            "id": "cards_collection",
+            "name": "cards",
+            "fields": [self.owner],
+            **self.rules,
+        }
+
+        def lookup(_base, _token, name):
+            if name == "users":
+                return users
+            if name == "cards":
+                return cards
+            return None
+
+        collection.side_effect = lookup
+        ensure.side_effect = lambda _b, _t, current, _fields, _label: current
+        secure.side_effect = lambda _b, _t, current, _u, _label: current
+        create.return_value = {"id": "created"}
+
+        SETUP.configure_schema("https://example.test", "token")
+
+        created_names = [call.args[3] for call in create.call_args_list]
+        for name in (
+                "marketplace_usage",
+                "marketplace_activity",
+                "marketplace_search_cache",
+                "marketplace_observations",
+                "marketplace_refresh_settings",
+                "marketplace_refresh_state",
+                "marketplace_collector_status"):
+            self.assertIn(name, created_names)
+        activity_call = next(
+            call for call in create.call_args_list
+            if call.args[3] == "marketplace_activity"
+        )
+        self.assertNotIn("`created`", " ".join(activity_call.args[5]))
+        self.assertIn("(`owner`)", activity_call.args[5][0])
+
+    def test_marketplace_schedule_is_owner_private_and_bounded(self):
+        setting = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_REFRESH_SETTING_FIELDS
+        }
+        state = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_REFRESH_STATE_FIELDS
+        }
+
+        self.assertEqual(setting["listing_count"]["min"], 3)
+        self.assertEqual(setting["listing_count"]["max"], 5)
+        self.assertEqual(setting["sold_listing_count"]["min"], 1)
+        self.assertEqual(setting["sold_listing_count"]["max"], 2)
+        self.assertEqual(setting["active_listing_count"]["min"], 3)
+        self.assertEqual(setting["active_listing_count"]["max"], 5)
+        self.assertEqual(
+            setting["interval_unit"]["values"],
+            ["hours", "days", "weeks", "months"],
+        )
+        self.assertTrue(state["card_id"]["required"])
+        self.assertEqual(state["schedule_override"]["type"], "json")
+        self.assertLessEqual(state["safe_error"]["max"], 500)
+
+    def test_collector_status_is_bounded_and_contains_no_secret_field(self):
+        fields = {
+            field["name"]: field
+            for field in SETUP.MARKETPLACE_COLLECTOR_STATUS_FIELDS
+        }
+        self.assertTrue(fields["collector_id"]["required"])
+        self.assertTrue(fields["heartbeat_at"]["required"])
+        self.assertLessEqual(fields["safe_message"]["max"], 500)
+        self.assertEqual(
+            fields["status"]["values"],
+            ["starting", "ready", "working", "attention", "cooldown",
+             "offline", "error"],
+        )
+        self.assertFalse(
+            {"token", "password", "credential", "secret"} & set(fields)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

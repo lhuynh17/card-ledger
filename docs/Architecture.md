@@ -16,6 +16,7 @@ flowchart LR
     PWA <--> PB["Private PocketBase on Synology NAS"]
     PB --> HOOKS["Authenticated PocketBase hooks"]
     HOOKS --> PARSE["Parse.bot PSA API"]
+    HOOKS --> BRIGHT["Bright Data API (default-off evaluation)"]
     HOOKS --> PSAIMG["Allowlisted PSA image hosts"]
     COL["Optional local eBay collector"] <--> PB
     COL --> EBAY["eBay sold-search pages"]
@@ -57,7 +58,10 @@ The external browser libraries are pinned and loaded with Subresource Integrity,
 
 - Python 3;
 - `requests`, Beautiful Soup, and Playwright;
-- standard persistent Chromium;
+- an unpacked extension in the owner's normal signed-in Google Chrome profile;
+- a random localhost-only extension pairing key;
+- an owner-configurable local window, all-day default, and visible
+  manual-check pause;
 - a loopback-only `ThreadingHTTPServer`;
 - local JSON cache and rotating operational state;
 - PocketBase synchronization using an app-user account.
@@ -82,7 +86,10 @@ The external browser libraries are pinned and loaded with Subresource Integrity,
 | `ebay-dashboard/slab-ledger-tools.js` | navigation, capital, percentages, balances, theme |
 | `ebay-dashboard/grading-plays.js` | simplified grading tracker and protected photos |
 | `ebay-dashboard/pb_hooks/slab_ledger_psa.pb.js` | authenticated PSA lookup, sales, credits, image relay, grading reads |
+| `ebay-dashboard/pb_hooks/slab_ledger_marketplace.pb.js` | authenticated marketplace evaluation, budgets, usage, private cache and observations |
+| `ebay-dashboard/pb_hooks/lib/` | provider-neutral marketplace core and isolated Bright Data adapter |
 | `ebay-dashboard/setup_pocketbase.py` | non-destructive schema/security installer |
+| `ebay-dashboard/bright_data_validate.py` | account metadata inspection without consuming scraper records |
 | `ebay-dashboard/scraper.py` | optional paced eBay collector and localhost dashboard |
 | `ebay-dashboard/POCKETBASE_SETUP.md` | operator setup instructions |
 
@@ -130,13 +137,36 @@ company, while the PocketBase record ID remains the storage identity.
 - normalized query and search URL;
 - market value, confidence, checked time, low/high range;
 - accepted and rejected counts;
-- up to three recent comparables for the primary UI;
+- up to five recent comparables for the primary UI;
 - source and notes;
 - append-style value history;
 - last safe error.
 
 Manual values and provider-derived values share the same normalized record so
 charts and exports do not depend on a provider.
+
+Bright Data evaluations do not write `market_values` automatically. The
+authenticated hook returns normalized candidates to the existing review form;
+the owner must explicitly save an accepted value. Owner-only supporting
+collections store daily/monthly usage, bounded recent activity, short-lived
+search cache entries, and normalized observations. A scheduled server task
+removes expired cache, activity, and observation records.
+
+`marketplace_refresh_settings` stores separate default-off owner schedules for
+one-to-two sold observations and three-to-five active observations.
+`marketplace_refresh_state` stores per-card due time and the last safe outcome.
+A PocketBase cron checks for due work every 15 minutes, processes only a bounded
+number of active cards, and advances each processed card independently. It
+stores evaluation observations and cache entries, never an automatic trusted
+market value.
+
+`marketplace_collector_status` stores an owner-private heartbeat and safe
+attention state for offline, cooldown, CAPTCHA/sign-in, and collector errors.
+
+The expanded policy separates one-to-two Apify sold observations from
+three-to-five Bright Data active asking prices. Per-card overrides can inherit
+the owner default, turn a role off, or set a custom interval. Projections
+include inherited cards and overrides before the schedule is saved.
 
 ### Portfolio history
 
@@ -216,9 +246,21 @@ There are three related but distinct search paths:
    - broad structured query retrieves candidate sold listings;
    - local normalization/filtering verifies grader, grade, card keywords, and
      replica exclusions;
-   - statistical filtering removes price outliers;
+   - identity and edition rules reject mismatches;
+   - genuine price dispersion is labeled as volatility rather than silently
+     deleting scarce-card sales;
    - current estimate uses the most recent accepted comparables;
    - the record stores confidence, range, counts, source, and error context.
+
+Bright Data implements the retrieval side of path 3 behind a default-off
+provider contract. Synchronous requests are supported when confirmed by the
+account scraper. Asynchronous requests use outbound trigger/progress/snapshot
+polling only; no public callback is required.
+
+Scheduled checks use the same provider contract, cache, normalization,
+rejection rules, returned-record accounting, budgets, and cooldowns as a manual
+evaluation. Twelve hours represents twice daily and one day represents once
+daily; longer custom hour, week, and month intervals are supported.
 
 See `docs/Marketplace.md`.
 

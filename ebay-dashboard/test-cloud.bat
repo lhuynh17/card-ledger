@@ -10,6 +10,10 @@ if %errorlevel%==0 (
     set "SLAB_PYTHON=python"
 )
 
+if not exist "data.json" (
+    copy "data.example.json" "data.json" >nul
+)
+
 %SLAB_PYTHON% scraper.py --test-cloud
 echo.
 if errorlevel 1 (

@@ -108,22 +108,45 @@ Avoid duplicating permanent dashboard sections.
 
 ### Provider abstraction
 
-Implement the provider-neutral contract in `docs/Marketplace.md` before adding
-another marketplace source.
+The provider-neutral contract, normalization/filtering foundation, cache,
+usage controls, and fixture tests are implemented. Remaining work is live
+schema validation and broader provider migration.
 
 ### Bright Data adapter
 
-Use Bright Data as the first managed provider candidate:
+The default-off Bright Data adapter, private PocketBase boundary, outbound
+polling, usage dashboard, and side-by-side evaluation mode are implemented.
+An owner-controlled scheduler with separate Apify sold evidence, Bright Data
+active asking prices, and free-tier-aware global/per-card estimates is also
+implemented but remains provider-gated.
+Before rollout:
 
 - validate current product, account, pricing, terms, and sold-listing coverage;
-- keep credentials server-side;
-- add budgets and a feature flag;
 - compare results against manual Product Research;
 - retain the local collector until accuracy is proven.
 
+### Local sold-listing proof
+
+Normal-Chrome transport has been validated. Guarded rollout work now includes
+edition-aware matching, Best Offer verification, volatility labels, reversible
+automatic values, and private collector alerts. Production remains gated on
+the additive migration and a post-migration evaluation cycle.
+
+Validate the optional Windows collector with a default evaluation-only,
+three-card all-day run:
+
+- confirm eBay exposes a trustworthy sold price and sold date;
+- retain the latest three verified local sold candidates per card;
+- verify the optional per-card three-lowest active asking-price view remains
+  separate from sold evidence;
+- verify manual sign-in/CAPTCHA pause and automatic continuation;
+- review matching and rejection behavior before importing observations;
+- keep trusted values unchanged throughout the proof.
+
 ### Hidden Index
 
-Add a private normalized marketplace observation store:
+An owner-private normalized observation store with deduplication and bounded
+retention is implemented as the foundation. Remaining work:
 
 - deduplicate listings and identical slab searches;
 - re-run local filtering without new provider calls;

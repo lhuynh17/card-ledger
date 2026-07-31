@@ -47,6 +47,14 @@ optional provider, collector, or network connection is unavailable.
   third-party APIs and protected relays.
 - The optional eBay collector is a separate Python companion. It must remain
   optional and localhost-only.
+- Keep the collector in evaluation-only mode through schema migration and
+  rollout validation. Once the owner deliberately enables guarded production
+  mode, only identity-matched medium/high-confidence sold evidence may promote
+  a value. Low confidence, empty results, failures, and unverified Best Offers
+  must preserve the existing trusted value.
+- The default collector uses an unpacked extension in the owner's normal
+  signed-in Chrome profile so normal verification renders. It pairs only with
+  the loopback collector and must never receive PocketBase credentials.
 - Do not silently remove legacy PocketBase collections or user records.
   Migrations must be additive and non-destructive unless the user explicitly
   authorizes a separately backed-up destructive migration.
@@ -93,6 +101,11 @@ These rules are mandatory:
 - Current server variables include:
   - `PARSE_BOT_API_KEY`
   - `PARSE_BOT_MONTHLY_CREDITS` (optional; defaults to 200)
+  - `BRIGHT_DATA_API_TOKEN` (server-only; never persist in PocketBase)
+  - `BRIGHT_DATA_DATASET_ID` (set only after account metadata validation)
+  - `BRIGHT_DATA_ENABLED` and `BRIGHT_DATA_KILL_SWITCH`
+  - the remaining `BRIGHT_DATA_*` budget, polling, cache, and retention
+    controls documented in `ebay-dashboard/POCKETBASE_SETUP.md`
 - Never place those variables or their values in frontend code.
 - Prefer environment variables or ignored local configuration over new
   hard-coded deployment values. If the current PocketBase URL is ever made
@@ -186,8 +199,31 @@ These rules are mandatory:
 - Future managed marketplace providers must implement the provider contract in
   `docs/Marketplace.md`. Bright Data is the intended first managed provider,
   but the UI and domain model must not depend on Bright Data-specific fields.
+- Bright Data remains disabled until its account-available eBay dataset,
+  request inputs, response fields, sold/completed semantics, billing unit, and
+  limits are confirmed. Never guess or copy a dataset ID from public examples.
+- Managed-provider results run in side-by-side evaluation mode. They may fill a
+  review form but must not overwrite a saved value without explicit owner
+  action.
+- Automatic managed-provider checks are owner-configured and default off. The
+  15-minute scheduler only finds due private work; each card keeps its own next
+  run time. Budget limits, cache reuse, provider cooldowns, the feature flag,
+  and the kill switch always take precedence over the schedule.
+- Provider roles are now distinct: Apify is limited to one or two verified
+  sold observations, while Bright Data is limited to three to five active
+  asking-price observations. Show both forecasts and include per-card schedule
+  overrides; never represent an active asking price as a completed sale.
 - The planned Hidden Index is private normalized marketplace data, not a public
   search engine and not permission to collect unrelated data.
+- The Windows local sold-listing proof is evaluation-only by default: three
+  unique searches in an owner-configured window that defaults to all day on a
+  dedicated computer, one or two strictly
+  dated sold candidates for hosted providers or three for the local collector,
+  visible manual sign-in/CAPTCHA handling, and no
+  trusted-value replacement. It must not automate or route around challenges.
+- Optional local active checks are per-card, use a separate active-results
+  request, retain at most the three lowest locally matched asking prices, and
+  never contribute sold evidence.
 
 ## Logging and error handling
 

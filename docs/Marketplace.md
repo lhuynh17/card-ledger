@@ -50,19 +50,40 @@ The Python collector:
 
 - reads active PocketBase inventory;
 - builds normalized searches;
-- retrieves one rendered sold-results page through standard Chromium;
+- queues one rendered sold-results page for an unpacked extension in the
+  owner's normal signed-in Google Chrome profile;
 - filters candidates locally;
 - calculates a valuation;
-- writes normalized values back to PocketBase;
+- defaults to evaluation-only so proof candidates remain local;
 - serves a separate dashboard only on `127.0.0.1`.
 
-It is deliberately slow and does not use stealth or challenge bypasses.
+The initial proof runs three unique searches throughout the day on the
+dedicated computer, paces them 12–20 minutes apart, and retains the latest three verified sold
+candidates per card.
+The normal Chrome tab pauses when eBay requests a sign-in or CAPTCHA and
+resumes only after the owner manually completes it. It does not solve, route
+around, or intensify traffic after a challenge. A provider failure or unfinished
+challenge preserves the last known good data.
 
-## Provider abstraction — Target
+For scarce cards selected by the owner, the collector may make one separate
+active-results request and retain the three lowest locally matched asking
+prices. These remain labeled active observations and are never used as proof of
+a completed transaction.
+
+After the proof output has been reviewed, accepted candidates can be migrated
+through the normalized owner-private observation boundary. Enabling that import
+is a separate rollout step; proof mode never overwrites a trusted value.
+
+## Provider abstraction — Current foundation
 
 Marketplace retrieval will use a provider-neutral contract. The domain model,
 filtering engine, UI, and PocketBase records must not depend on a provider's raw
 field names.
+
+The contract, normalized candidate validation, local rejection reasons,
+valuation helper, caching policy, and fixture tests are implemented. Parse.bot
+and the legacy collector have not been migrated to this contract and remain
+unchanged.
 
 Conceptual interface:
 
@@ -125,7 +146,7 @@ ProviderSearchResult
 Provider adapters may preserve a short-lived encrypted/raw reference for
 diagnosis, but raw payloads must not become the application model.
 
-## Bright Data as the initial managed provider — Target
+## Bright Data as the initial managed provider — Current gated evaluation
 
 Bright Data is the chosen first managed marketplace provider behind the
 abstraction, subject to final account, pricing, terms, and endpoint validation.
@@ -151,6 +172,58 @@ Constraints:
 
 If Bright Data is rejected after validation, another provider can implement the
 same contract without rewriting the app.
+
+Implemented safeguards:
+
+- authenticated PocketBase usage and search routes;
+- outbound-only HTTPS calls to `api.brightdata.com`;
+- sync requests or bounded async polling without a webhook;
+- default-off feature flag, default-on kill switch, and explicit schema gate;
+- 5,000 returned-record monthly allowance by default;
+- configurable warning thresholds, daily ceiling, hard stop, result/page
+  limits, timeouts, retries, cooldown, cache lifetime, and retention;
+- owner-only usage, activity, cache, and normalized observation records;
+- duplicate-operation blocking and shared recent-query cache;
+- side-by-side UI evaluation that never writes a value automatically;
+- a Marketplace Usage dashboard.
+- separate owner-controlled schedules for one-to-two sold observations and
+  three-to-five active observations, with per-card due state and overrides.
+
+Still required before live record collection:
+
+- identify the exact eBay scraper available to the owner's account;
+- confirm its input mode, response schema, active-listing and sold/completed
+  support, billing unit, record/page limits, and sync/async behavior;
+- run metadata inspection, then one deliberately bounded live validation;
+- compare a representative card set against manual Product Research.
+
+## Automatic evaluation schedule — Current gated foundation
+
+The owner can separately configure one or two Apify sold observations and
+three, four, or five Bright Data active observations in hours, days, weeks, or
+months. Twelve hours is twice daily and one day is once daily.
+
+The scheduler:
+
+- remains off by default and cannot bypass the provider feature flag or kill
+  switch;
+- wakes every 15 minutes but processes only due provider/card roles;
+- keeps independent next-run state for each card;
+- limits cards processed per scheduler tick;
+- reuses identical-query cache entries without consuming provider records;
+- stops at daily/monthly hard limits and honors provider cooldowns;
+- records safe usage/activity and normalized private observations;
+- never writes or clears `market_values` automatically.
+
+The dashboard estimates monthly operations and returned records for the current
+active-card count before the schedule is enabled. Actual billing still depends
+on the account-confirmed Bright Data billing unit and response behavior.
+
+The revised gated policy assigns Apify to verified sold evidence and Bright
+Data to active asking-price context. Sold checks allow one or two results;
+active checks allow three to five. Each role has an independent interval and
+allowance forecast. A card can inherit defaults or override its sold schedule.
+Active asking prices remain separate and cannot become completed-sale evidence.
 
 ## Two-stage marketplace search — Current principle, target expansion
 
@@ -197,6 +270,16 @@ Current automated valuation uses the most recent accepted comparables and stores
 supporting range and confidence. Parse.bot's sales estimate uses the median of
 up to three returned sales.
 
+The local collector uses the median of up to three newest verified sales.
+Identity confidence, evidence level, and volatility are separate. First
+Edition, Unlimited, language, set, variation, grader, and grade are not
+interchangeable. Unknown Best Offer prices remain visible but do not affect
+valuation until manually verified through Product Research.
+
+After evaluation mode is deliberately disabled, medium/high-confidence local
+evidence may update the current value with rollback history. Low-confidence
+evidence remains a provisional suggestion.
+
 The normalized valuation record includes:
 
 - source/provider;
@@ -223,7 +306,7 @@ Future scoring may incorporate:
 Any algorithm change must be versioned in stored metadata so historical values
 remain explainable.
 
-## Hidden Index — Target
+## Hidden Index — Partial foundation
 
 The **Hidden Index** is the planned private normalized cache of marketplace
 observations. It is "hidden" because it is internal to the owner's deployment,
@@ -264,6 +347,10 @@ Safeguards:
 
 The current collector's ignored `data.json` cache is not yet the Hidden Index;
 it is a local operational cache.
+
+`marketplace_observations` is now an owner-private, normalized, deduplicated,
+retention-bounded foundation for the Hidden Index. It is not yet the completed
+cross-provider trend and re-filtering system.
 
 ## Usage tracking and budgets
 

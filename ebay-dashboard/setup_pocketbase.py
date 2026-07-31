@@ -22,12 +22,22 @@ MARKET_FIELDS = [
     {"name": "market_value", "type": "number"},
     {"name": "confidence", "type": "select", "maxSelect": 1,
      "values": ["low", "medium", "high"]},
+    {"name": "identity_confidence", "type": "select", "maxSelect": 1,
+     "values": ["low", "medium", "high"]},
+    {"name": "volatility", "type": "select", "maxSelect": 1,
+     "values": ["unknown", "stable", "moderate", "high"]},
+    {"name": "auto_status", "type": "select", "maxSelect": 1,
+     "values": ["manual", "automatic", "provisional", "attention"]},
+    {"name": "suggested_value", "type": "number", "min": 0},
     {"name": "checked_at", "type": "date"},
     {"name": "comparable_count", "type": "number", "onlyInt": True},
     {"name": "rejected_count", "type": "number", "onlyInt": True},
     {"name": "low", "type": "number"},
     {"name": "high", "type": "number"},
     {"name": "comparables", "type": "json", "maxSize": 2000000},
+    {"name": "pending_best_offers", "type": "json", "maxSize": 2000000},
+    {"name": "active_listings", "type": "json", "maxSize": 2000000},
+    {"name": "algorithm_version", "type": "text", "max": 80},
     {"name": "source", "type": "text", "max": 200},
     {"name": "notes", "type": "text", "max": 10000},
     {"name": "history", "type": "json", "maxSize": 2000000},
@@ -79,6 +89,113 @@ PREFERENCE_FIELDS = [
     {"name": "parse_credit_reset_at", "type": "text", "max": 10},
     {"name": "parse_credit_used_at_sync", "type": "number", "min": 0,
      "onlyInt": True},
+]
+
+MARKETPLACE_USAGE_FIELDS = [
+    {"name": "period_type", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["day", "month"]},
+    {"name": "period", "type": "text", "required": True, "max": 10},
+    {"name": "records_used", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "operations", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "cache_hits", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "usage_by_feature", "type": "json", "maxSize": 100000},
+]
+
+MARKETPLACE_ACTIVITY_FIELDS = [
+    {"name": "provider", "type": "text", "required": True, "max": 50},
+    {"name": "operation_id", "type": "text", "required": True, "max": 100},
+    {"name": "feature", "type": "text", "max": 80},
+    {"name": "status", "type": "text", "required": True, "max": 40},
+    {"name": "records_used", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "cache_hit", "type": "bool"},
+    {"name": "safe_message", "type": "text", "max": 500},
+    {"name": "expires_at", "type": "date", "required": True},
+]
+
+MARKETPLACE_CACHE_FIELDS = [
+    {"name": "provider", "type": "text", "required": True, "max": 50},
+    {"name": "query_hash", "type": "text", "required": True, "max": 100},
+    {"name": "query_summary", "type": "text", "max": 300},
+    {"name": "results", "type": "json", "maxSize": 2000000},
+    {"name": "rejection_counts", "type": "json", "maxSize": 100000},
+    {"name": "records_returned", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "retrieved_at", "type": "date"},
+    {"name": "expires_at", "type": "date", "required": True},
+]
+
+MARKETPLACE_OBSERVATION_FIELDS = [
+    {"name": "provider", "type": "text", "required": True, "max": 50},
+    {"name": "listing_id", "type": "text", "required": True, "max": 2000},
+    {"name": "query_hash", "type": "text", "required": True, "max": 100},
+    {"name": "card_id", "type": "text", "max": 100},
+    {"name": "marketplace", "type": "text", "required": True, "max": 30},
+    {"name": "title", "type": "text", "required": True, "max": 1000},
+    {"name": "sold_at", "type": "date"},
+    {"name": "price", "type": "number", "min": 0},
+    {"name": "shipping", "type": "number", "min": 0},
+    {"name": "total", "type": "number", "min": 0},
+    {"name": "currency", "type": "text", "max": 10},
+    {"name": "condition", "type": "text", "max": 200},
+    {"name": "listing_url", "type": "url"},
+    {"name": "retrieved_at", "type": "date", "required": True},
+    {"name": "match_status", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["accepted", "rejected"]},
+    {"name": "rejection_reason", "type": "text", "max": 80},
+    {"name": "algorithm_version", "type": "text", "max": 80},
+    {"name": "expires_at", "type": "date", "required": True},
+]
+
+MARKETPLACE_REFRESH_SETTING_FIELDS = [
+    {"name": "enabled", "type": "bool"},
+    {"name": "listing_count", "type": "number", "required": True,
+     "min": 3, "max": 5, "onlyInt": True},
+    {"name": "interval_unit", "type": "select", "required": True,
+     "maxSelect": 1, "values": ["hours", "days", "weeks", "months"]},
+    {"name": "interval_value", "type": "number", "required": True,
+     "min": 1, "max": 720, "onlyInt": True},
+    {"name": "last_run_at", "type": "date"},
+    {"name": "next_run_at", "type": "date"},
+    {"name": "sold_enabled", "type": "bool"},
+    {"name": "sold_listing_count", "type": "number", "min": 1, "max": 2,
+     "onlyInt": True},
+    {"name": "sold_interval_unit", "type": "select", "maxSelect": 1,
+     "values": ["hours", "days", "weeks", "months"]},
+    {"name": "sold_interval_value", "type": "number", "min": 1, "max": 720,
+     "onlyInt": True},
+    {"name": "active_enabled", "type": "bool"},
+    {"name": "active_listing_count", "type": "number", "min": 3, "max": 5,
+     "onlyInt": True},
+    {"name": "active_interval_unit", "type": "select", "maxSelect": 1,
+     "values": ["hours", "days", "weeks", "months"]},
+    {"name": "active_interval_value", "type": "number", "min": 1, "max": 720,
+     "onlyInt": True},
+]
+
+MARKETPLACE_REFRESH_STATE_FIELDS = [
+    {"name": "card_id", "type": "text", "required": True, "max": 100},
+    {"name": "last_run_at", "type": "date"},
+    {"name": "next_run_at", "type": "date"},
+    {"name": "status", "type": "text", "max": 40},
+    {"name": "records_used", "type": "number", "min": 0, "onlyInt": True},
+    {"name": "safe_error", "type": "text", "max": 500},
+    {"name": "schedule_override", "type": "json"},
+    {"name": "sold_last_run_at", "type": "date"},
+    {"name": "sold_next_run_at", "type": "date"},
+    {"name": "active_last_run_at", "type": "date"},
+    {"name": "active_next_run_at", "type": "date"},
+]
+
+MARKETPLACE_COLLECTOR_STATUS_FIELDS = [
+    {"name": "collector_id", "type": "text", "required": True, "max": 80},
+    {"name": "status", "type": "select", "required": True, "maxSelect": 1,
+     "values": ["starting", "ready", "working", "attention", "cooldown",
+                "offline", "error"]},
+    {"name": "safe_message", "type": "text", "max": 500},
+    {"name": "card_id", "type": "text", "max": 100},
+    {"name": "heartbeat_at", "type": "date", "required": True},
+    {"name": "last_success_at", "type": "date"},
+    {"name": "next_check_at", "type": "date"},
+    {"name": "action_required_at", "type": "date"},
 ]
 
 DEBT_FIELDS = [
@@ -457,6 +574,74 @@ def configure_schema(base_url: str, token: str):
             ["CREATE UNIQUE INDEX `idx_app_preferences_owner` "
              "ON `app_preferences` (`owner`)"],
         )
+
+    marketplace_collections = [
+        (
+            "marketplace_usage",
+            MARKETPLACE_USAGE_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_usage_owner_period` "
+             "ON `marketplace_usage` (`owner`, `period_type`, `period`)"],
+        ),
+        (
+            "marketplace_activity",
+            MARKETPLACE_ACTIVITY_FIELDS,
+            # Some PocketBase versions cannot reference the automatic
+            # `created` column in the same request that creates a collection.
+            # Owner scoping is the important lookup boundary; retention keeps
+            # this collection bounded.
+            ["CREATE INDEX `idx_marketplace_activity_owner` "
+             "ON `marketplace_activity` (`owner`)"],
+        ),
+        (
+            "marketplace_search_cache",
+            MARKETPLACE_CACHE_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_cache_owner_query` "
+             "ON `marketplace_search_cache` (`owner`, `provider`, `query_hash`)"],
+        ),
+        (
+            "marketplace_observations",
+            MARKETPLACE_OBSERVATION_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_observation_owner_listing` "
+             "ON `marketplace_observations` (`owner`, `provider`, `listing_id`)",
+             "CREATE INDEX `idx_marketplace_observation_owner_query` "
+             "ON `marketplace_observations` (`owner`, `query_hash`)"],
+        ),
+        (
+            "marketplace_refresh_settings",
+            MARKETPLACE_REFRESH_SETTING_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_refresh_setting_owner` "
+             "ON `marketplace_refresh_settings` (`owner`)"],
+        ),
+        (
+            "marketplace_refresh_state",
+            MARKETPLACE_REFRESH_STATE_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_refresh_state_owner_card` "
+             "ON `marketplace_refresh_state` (`owner`, `card_id`)",
+             "CREATE INDEX `idx_marketplace_refresh_state_owner_next` "
+             "ON `marketplace_refresh_state` (`owner`, `next_run_at`)"],
+        ),
+        (
+            "marketplace_collector_status",
+            MARKETPLACE_COLLECTOR_STATUS_FIELDS,
+            ["CREATE UNIQUE INDEX `idx_marketplace_collector_owner_id` "
+             "ON `marketplace_collector_status` (`owner`, `collector_id`)",
+             "CREATE INDEX `idx_marketplace_collector_owner_heartbeat` "
+             "ON `marketplace_collector_status` (`owner`, `heartbeat_at`)"],
+        ),
+    ]
+    for name, fields, indexes in marketplace_collections:
+        current = collection(base_url, token, name)
+        if current:
+            current = ensure_fields(
+                base_url, token, current, fields, name
+            )
+            secure_existing_owner_collection(
+                base_url, token, current, users_id, name
+            )
+        else:
+            create_owner_collection(
+                base_url, token, users_id, name, fields, indexes
+            )
 
     debts = collection(base_url, token, "debt_reminders")
     if debts:

@@ -22,12 +22,8 @@ echo Installing the Slab Ledger collector components...
 if errorlevel 1 goto :failed
 
 echo.
-echo Installing the standard Chromium browser used for rendered sold results...
-%SLAB_PYTHON% -m playwright install chromium
-if errorlevel 1 goto :failed
-
-echo.
 echo Setup completed successfully.
+echo Make sure the current Google Chrome for Windows is installed.
 echo You can now double-click run.bat.
 pause
 exit /b 0

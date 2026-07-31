@@ -9,8 +9,22 @@ The app tracks:
   slab images, and optional recent-sales estimates through private PocketBase
   routes, with structured, editable eBay search keywords and a guided manual
   fallback;
-- one-tap PSA recent-sale comparables or manual market values from one to three
+- one-tap PSA recent-sale comparables or manual market values from one to five
   sales, including links, source, notes, update date, and value history;
+- a default-off Bright Data evaluation adapter behind authenticated PocketBase
+  routes, with private usage controls, caching, normalized observations, and a
+  Marketplace Usage dashboard; live collection remains disabled until the
+  owner's account-specific eBay dataset and schema are validated;
+- separate default-off Apify sold-evidence and Bright Data active-listing
+  schedules at hour/day/week/month intervals, with live free-tier estimates,
+  per-card sold-schedule overrides, and no automatic value replacement;
+- an optional evaluation-only Windows collector paired to an unpacked
+  normal-Chrome extension; it can run a three-card all-day proof, pause for a
+  manual browser check, and retain up to three candidates locally without
+  replacing trusted values;
+- guarded local rollout with edition-aware matching, provisional
+  low-confidence estimates, reversible automatic values, Best Offer
+  verification, and owner-private collector alerts;
 - collection cost, market value, unrealized gain or loss, and a total
   collection-value timeline reconstructed from saved per-card market history;
 - an owner profile with a synced display name and protected business
@@ -30,6 +44,12 @@ PocketBase setup instructions are in
 [`ebay-dashboard/POCKETBASE_SETUP.md`](ebay-dashboard/POCKETBASE_SETUP.md).
 The scraper is optional; manual market tracking and the business ledger work
 without it.
+
+Bright Data is also optional. Its adapter never replaces manual values,
+Parse.bot, Product Research, cached values, or the local collector. Managed
+results only prefill a review form until the owner explicitly saves them.
+The local collector may promote medium/high-confidence verified sales only
+after evaluation mode is deliberately disabled; every change retains history.
 
 ## Project documentation
 

@@ -39,7 +39,7 @@ configuration change.
    - Hosts authenticated hook routes for PSA data and image import.
 
 3. **Third-party providers**
-   - Parse.bot and future marketplace providers are untrusted external
+   - Parse.bot and Bright Data are untrusted external
      dependencies.
    - Provider credentials remain server-side.
    - Provider payloads must be validated and normalized.
@@ -119,6 +119,29 @@ accept arbitrary URLs from the browser and fetch them from the NAS. Block
 loopback, link-local, RFC1918/private, NAS, metadata-service, and non-HTTPS
 targets unless a narrowly reviewed internal use case explicitly requires them.
 
+### Bright Data boundary
+
+- Bright Data requests originate only from an authenticated PocketBase hook.
+- The integration makes outbound HTTPS requests only to
+  `api.brightdata.com`; it creates no listener, public route, webhook, Funnel,
+  or router forwarding rule.
+- Every marketplace route requires an authenticated `users` record. Searches
+  referencing a card also verify that the card belongs to that user.
+- `BRIGHT_DATA_API_TOKEN` exists only in the PocketBase/container environment.
+  It is never returned to the browser, written to PocketBase, or logged.
+- The adapter cannot make a live request unless the feature flag is enabled,
+  the kill switch is off, and account/schema confirmation is explicit.
+- Async jobs use bounded outbound polling. No inbound callback is accepted.
+- The optional automatic scheduler runs inside PocketBase every 15 minutes,
+  selects only owner-private due settings and active owner cards, and starts no
+  inbound service. It processes a bounded number of cards per tick.
+- Apify sold evidence and Bright Data active listings remain separate outbound
+  adapters. Asking prices can never be promoted to completed-sale evidence.
+- Provider response aliases are confined to the Bright Data adapter. Only
+  strictly validated, normalized candidates cross into the domain layer.
+- Empty, malformed, timed-out, blocked, or failed results return a safe error
+  and never replace a last known good value.
+
 ## Network restrictions
 
 - Keep Tailscale Serve private to the tailnet.
@@ -153,12 +176,18 @@ Supported configuration:
 | --- | --- | --- |
 | `PARSE_BOT_API_KEY` | PocketBase/container environment | Parse.bot server credential |
 | `PARSE_BOT_MONTHLY_CREDITS` | PocketBase/container environment | Optional monthly allowance override |
+| `BRIGHT_DATA_API_TOKEN` | PocketBase/container environment | Server-only Bright Data bearer token |
+| `BRIGHT_DATA_DATASET_ID` | PocketBase/container environment | Account-validated eBay scraper ID |
+| `BRIGHT_DATA_ENABLED` | PocketBase/container environment | Default-off feature flag |
+| `BRIGHT_DATA_KILL_SWITCH` | PocketBase/container environment | Immediate provider stop; defaults on |
 | `SLAB_POCKETBASE_URL` | ignored collector/setup env | PocketBase address |
 | `SLAB_POCKETBASE_EMAIL` | ignored collector env | collector app-user email |
 | `SLAB_POCKETBASE_PASSWORD` | ignored collector env | collector app-user password |
 | `SLAB_POCKETBASE_SUPERUSER_EMAIL` | ignored setup env | non-secret setup convenience |
-| `SLAB_SCRAPER_BACKEND` | ignored collector env | `browser` normally; `requests` for troubleshooting |
+| `SLAB_SCRAPER_BACKEND` | ignored collector env | `extension` normally; other transports only for troubleshooting |
+| `SLAB_BROWSER_CHANNEL` | ignored collector env | `chrome` for the dedicated installed-browser profile |
 | `SLAB_BROWSER_HEADLESS` | ignored collector env | background or visible diagnostic browser |
+| `SLAB_COLLECTOR_ALLOWED_ORIGIN` | ignored collector env | exact static-app origin allowed to use the legacy local inventory fallback |
 
 The setup utility saves only the PocketBase URL and superuser email. It never
 saves the superuser password or MFA code.
@@ -168,17 +197,47 @@ saves the superuser password or MFA code.
 The optional eBay collector intentionally:
 
 - processes one due unique query every 12–20 minutes;
-- runs only between 7 AM and 11 PM;
+- uses an owner-configured local collection window, defaulting to all day on
+  the dedicated computer for the three-card proof;
 - treats results as fresh for 22 hours;
 - caps requests at 72 per rolling 24 hours;
 - shares one cached result among identical searches;
 - uses a single-instance lock;
 - increases cooldowns after HTTP 403/429 or verification responses;
-- uses standard Chromium without stealth, fingerprint disguise, proxy
+- uses a normal-Chrome extension by default and without stealth, fingerprint
+  disguise, proxy
   rotation, CAPTCHA solving, or challenge bypass.
+- pauses visibly for manual owner completion when eBay requests a sign-in or
+  CAPTCHA, then resumes the same queue without automating the challenge;
+- defaults to evaluation-only so proof results remain local and cannot replace
+  a trusted PocketBase market value.
+- makes a separate optional active-listing request only for cards the owner
+  selects, retains at most the three lowest matching asking prices, and never
+  treats those prices as sold evidence.
 
 Preserve these limits. A provider abstraction may change transport, but it must
 retain budgets, rate controls, observability, and an immediate kill switch.
+
+### Chrome extension boundary
+
+- The unpacked extension runs only in the owner's normal Chrome profile and
+  requests access only to eBay and `http://127.0.0.1:8000`.
+- A randomly generated local pairing key authenticates bridge calls. It is
+  stored only in the Windows user's local application-data folder and Chrome
+  extension-local storage; it is not a provider or PocketBase credential.
+- The bridge stays bound to `127.0.0.1`, restricts extension API CORS to
+  `chrome-extension://` origins, bounds request bodies, and validates returned
+  URLs, prices, sold dates, card matches, and result counts.
+- The localhost file server explicitly denies collector environment, lock,
+  log, browser-profile, and private state paths.
+- The extension never receives PocketBase credentials and cannot write trusted
+  values directly. The localhost companion may write guarded normalized values
+  with its app-user credential only after evaluation mode is deliberately
+  disabled; low-confidence results remain provisional and history is retained.
+- Owner-private collector status contains no cookies, credentials, pairing
+  keys, screenshots, or raw authenticated pages.
+- Verification pages activate the tab and require the owner to complete the
+  challenge manually. The extension does not inspect or automate it.
 
 ## Logging and privacy
 
@@ -242,6 +301,14 @@ may contain session or account context.
 - private Tailscale-only access;
 - collector loopback binding;
 - request pacing, daily budget, cooldowns, and single-instance lock;
+- default-off Bright Data feature flag and default-on kill switch;
+- monthly/daily returned-record limits, warnings, hard stop, bounded retries,
+  timeouts, polling, cooldowns, cache reuse, and duplicate-operation blocking;
+- owner-only marketplace usage, activity, cache, and normalized observation
+  collections with scheduled retention cleanup;
+- side-by-side managed-provider evaluation with explicit owner save;
+- default-off owner schedule, per-card due state, monthly cost projection, and
+  a bounded cards-per-tick limit;
 - ignored secrets, caches, logs, and diagnostics;
 - local/offline fallbacks that do not replace server authorization;
 - automatic local and off-site backups.
