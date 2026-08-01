@@ -123,6 +123,7 @@ routerAdd("GET", "/api/slab-ledger/psa/{cert}", (e) => {
     subject: String(details.subject || ""),
     brand: String(details.brand || ""),
     year: String(details.year || ""),
+    card_number: String(details.card_number || ""),
     grade: String(details.grade || ""),
     population: String(details.population || ""),
     spec_id: String(details.spec_id || ""),

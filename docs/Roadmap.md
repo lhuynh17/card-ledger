@@ -106,6 +106,16 @@ Avoid duplicating permanent dashboard sections.
 
 ## Marketplace platform
 
+Current local-collector direction:
+
+- run one paced nightly refresh cycle beginning at 2:00 AM;
+- use the newest exact sold listing as the current value;
+- accumulate at most three confirmed sales over subsequent cycles;
+- show three exact lowest active listings without treating them as sales;
+- reject explicit PSA-identity conflicts and request owner confirmation only
+  when a plausible listing omits identity information;
+- keep the card-detail UI focused on value, evidence, correction, and history.
+
 ### Provider abstraction
 
 The provider-neutral contract, normalization/filtering foundation, cache,

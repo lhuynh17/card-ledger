@@ -459,3 +459,28 @@ than a precise-looking value based on a different card.
 **Consequence:** Scarce cards may show no automatic estimate until exact sold
 evidence appears. Manual values, Product Research, stored history, active
 listings, and provider fallbacks remain available and unchanged.
+
+## 2026-08-01 — One nightly latest-sale valuation with strict PSA identity
+
+**Decision:** Replace granular per-card marketplace schedules with one paced
+nightly local refresh cycle beginning at 2:00 AM by default. For each unique
+card identity, request the newest sold results and lowest active listings. Use
+only the newest exact sold match as the current market value, accumulate a
+rolling maximum of three confirmed sales over future cycles, and retain the
+three lowest exact active asking prices separately.
+
+Build the query and validator from structured PSA year, subject, brand/set,
+printed card number, edition, grading company, and grade when available. Reject
+explicit identity conflicts. A plausible listing that merely omits a required
+identity detail remains provisional until the owner opens and confirms it.
+
+**Why:** Three noisy results do not make a reliable valuation. One exact result
+is safer, easier to explain, and naturally creates useful history over time.
+The value of the automation depends more on card identity than on collection
+frequency or the number of candidates returned.
+
+**Consequence:** Failed, empty, ambiguous, and conflicting results cannot erase
+or reduce an existing trusted value. The card-detail UI centers current value,
+confirmed sales, active asks, and a single confirmation path. The local-only
+collector, owner-only PocketBase records, outbound-only network boundary,
+manual values, Product Research, and provider fallbacks remain unchanged.

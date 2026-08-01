@@ -42,13 +42,13 @@ class CollectorConfigurationTests(unittest.TestCase):
             )
         )
 
-    def test_default_proof_is_all_day_local_and_evaluation_only(self):
+    def test_default_cycle_starts_at_two_and_is_evaluation_only(self):
         with patch.dict(os.environ, {}, clear=True):
             config = scraper.collector_config()
-        self.assertEqual(config["start"], (0, 0))
-        self.assertEqual(config["end"], (0, 0))
-        self.assertEqual(config["result_limit"], 3)
-        self.assertEqual(config["proof_limit"], 3)
+        self.assertEqual(config["start"], (2, 0))
+        self.assertEqual(config["end"], (12, 0))
+        self.assertEqual(config["result_limit"], 1)
+        self.assertEqual(config["proof_limit"], 0)
         self.assertTrue(config["evaluation_only"])
 
     def test_mode_summary_distinguishes_evaluation_and_production(self):
@@ -139,7 +139,7 @@ class CollectorConfigurationTests(unittest.TestCase):
         with patch.dict(os.environ, values, clear=True):
             config = scraper.collector_config()
         self.assertEqual(config["daily_ceiling"], scraper.MAX_REQUESTS_PER_DAY)
-        self.assertEqual(config["result_limit"], 3)
+        self.assertEqual(config["result_limit"], 1)
         self.assertEqual(config["minimum_delay_minutes"], 15)
         self.assertEqual(config["maximum_delay_minutes"], 15)
 
@@ -321,7 +321,7 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("LH_Complete=1", result["searchUrl"])
         self.assertIn("_sop=13", result["searchUrl"])
 
-    def test_valuation_retains_only_requested_recent_results(self):
+    def test_valuation_uses_only_the_most_recent_exact_sale(self):
         card = {
             "id": "card-1",
             "company": "PSA",
@@ -333,14 +333,15 @@ class SoldResultTests(unittest.TestCase):
                 "id": str(index),
                 "title": "2023 Pokemon 199 Charizard PSA 10",
                 "total": total,
+                "soldAt":f"2026-07-{index:02d}T00:00:00Z",
             }
             for index, total in enumerate((100, 110, 120, 130), start=1)
         ]
         result = scraper.valuation(
             card, scraper.ebay_search_terms(card), listings, result_limit=3
         )
-        self.assertEqual(len(result["recentComparables"]), 3)
-        self.assertEqual(result["marketValue"], 110)
+        self.assertEqual(len(result["recentComparables"]), 1)
+        self.assertEqual(result["marketValue"], 130)
 
     def test_query_keeps_year_language_number_and_edition(self):
         card = {
@@ -352,10 +353,27 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("2014", query)
         self.assertIn("JAPANESE", query)
         self.assertIn("090/088", query)
-        self.assertIn("GENGAR EX 1ST ED", query)
+        self.assertIn("GENGAR EX", query)
+        self.assertIn("1st Edition", query)
+
+    def test_query_prefers_structured_psa_identity_fields(self):
+        card = {
+            "company":"PSA", "grade":"10", "name":"Gengar card",
+            "psa_year":"2014", "psa_subject":"Gengar EX",
+            "psa_brand":"Pokemon Japanese XY Phantom Gate",
+            "psa_card_number":"090/088",
+            "ebay_search":"old broad gengar search",
+        }
+        query = scraper.ebay_search_terms(card)
+        for required in (
+            "2014", "JAPANESE", "XY PHANTOM GATE", "GENGAR EX",
+            "090/088", '"PSA 10"', "-raw", "-ungraded",
+        ):
+            self.assertIn(required, query)
 
     def test_gengar_requires_year_language_and_full_card_number(self):
         card = {
+            "id":"card-1",
             "company":"PSA", "grade":"10",
             "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
         }
@@ -369,6 +387,42 @@ class SoldResultTests(unittest.TestCase):
             "2014 Japanese Gengar EX 090 PSA 10 1st Edition",
         ):
             self.assertFalse(scraper.comparable(card, {"title":title}), title)
+
+    def test_incomplete_but_plausible_gengar_is_sent_for_confirmation(self):
+        card = {
+            "id":"card-1",
+            "company":"PSA", "grade":"10",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+        }
+        listing = {
+            "id":"maybe-1", "title":"Japanese Gengar EX 090 PSA 10",
+            "total":4100, "soldAt":"2026-07-31T00:00:00Z",
+        }
+        result = scraper.valuation(card, scraper.ebay_search_terms(card), [listing])
+        self.assertEqual(result["marketValue"], 0)
+        self.assertEqual(result["recentComparables"], [])
+        self.assertEqual(result["reviewCandidates"][0]["id"], "maybe-1")
+        self.assertIn(
+            "printed_number_missing",
+            result["reviewCandidates"][0]["reviewReasons"],
+        )
+
+    def test_explicit_identity_conflicts_are_rejected_not_reviewed(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+        }
+        titles = (
+            "2015 Japanese Phantom Gate Gengar EX 090/088 PSA 10 1st Edition",
+            "2014 English Phantom Gate Gengar EX 090/088 PSA 10 1st Edition",
+            "2014 Japanese Phantom Gate Gengar EX 090/087 PSA 10 1st Edition",
+            "2014 Japanese Phantom Gate Gengar EX 090/088 PSA 10 Unlimited",
+        )
+        for title in titles:
+            status, reasons = scraper.listing_identity_assessment(
+                card, {"title":title}
+            )
+            self.assertEqual(status, "rejected", (title, reasons))
 
     def test_first_edition_and_unlimited_are_not_interchangeable(self):
         first = {
@@ -404,20 +458,38 @@ class SoldResultTests(unittest.TestCase):
         self.assertFalse(scraper.comparable(card, {
             "title":"2016 Pokemon XY Promo 224 Pikachu PSA 10"
         }))
+        status, _ = scraper.listing_identity_assessment(card, {
+            "title":"2016 Japanese Pokemon XY Promo #224 Pikachu PSA 10"
+        })
+        self.assertEqual(status, "rejected")
 
-    def test_real_price_swing_is_labeled_not_removed(self):
+    def test_shared_character_but_wrong_variant_is_not_reviewable(self):
+        card = {
+            "company":"PSA", "grade":"10", "psa_year":"2016",
+            "psa_subject":"Pikachu Holo 20th Anniversary Festa",
+            "psa_brand":"Pokemon Japanese XY Promo",
+            "psa_card_number":"279",
+            "name":"2016 Pokemon Japanese XY Promo #279 Pikachu Festa",
+        }
+        status, _ = scraper.listing_identity_assessment(card, {
+            "title":"2016 Japanese Pikachu Battle Promo PSA 10"
+        })
+        self.assertEqual(status, "rejected")
+
+    def test_latest_exact_sale_is_used_even_when_prices_swing(self):
         card = {
             "id":"card-1", "company":"PSA", "grade":"10",
             "name":"Pokemon #090 Gengar EX",
         }
         listings = [
-            {"id":str(index), "title":"Gengar EX 090 PSA 10", "total":total}
+            {"id":str(index), "title":"Gengar EX 090 PSA 10", "total":total,
+             "soldAt":f"2026-07-{4-index:02d}T00:00:00Z"}
             for index, total in enumerate((8000, 4000, 3900), start=1)
         ]
         result = scraper.valuation(card, "Gengar EX 090 PSA 10", listings)
         self.assertEqual(result["comparableCount"], 3)
-        self.assertEqual(result["marketValue"], 4000)
-        self.assertEqual(result["volatility"], "high")
+        self.assertEqual(result["marketValue"], 8000)
+        self.assertEqual(result["volatility"], "unknown")
 
     def test_empty_results_never_create_a_positive_or_blank_estimate(self):
         card = {
@@ -483,7 +555,7 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["market_value"], 5000)
         self.assertEqual(payload["auto_status"], "automatic")
         self.assertEqual(payload["history"][-1]["value"], 5000)
-        self.assertEqual(payload["algorithm_version"], "local-ebay-v4")
+        self.assertEqual(payload["algorithm_version"], "local-ebay-v5")
 
     def test_low_confidence_is_provisional_and_keeps_trusted_value(self):
         result = {
@@ -497,6 +569,37 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["market_value"], 4200)
         self.assertEqual(payload["suggested_value"], 5000)
         self.assertEqual(payload["auto_status"], "provisional")
+
+    def test_new_exact_sale_rolls_history_and_sales_to_three(self):
+        result = {
+            "cardId":"card-1", "marketValue":4000, "confidence":"high",
+            "lastChecked":"2026-08-01T07:00:00+00:00",
+            "recentComparables":[{
+                "id":"sale-4", "total":4000,
+                "soldAt":"2026-08-01T06:00:00+00:00",
+            }],
+        }
+        previous = {
+            "market_value":3900, "source":"Local eBay collector",
+            "comparables":[
+                {"id":"sale-3", "total":3900, "soldAt":"2026-07-31"},
+                {"id":"sale-2", "total":3800, "soldAt":"2026-07-30"},
+                {"id":"sale-1", "total":3700, "soldAt":"2026-07-29"},
+            ],
+            "history":[
+                {"date":"2026-07-29", "value":3700},
+                {"date":"2026-07-30", "value":3800},
+                {"date":"2026-07-31", "value":3900},
+            ],
+        }
+        payload = scraper.automatic_market_payload(result, previous, "owner-1")
+        self.assertEqual(payload["market_value"], 4000)
+        self.assertEqual(
+            [sale["id"] for sale in payload["comparables"]],
+            ["sale-4", "sale-3", "sale-2"],
+        )
+        self.assertEqual(len(payload["history"]), 3)
+        self.assertEqual(payload["history"][-1]["listingId"], "sale-4")
 
     def test_dramatic_price_change_requires_review(self):
         result = {

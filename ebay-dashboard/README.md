@@ -1,8 +1,9 @@
 # Slab Ledger market collector
 
-This Windows companion reads active inventory from PocketBase, checks rendered
-eBay sold-search results at a deliberately slow pace, and writes the latest
-accepted comparables and market estimate back to PocketBase.
+This Windows companion reads active inventory from PocketBase and begins one
+paced daily refresh cycle at 2:00 AM local time. The most recent exact-match
+sale becomes the market value. Up to three confirmed sales and the three lowest
+exact-match active listings remain visible for context.
 
 ## First-time Windows setup
 
@@ -12,7 +13,7 @@ accepted comparables and market estimate back to PocketBase.
 4. Keep your existing private `collector.env`.
 5. Double-click `test-cloud.bat`.
 6. Double-click `run.bat` and leave its window open.
-7. After the three-card proof succeeds, double-click
+7. After a test card completes successfully, double-click
    `install-collector-startup.bat` once. Windows will then start the collector
    whenever you sign in. Keep that Windows account signed in; locking the
    screen is fine.
@@ -44,15 +45,13 @@ not share it.
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
-- Identical slab searches share a cached result.
-- The default proof can run throughout the day on the dedicated Windows
-  computer, with one due search every 12–20 minutes.
-- The proof stops after three unique searches and retains the latest three
-  sold candidates per card.
-- Cards explicitly selected in Slab Ledger can also retain their three lowest
-  matching active asking prices from one separate request.
-- Results remain current for 22 hours.
-- No more than 72 requests run in a rolling 24-hour window.
+- Identical slab identities share a cached result.
+- One daily cycle starts at 2:00 AM and paces requests every 2–4 minutes.
+- Each card gets one sold-results lookup and one active-results lookup.
+- Only the most recent exact sale changes the market value.
+- Up to three confirmed sales and three lowest exact active listings are kept.
+- Ambiguous candidates never change the value until the owner confirms one.
+- No more than 150 requests run in a rolling 24-hour window.
 - A 403, 429, or verification page triggers an escalating cooldown.
 - A lock file prevents two collector windows from running simultaneously.
 - Failures are logged locally under `logs/`, with a screenshot and HTML
@@ -76,16 +75,17 @@ workarounds.
 SLAB_SCRAPER_BACKEND=extension
 SLAB_BROWSER_CHANNEL=chrome
 SLAB_BROWSER_HEADLESS=0
-SLAB_COLLECTOR_START_TIME=00:00
-SLAB_COLLECTOR_END_TIME=00:00
-SLAB_COLLECTOR_MIN_DELAY_MINUTES=12
-SLAB_COLLECTOR_MAX_DELAY_MINUTES=20
-SLAB_COLLECTOR_RESULT_LIMIT=3
-SLAB_COLLECTOR_PROOF_LIMIT=3
+SLAB_COLLECTOR_DAILY_RUN_TIME=02:00
+SLAB_COLLECTOR_MIN_DELAY_MINUTES=2
+SLAB_COLLECTOR_MAX_DELAY_MINUTES=4
+SLAB_COLLECTOR_DAILY_CEILING=150
+SLAB_COLLECTOR_PROOF_LIMIT=0
 SLAB_COLLECTOR_EVALUATION_ONLY=1
 ```
 
 Use `SLAB_SCRAPER_BACKEND=requests` only as a troubleshooting fallback.
 Keep `SLAB_BROWSER_HEADLESS=0` for the dedicated Windows computer so remote
-manual checks remain possible. Do not change
-`SLAB_COLLECTOR_EVALUATION_ONLY` until the three-card output has been reviewed.
+manual checks remain possible. Keep `SLAB_COLLECTOR_EVALUATION_ONLY=1` during a
+first-time test. Set it to `0` only after the exact-match result has been
+reviewed; production still refuses ambiguous listings and preserves existing
+values after failures.

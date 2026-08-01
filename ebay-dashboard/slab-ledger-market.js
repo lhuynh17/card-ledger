@@ -76,6 +76,7 @@
       notes:record.notes || "", comparables,
       pendingBestOffers:jsonArray(record.pending_best_offers),
       activeListings:jsonArray(record.active_listings),
+      reviewCandidates:jsonArray(record.review_candidates),
       history, searchUrl:record.search_url || "",
       confidence:record.confidence || "low",
       identityConfidence:record.identity_confidence || record.confidence || "low",
@@ -139,8 +140,8 @@
       .market-panel .mf input,.market-panel .mf select,.market-panel .mf textarea{box-sizing:border-box;width:100%;min-height:42px;padding:9px;border:1px solid #bfcac2!important;border-radius:9px;background:#fff!important;color:#17211b!important;-webkit-text-fill-color:#17211b;color-scheme:light;font:inherit}.market-panel .mf select option{background:#fff!important;color:#17211b!important}.market-panel .mf textarea{min-height:70px}.market-panel .mf input:focus,.market-panel .mf select:focus,.market-panel .mf textarea:focus{outline:3px solid rgba(23,102,62,.18);border-color:#17663e!important}
       .market-research-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:9px}.market-research-actions a,.market-research-actions button,.market-actions button{box-sizing:border-box;min-height:42px;padding:10px 13px;border:1px solid #cbd6ce;border-radius:9px;appearance:none;background:#f5f7f4;color:#17462f;font-weight:750;text-decoration:none;cursor:pointer}.market-research-actions a:hover,.market-research-actions button:hover,.market-actions button:hover{border-color:#17663e;background:#eaf2ed}.market-research-actions .primary,.market-actions .primary{background:#17663e;color:#fff}.market-research-actions button:disabled,.market-actions button:disabled{opacity:.55;cursor:wait}
       .market-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.market-message{grid-column:1/-1;min-height:17px;color:#52675a;font-size:12px}.market-message.error{color:#8a332a}.market-message.ok{color:#24633d}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
-      .market-signals{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.market-signal{padding:5px 8px;border-radius:999px;background:#f0f3f0;color:#405248;font-size:11px;font-weight:750}.market-signal.warn{background:#fff1c9;color:#785500}.market-signal.bad{background:#ffe1dc;color:#8a332a}
       .market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row strong{overflow-wrap:anywhere}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}.market-evidence-row button,.history-row button{margin-top:5px;padding:6px 8px;border:1px solid #d5ddd7;border-radius:7px;background:#fff;color:#17462f;font-weight:750;cursor:pointer}.market-empty{margin:0;color:#617067;font-size:12px}.market-preview{grid-column:1/-1;padding:10px 12px;border-radius:9px;background:#eaf2ed;color:#17462f;font-size:13px;font-weight:800}
+      .market-candidate-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.market-candidate-actions a,.market-candidate-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;margin:0!important;padding:6px 9px!important}
       @media(max-width:620px){.market-modal{padding:0}.market-panel{width:100%;max-height:100vh;height:100%;border-radius:0}.market-head{padding:12px 14px}.market-head h2{font-size:17px}.market-body{padding:12px}.market-footer{padding:10px 14px}.market-back{width:100%}.market-section{padding:14px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}.market-evidence-row{grid-template-columns:1fr}.market-evidence-row>div:last-child{display:flex;align-items:center;justify-content:space-between;gap:10px}}
     `;
     document.head.appendChild(style);
@@ -171,9 +172,7 @@
     applyClientSafety(card, value);
     const modal = document.getElementById("marketModal");
     modal.rememberMarketFocus?.();
-    const desiredComps = Math.max(3, Math.min(
-      5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
-    ));
+    const desiredComps = 1;
     const matchedSold = (value?.comparables || []).filter((item) => listingMatchesCard(card, item));
     const matchedPending = (value?.pendingBestOffers || []).filter((item) => listingMatchesCard(card, item));
     const matchedActive = (value?.activeListings || []).filter((item) => listingMatchesCard(card, item));
@@ -181,7 +180,8 @@
       + (value?.pendingBestOffers || []).length - matchedPending.length
       + (value?.activeListings || []).length - matchedActive.length;
     const comps = value?.autoStatus === "provisional" ? [] : matchedSold.slice(0, desiredComps);
-    const history = (value?.history || []).slice().reverse().slice(0, 8);
+    const history = (value?.history || []).slice().reverse().slice(0, 3);
+    const reviewCandidates = value?.reviewCandidates || [];
     const previousTrustedIndex = history.findIndex((item) => {
       const previous = Number(item?.value) || 0;
       return value?.marketValue && previous && previous !== value.marketValue
@@ -192,11 +192,16 @@
     const evidenceRows = (items, kind) => items.map((item, index) => {
       const pending = kind === "pending";
       const active = kind === "active";
+      const review = kind === "review";
       const amount = pending ? "Price unknown" : cash(item.total || item.price);
       const detail = pending ? "Best Offer · verify in Product Research"
         : active ? "Active asking price—not a completed sale"
           : `Sold ${safe(shortDate(item.soldAt) || "date unavailable")}`;
-      return `<div class="market-evidence-row${pending ? " attention" : ""}><div><strong>${safe(item.title || "eBay listing")}</strong><small>${detail}</small></div><div><span>${amount}</span>${pending ? `<button class="verify-best-offer" type="button" data-index="${index}">Verify price</button>` : item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}</div></div>`;
+      if (review) {
+        const reasons = (item.reviewReasons || []).join(", ").replaceAll("_", " ");
+        return `<div class="market-evidence-row attention"><div><strong>${safe(item.title || "eBay listing")}</strong><small>${safe(`Not used yet · ${reasons}`)}</small></div><div><span>${amount}</span><div class="market-candidate-actions">${item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Check listing ↗</a>` : ""}<button class="confirm-market-sale" type="button" data-index="${index}">Yes, this is my card</button></div></div></div>`;
+      }
+      return `<div class="market-evidence-row${pending ? " attention" : ""}"><div><strong>${safe(item.title || "eBay listing")}</strong><small>${detail}</small></div><div><span>${amount}</span>${pending ? `<button class="verify-best-offer" type="button" data-index="${index}">Verify price</button>` : item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ""}</div></div>`;
     }).join("");
     const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
       _nkw:query, LH_Sold:"1", LH_Complete:"1", LH_TitleDesc:"1", _ipg:"240", _sop:"13"
@@ -209,49 +214,77 @@
       ${hiddenEvidence ? `<div class="market-review-alert"><strong>${hiddenEvidence} cached result${hiddenEvidence === 1 ? " was" : "s were"} hidden.</strong><br>${value?.suspectMarketValue ? `The ${cash(value.suspectMarketValue)} automatic value is also excluded from inventory totals. ` : ""}Those listings did not match this card's year, language, printed number, grader, grade, or edition.</div>` : ""}
       ${value?.dramaticChange ? `<div class="market-review-alert"><strong>This saved value is far from its previous value.</strong><br>It may have come from an incorrect match.${previousTrustedIndex >= 0 ? ` <button class="rollback-market-value" type="button" data-index="${previousTrustedIndex}">Restore previous ${cash(history[previousTrustedIndex].value)}</button>` : ""}</div>` : ""}
       <div class="market-page-message" id="marketPageMessage" role="status"></div>
-      <div class="market-signals">
-      <span class="market-signal">Match ${safe(value?.identityConfidence || "unknown")}</span>
-      <span class="market-signal${value?.confidence === "low" ? " warn" : ""}">Evidence ${safe(value?.confidence || "low")}</span>
-      <span class="market-signal${value?.volatility === "high" ? " warn" : ""}">Volatility ${safe(value?.volatility || "unknown")}</span>
-      </div>
-      <section class="market-section"><h3>Market evidence</h3><p class="market-section-intro">Sold results support valuation. Active listings are shown separately and never count as sales.</p>
-      <div class="market-subsection"><h4>Recent matched sales</h4><div class="market-evidence-list">${evidenceRows(matchedSold, "sold") || "<p class='market-empty'>No reliable sold matches yet.</p>"}</div></div>
+      <section class="market-section"><h3>Sales and listings</h3><p class="market-section-intro">Only an exact match can update the value automatically. Active listings never count as sales.</p>
+      ${reviewCandidates.length ? `<div class="market-subsection"><h4>Check this possible sale</h4><div class="market-evidence-list">${evidenceRows(reviewCandidates, "review")}</div></div>` : ""}
+      <div class="market-subsection"><h4>Latest confirmed sales</h4><div class="market-evidence-list">${evidenceRows(matchedSold, "sold") || "<p class='market-empty'>No exact sold match has been saved yet.</p>"}</div></div>
       ${matchedPending.length ? `<div class="market-subsection"><h4>Best Offers needing a price</h4><div class="market-evidence-list">${evidenceRows(matchedPending, "pending")}</div><div class="market-research-actions"><a href="${safe(ebayResearchUrl(card))}" target="_blank" rel="noopener noreferrer">Verify in Product Research ↗</a></div></div>` : ""}
       ${matchedActive.length ? `<div class="market-subsection"><h4>Lowest active asking prices</h4><div class="market-evidence-list">${evidenceRows(matchedActive, "active")}</div></div>` : ""}
       <div class="market-research-actions"><a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open current eBay sold search ↗</a></div></section>
-      ${card.remoteId ? `<details class="market-disclosure"><summary>Automatic check settings</summary><div class="market-disclosure-body"><p class="market-section-intro">Choose how often this card is checked. These settings do not change matching safeguards.</p>
-      <div class="mf"><label>Sold-listing schedule</label><select id="cardSoldSchedule">
-      <option value="inherit">Use inventory default</option><option value="off">Off</option>
-      <option value="daily">Daily</option><option value="three_days">Every 3 days</option>
-      <option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
-      <div class="mf"><label>Active asking-price check</label><select id="cardActiveSchedule">
-      <option value="off">Off</option><option value="three">Include 3 lowest active listings</option></select></div>
-      <p class="market-status" id="cardScheduleEstimate" style="text-align:left"></p>
-      <div class="market-actions"><button id="saveCardSchedule" type="button">Save card schedule</button></div>
-      <div class="market-message" id="cardScheduleMessage"></div></div></details>` : ""}
-      <details class="market-disclosure"><summary>Correct or enter a value manually</summary><div class="market-disclosure-body"><form id="manualCompForm" class="manual-comps">
-      <p class="market-help">Use this only when automatic evidence is missing or wrong. Review the listings, enter the prices you trust, then save.</p>
+      <details class="market-disclosure"><summary>Correct the current market value</summary><div class="market-disclosure-body"><form id="manualCompForm" class="manual-comps">
+      <p class="market-help">Enter one confirmed sale. It becomes the current market value and joins the rolling three-sale history.</p>
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
       <a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Research on eBay ↗</a></div>
-      ${Array.from({length:desiredComps}, (_, i) => `<div class="comp-row"><div class="mf"><label>Trusted sold price ${i + 1}</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
+      ${Array.from({length:desiredComps}, (_, i) => `<div class="comp-row"><div class="mf"><label>Confirmed sold price</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
       <div class="mf"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="Paste the sold-listing link"></div></div>`).join("")}
-      <div class="market-preview" id="manualPreview">Manual average: —</div>
+      <div class="market-preview" id="manualPreview">New market value: —</div>
       <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
       <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
       <div class="mf full"><label>Notes</label><textarea id="marketNotes" placeholder="Why these listings are trustworthy…">${safe(value?.notes || "")}</textarea></div>
       <div class="market-actions"><button class="primary" type="submit">Save manual market value</button></div>
       <div class="market-message" id="marketMessage"></div></form></div></details>
-      <details class="market-disclosure"><summary>Value history</summary><div class="market-disclosure-body">${history.length ? history.map((item, index) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}<button class="rollback-market-value" type="button" data-index="${index}">Restore</button></span></div>`).join("") : "<p class='market-empty'>No saved history yet.</p>"}</div></details>`;
+      <details class="market-disclosure"><summary>Previous saved values</summary><div class="market-disclosure-body">${history.length ? history.map((item, index) => `<div class="history-row"><span>${safe(shortDate(item.date))}</span><strong>${cash(item.value)}</strong><span>${safe(item.source || "")}<button class="rollback-market-value" type="button" data-index="${index}">Restore</button></span></div>`).join("") : "<p class='market-empty'>No previous saved values yet.</p>"}</div></details>`;
     modal.classList.add("open"); document.body.style.overflow = "hidden";
     modal.querySelector(".market-close")?.focus();
     const priceInputs = [...document.querySelectorAll(".comp-price")];
     const recalc = () => {
       const valid = priceInputs.map((input) => Number(input.value)).filter((n) => n > 0);
       document.getElementById("manualPreview").textContent = valid.length
-        ? "Manual average: " + cash(valid.reduce((sum, n) => sum + n, 0) / valid.length)
-        : "Manual average: —";
+        ? "New market value: " + cash(valid[0])
+        : "New market value: —";
     };
     priceInputs.forEach((input) => input.addEventListener("input", recalc));
+    document.querySelectorAll(".confirm-market-sale").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const candidate = reviewCandidates[Number(button.dataset.index)];
+        const confirmedValue = Number(candidate?.total || candidate?.price) || 0;
+        if (!candidate || !confirmedValue || !value?.recordId) return;
+        button.disabled = true;
+        try {
+          const checked = new Date().toISOString();
+          const key = String(candidate.id || candidate.url || checked);
+          const sales = [candidate, ...(value.comparables || [])].filter(
+            (sale, index, all) => all.findIndex((other) =>
+              String(other.id || other.url) === String(sale.id || sale.url)
+            ) === index
+          ).sort((a, b) => String(b.soldAt || "").localeCompare(String(a.soldAt || ""))).slice(0, 3);
+          const history = [...(value.history || []), {
+            date:candidate.soldAt || checked, value:confirmedValue,
+            source:"Owner-confirmed eBay sale", listingId:key,
+            title:candidate.title || "", url:candidate.url || ""
+          }].slice(-3);
+          const remaining = reviewCandidates.filter((_, index) => index !== Number(button.dataset.index));
+          const row = await pbRequest(`/api/collections/market_values/records/${value.recordId}`, {
+            method:"PATCH", headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              market_value:confirmedValue, suggested_value:confirmedValue,
+              source:"Owner-confirmed eBay sale", checked_at:checked,
+              auto_status:"manual", confidence:"high", identity_confidence:"high",
+              comparables:sales, review_candidates:remaining, history
+            })
+          });
+          const confirmed = fromRecord(row);
+          values.set(confirmed.cardId, confirmed);
+          render();
+          window.dispatchEvent(new CustomEvent("slab-market-updated"));
+          show(card, confirmed);
+        } catch (error) {
+          button.disabled = false;
+          const message = document.getElementById("marketPageMessage");
+          message.className = "market-page-message error";
+          message.textContent = error.message || "The sale could not be confirmed.";
+        }
+      });
+    });
     document.querySelectorAll(".verify-best-offer").forEach((button) => {
       button.addEventListener("click", () => {
         const pending = value?.pendingBestOffers?.[Number(button.dataset.index)];
@@ -302,89 +335,12 @@
         }
       });
     });
-    const cardSchedule = document.getElementById("cardSoldSchedule");
-    if (cardSchedule) {
-      const activeSchedule = document.getElementById("cardActiveSchedule");
-      const scheduleDetails = {
-        inherit:{label:"Uses the inventory default shown in Marketplace Usage."},
-        off:{label:"No automatic sold checks for this card."},
-        daily:{label:"About 61 sold records/month · about $0.21."},
-        three_days:{label:"About 21 sold records/month · about $0.07."},
-        weekly:{label:"About 9 sold records/month · about $0.03."},
-        monthly:{label:"2 sold records/month · under $0.01."},
-      };
-      const estimate = document.getElementById("cardScheduleEstimate");
-      const updateCardEstimate = () => {
-        const activeNote = activeSchedule.value === "three"
-          ? " Also runs one active search and retains the 3 lowest matching asking prices."
-          : "";
-        estimate.textContent = (scheduleDetails[cardSchedule.value]?.label || "") + activeNote;
-      };
-      cardSchedule.addEventListener("change", updateCardEstimate);
-      activeSchedule.addEventListener("change", updateCardEstimate);
-      updateCardEstimate();
-      pbRequest(
-        "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId)
-      ).then((result) => {
-        const sold = result?.override?.sold || {};
-        const active = result?.override?.active || {};
-        if (sold.mode === "off") cardSchedule.value = "off";
-        else if (sold.mode === "custom") {
-          if (sold.interval_unit === "days" && sold.interval_value === 1) {
-            cardSchedule.value = "daily";
-          } else if (sold.interval_unit === "days" && sold.interval_value === 3) {
-            cardSchedule.value = "three_days";
-          } else if (sold.interval_unit === "weeks" && sold.interval_value === 1) {
-            cardSchedule.value = "weekly";
-          } else if (sold.interval_unit === "months" && sold.interval_value === 1) {
-            cardSchedule.value = "monthly";
-          }
-        }
-        activeSchedule.value = active.mode === "custom" && active.enabled
-          ? "three" : "off";
-        updateCardEstimate();
-      }).catch(() => {});
-      document.getElementById("saveCardSchedule").addEventListener("click", async () => {
-        const message = document.getElementById("cardScheduleMessage");
-        const presets = {
-          daily:{mode:"custom", enabled:true, listing_count:2, interval_unit:"days", interval_value:1},
-          three_days:{mode:"custom", enabled:true, listing_count:2, interval_unit:"days", interval_value:3},
-          weekly:{mode:"custom", enabled:true, listing_count:2, interval_unit:"weeks", interval_value:1},
-          monthly:{mode:"custom", enabled:true, listing_count:2, interval_unit:"months", interval_value:1},
-        };
-        const sold = cardSchedule.value === "inherit" ? {mode:"inherit"}
-          : cardSchedule.value === "off" ? {mode:"off"}
-            : presets[cardSchedule.value];
-        const active = activeSchedule.value === "three"
-          ? {
-              mode:"custom", enabled:true, listing_count:3,
-              interval_unit:"days", interval_value:1
-            }
-          : {mode:"off"};
-        try {
-          await pbRequest(
-            "/api/slab-ledger/marketplace/schedule/card/" + encodeURIComponent(card.remoteId),
-            {
-              method:"PUT",
-              headers:{"Content-Type":"application/json"},
-              body:JSON.stringify({sold, active})
-            }
-          );
-          message.className = "market-message ok";
-          message.textContent = "Card schedule preference saved.";
-          await window.slabManagedMarketplace?.refresh?.(true);
-        } catch (error) {
-          message.className = "market-message error";
-          message.textContent = error.message || "Card schedule could not be saved.";
-        }
-      });
-    }
     const psaButton = document.getElementById("loadPsaSales");
     if (psaButton) psaButton.addEventListener("click", async () => {
       const message = document.getElementById("marketMessage");
       psaButton.disabled = true;
       message.className = "market-message";
-      message.textContent = "Loading up to three recent PSA comparable sales…";
+      message.textContent = "Loading the most recent PSA comparable sale…";
       try {
         const result = await pbRequest("/api/slab-ledger/psa/" + encodeURIComponent(card.cert) + "/sales");
         window.updateParseCreditBadge?.(result.credits);
@@ -401,60 +357,12 @@
         document.getElementById("marketDate").value = new Date().toISOString().slice(0, 10);
         recalc();
         message.className = "market-message ok";
-        message.textContent = `Filled ${sales.length} recent sale${sales.length === 1 ? "" : "s"}. Review them, then save the average.`;
+        message.textContent = "Filled the most recent PSA sale. Verify it, then save it as the market value.";
       } catch (error) {
         message.className = "market-message error";
         message.textContent = error.message || "Recent PSA sales could not be loaded.";
       } finally {
         psaButton.disabled = false;
-      }
-    });
-    const managedButton = document.getElementById("loadManagedSales");
-    if (managedButton) managedButton.addEventListener("click", async () => {
-      const message = document.getElementById("marketMessage");
-      const listingCount = Math.max(3, Math.min(
-        5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
-      ));
-      managedButton.disabled = true;
-      message.className = "market-message";
-      message.textContent = "Running a private side-by-side marketplace evaluation…";
-      try {
-        const result = await window.slabManagedMarketplace.search({
-          card_id:String(card.remoteId || ""),
-          query,
-          card_identity:card.name || query,
-          grader:String(card.company || "PSA").toUpperCase(),
-          grade:String(card.grade || ""),
-          marketplace:"ebay",
-          sold_only:true,
-          completed_only:true,
-          sort:"sold_desc",
-          search_url:soldUrl,
-          result_limit:listingCount,
-          feature:"market_modal"
-        });
-        const candidates = Array.isArray(result?.candidates)
-          ? result.candidates.slice(0, listingCount)
-          : [];
-        if (!result?.valuation || !candidates.length) {
-          throw new Error("No usable managed-provider comparables were returned. Your saved value was not changed.");
-        }
-        const urlInputs = [...document.querySelectorAll(".comp-url")];
-        candidates.forEach((candidate, index) => {
-          priceInputs[index].value = Number(candidate.total).toFixed(2);
-          priceInputs[index].dataset.title = candidate.title || "";
-          urlInputs[index].value = candidate.listing_url || "";
-        });
-        document.getElementById("marketSource").value = "Bright Data evaluation";
-        document.getElementById("marketDate").value = new Date().toISOString().slice(0, 10);
-        recalc();
-        message.className = "market-message ok";
-        message.textContent = `Evaluation filled ${candidates.length} comparable${candidates.length === 1 ? "" : "s"} for review. Nothing is saved until you choose Save average.`;
-      } catch (error) {
-        message.className = "market-message error";
-        message.textContent = error.message || "Managed marketplace evaluation is unavailable. Your saved value was not changed.";
-      } finally {
-        managedButton.disabled = false;
       }
     });
     document.getElementById("manualCompForm").addEventListener("submit", async (event) => {
@@ -474,24 +382,33 @@
       title:priceInputs[index].dataset.title || `Manual comp ${index + 1}` }))
       .filter((comp) => comp.price > 0);
     if (!comps.length) throw new Error("Enter at least one sold comp price.");
-    const average = Math.round(comps.reduce((sum, comp) => sum + comp.price, 0) / comps.length * 100) / 100;
+    const latest = {...comps[0], soldAt:document.getElementById("marketDate").value + " 12:00:00.000Z"};
+    const marketValue = Math.round(latest.price * 100) / 100;
     const source = document.getElementById("marketSource").value;
     const checked = document.getElementById("marketDate").value + " 12:00:00.000Z";
-    const history = [...(previous?.history || []), { date:checked, value:average, source, comparables:comps }].slice(-100);
+    const history = [...(previous?.history || []), {
+      date:checked, value:marketValue, source, title:latest.title, url:latest.url
+    }].slice(-3);
+    const rollingSales = [latest, ...(previous?.comparables || [])].filter(
+      (sale, index, all) => all.findIndex((other) =>
+        String(other.id || other.url || `${other.soldAt}-${other.total}`) ===
+        String(sale.id || sale.url || `${sale.soldAt}-${sale.total}`)
+      ) === index
+    ).sort((a, b) => String(b.soldAt || "").localeCompare(String(a.soldAt || ""))).slice(0, 3);
     const verifiedUrls = new Set(comps.map((comp) => comp.url).filter(Boolean));
     const payload = {
       owner:cloudSession.record.id, card_id:String(card.remoteId), query:ebaySearchTerms(card),
-      search_url:comps.find((comp) => comp.url)?.url || "", market_value:average,
-      confidence:comps.length >= 3 ? "high" : comps.length === 2 ? "medium" : "low",
-      checked_at:checked, comparable_count:comps.length, rejected_count:0,
-      low:Math.min(...comps.map((comp) => comp.price)), high:Math.max(...comps.map((comp) => comp.price)),
-      comparables:comps, source, notes:document.getElementById("marketNotes").value.trim(),
+      search_url:latest.url || "", market_value:marketValue,
+      confidence:"high", checked_at:checked, comparable_count:rollingSales.length, rejected_count:0,
+      low:marketValue, high:marketValue,
+      comparables:rollingSales, source, notes:document.getElementById("marketNotes").value.trim(),
       pending_best_offers:(previous?.pendingBestOffers || [])
         .filter((offer) => !verifiedUrls.has(offer.url)),
       active_listings:previous?.activeListings || [],
-      identity_confidence:previous?.identityConfidence || (comps.length >= 3 ? "high" : comps.length === 2 ? "medium" : "low"),
+      identity_confidence:"high",
       volatility:previous?.volatility || "unknown", auto_status:"manual",
-      suggested_value:average, algorithm_version:previous?.algorithmVersion || "manual",
+      suggested_value:marketValue, algorithm_version:previous?.algorithmVersion || "manual",
+      review_candidates:(previous?.reviewCandidates || []).filter((item) => item.url !== latest.url),
       history, error:""
     };
     const row = await pbRequest("/api/collections/market_values/records" + (previous?.recordId ? "/" + previous.recordId : ""), {

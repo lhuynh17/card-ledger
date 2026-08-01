@@ -196,11 +196,13 @@ saves the superuser password or MFA code.
 
 The optional eBay collector intentionally:
 
-- processes one due unique query every 12–20 minutes;
-- uses an owner-configured local collection window, defaulting to all day on
-  the dedicated computer for the three-card proof;
-- treats results as fresh for 22 hours;
-- caps requests at 72 per rolling 24 hours;
+- begins one paced nightly cycle at 2:00 AM by default and processes one due
+  unique card at a time;
+- performs at most one sold and one active lookup per unique card identity in
+  that cycle;
+- treats results as fresh for 23 hours;
+- caps requests at 150 per rolling 24 hours, enough for at most 75 unique
+  two-request card refreshes;
 - shares one cached result among identical searches;
 - uses a single-instance lock;
 - increases cooldowns after HTTP 403/429 or verification responses;
@@ -209,11 +211,14 @@ The optional eBay collector intentionally:
   rotation, CAPTCHA solving, or challenge bypass.
 - pauses visibly for manual owner completion when eBay requests a sign-in or
   CAPTCHA, then resumes the same queue without automating the challenge;
-- defaults to evaluation-only so proof results remain local and cannot replace
-  a trusted PocketBase market value.
-- makes a separate optional active-listing request only for cards the owner
-  selects, retains at most the three lowest matching asking prices, and never
-  treats those prices as sold evidence.
+- defaults to evaluation-only so test results remain local and cannot replace
+  a trusted PocketBase market value;
+- requires structured card identity—including year, language, printed number,
+  edition, grader, and grade when known—before automatic promotion;
+- rejects explicit identity conflicts and keeps incomplete plausible results
+  in an owner-confirmation queue that cannot change value by itself;
+- retains at most the three lowest exact active asking prices and never treats
+  those prices as sold evidence.
 
 Preserve these limits. A provider abstraction may change transport, but it must
 retain budgets, rate controls, observability, and an immediate kill switch.

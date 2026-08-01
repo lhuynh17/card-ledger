@@ -1389,6 +1389,9 @@ function cloudFields(card) {
   return {
     company: card.company || "PSA", cert: card.cert || "", name: card.name || "",
     ebay_search: card.ebaySearch || "",
+    psa_year:card.psaYear || "", psa_subject:card.psaSubject || "",
+    psa_brand:card.psaBrand || "", psa_card_number:card.psaCardNumber || "",
+    psa_spec_id:card.psaSpecId || "",
     grade: card.grade || "", pop: card.pop || "", cost: numberValue(card.cost),
     notes: card.notes || "", sold: Boolean(card.sold),
     sold_price: numberValue(card.soldPrice), sold_date: card.soldDate || "",
@@ -1442,6 +1445,9 @@ async function remoteToLocal(record, existing = null) {
     _dirty:false, _deleted:false,
     company:record.company || "PSA", cert:record.cert || "", name:record.name || "",
     ebaySearch:record.ebay_search || "",
+    psaYear:record.psa_year || "", psaSubject:record.psa_subject || "",
+    psaBrand:record.psa_brand || "", psaCardNumber:record.psa_card_number || "",
+    psaSpecId:record.psa_spec_id || "",
     grade:record.grade || "", pop:record.pop || "", cost:record.cost || 0,
     psaEstimate:record.psa_estimate || 0,
     psaEstimateUpdated:record.psa_estimate_updated || "",
@@ -1458,6 +1464,8 @@ async function remoteToLocal(record, existing = null) {
 function remoteStamp(record) {
   return record.updated || JSON.stringify([
     record.company, record.cert, record.name, record.ebay_search,
+    record.psa_year, record.psa_subject, record.psa_brand,
+    record.psa_card_number, record.psa_spec_id,
     record.grade, record.pop, record.cost,
     record.notes, record.sold, record.sold_price, record.sold_date, record.sale_notes,
     record.selling_fees, record.shipping_cost, record.psa_estimate,
@@ -1727,8 +1735,8 @@ function gradeNumber(text) {
   return m ? m[1] : "";
 }
 
-// Turn a formal cert-page title into broader eBay keywords. PSA titles often
-// repeat the set name and include label words that ordinary sellers omit.
+// Preserve the PSA identity fields that distinguish one priced card from
+// another. A narrower result set is preferable to a wrong automatic value.
 function ebayCardKeywords(cardName) {
   const generic = new Set([
     "POKEMON", "CARD", "CARDS", "TRADING", "COLLECTIBLE",
@@ -1736,24 +1744,17 @@ function ebayCardKeywords(cardName) {
     "LMTD", "COLL", "MASTER", "BTL", "SET"
   ]);
   const original = String(cardName || "").toUpperCase();
-  const numberedTitle = original.match(/^(.*?)#\s*([A-Z0-9-]+)\s+(.+)$/);
+  const numberedTitle = original.match(/^(.*?)#\s*([A-Z0-9/-]+)\s+(.+)$/);
 
-  // PSA's API returns a catalog title rather than the shorter wording most
-  // eBay sellers use. For numbered cards, keep the language, card number, and
-  // subject while dropping a set name repeated on both sides of "#".
   if (numberedTitle) {
-    const prefixWords = numberedTitle[1].replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/);
-    const repeatedWords = new Set(prefixWords);
-    const yearWords = prefixWords.filter((word) => /^(?:19|20)\d{2}$/.test(word));
-    const languageWords = prefixWords.filter((word) =>
-      ["JAPANESE", "ENGLISH", "KOREAN", "CHINESE", "FRENCH", "GERMAN", "SPANISH", "ITALIAN"].includes(word)
-    );
+    const prefixWords = numberedTitle[1].replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/)
+      .filter((word) => word && !generic.has(word));
     const subjectWords = numberedTitle[3]
       .replace(/[^A-Z0-9]+/g, " ")
       .trim()
       .split(/\s+/)
-      .filter((word) => word && !generic.has(word) && !repeatedWords.has(word));
-    const conciseWords = [...yearWords, ...languageWords, numberedTitle[2], ...subjectWords];
+      .filter((word) => word && !generic.has(word));
+    const conciseWords = [...prefixWords, numberedTitle[2], ...subjectWords];
     const uniqueWords = conciseWords.filter((word, index) => conciseWords.indexOf(word) === index);
     if (uniqueWords.length >= 2) return uniqueWords.join(" ");
   }
@@ -1764,7 +1765,7 @@ function ebayCardKeywords(cardName) {
     .trim()
     .split(/\s+/)
     .filter((word) => {
-      if (!word || generic.has(word) || /^20\d{2}$/.test(word) || seen.has(word)) return false;
+      if (!word || generic.has(word) || seen.has(word)) return false;
       seen.add(word);
       return true;
     });
@@ -2491,6 +2492,7 @@ let pendingBackPhoto = "";
 let pendingPsaEstimate = 0;
 let pendingPsaEstimateUpdated = "";
 let pendingPsaSalesCount = 0;
+let pendingPsaIdentity = {};
 
 $("addBtn").addEventListener("click", async () => {
   const company = currentCompany();
@@ -2513,6 +2515,11 @@ $("addBtn").addEventListener("click", async () => {
                  psaEstimate:pendingPsaEstimate,
                  psaEstimateUpdated:pendingPsaEstimateUpdated,
                  psaSalesCount:pendingPsaSalesCount, sold:false,
+                 psaYear:pendingPsaIdentity.year || "",
+                 psaSubject:pendingPsaIdentity.subject || "",
+                 psaBrand:pendingPsaIdentity.brand || "",
+                 psaCardNumber:pendingPsaIdentity.cardNumber || "",
+                 psaSpecId:pendingPsaIdentity.specId || "",
                  soldPrice:"", soldDate:"", saleNotes:"", photo: pendingPhoto,
                  backPhoto:pendingBackPhoto,
                  added: new Date().toLocaleDateString(), _dirty:true,
@@ -2657,6 +2664,7 @@ function clearPsaEstimate() {
   pendingPsaEstimate = 0;
   pendingPsaEstimateUpdated = "";
   pendingPsaSalesCount = 0;
+  pendingPsaIdentity = {};
   $("psaEstimate").value = "";
 }
 
@@ -2687,6 +2695,11 @@ async function lookupPsaDetails() {
     updateParseCreditBadge(details.credits);
     if (details.card_title) $("cardName").value = details.card_title;
     $("ebaySearch").value = structuredEbayKeywords(details);
+    pendingPsaIdentity = {
+      year:String(details.year || ""), subject:String(details.subject || ""),
+      brand:String(details.brand || ""), cardNumber:String(details.card_number || ""),
+      specId:String(details.spec_id || "")
+    };
     const grade = gradeNumber(details.grade);
     if (grade) $("cardGrade").value = grade;
     else if (/AUTHENTIC/i.test(details.grade)) $("cardGrade").value = "AUTHENTIC";
@@ -3161,7 +3174,7 @@ init();
 </script>
 <script src="ebay-dashboard/slab-ledger-marketplace-usage.js?v=marketplace-usage-3"></script>
 <script src="ebay-dashboard/slab-ledger-collector-status.js?v=collector-status-1"></script>
-<script src="ebay-dashboard/slab-ledger-market.js?v=market-21"></script>
+<script src="ebay-dashboard/slab-ledger-market.js?v=market-22"></script>
 <script src="ebay-dashboard/slab-ledger-profile.js?v=profile-4"></script>
 <script src="ebay-dashboard/slab-ledger-portfolio.js?v=portfolio-2"></script>
 <script src="ebay-dashboard/business-ledger.js?v=business-ledger-14"></script>

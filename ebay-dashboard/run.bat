@@ -43,13 +43,13 @@ echo.
 echo Starting the Slab Ledger market bridge at http://localhost:8000 ...
 echo.
 echo Schedule:
-echo   - One unique inventory search every 12-20 minutes
-echo   - Each search cached for 22 hours
-echo   - Available throughout the day on the dedicated computer
-echo   - Three recent sold results retained per card
-echo   - Optional three lowest active listings for selected scarce cards
+echo   - One daily refresh cycle beginning at 2:00 AM local time
+echo   - One most-recent exact sold result sets the market value
+echo   - Up to three confirmed sales are retained as history
+echo   - Up to three lowest exact-match active listings are retained
+echo   - Ambiguous results wait for owner confirmation
 echo   - Actual evaluation/production mode is confirmed below from collector.env
-echo   - Maximum 72 requests per rolling 24 hours
+echo   - Maximum 150 requests per rolling 24 hours
 echo   - Automatic extended cooldown after a block response
 echo   - Normal-Chrome extension pauses for manual checks and resumes
 echo   - No stealth, CAPTCHA solving, proxy rotation, or challenge bypass
