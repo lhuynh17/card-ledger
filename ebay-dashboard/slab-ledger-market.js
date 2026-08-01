@@ -20,6 +20,46 @@
     return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
   };
 
+  function listingMatchesCard(card, item) {
+    const title = String(item?.title || "").toUpperCase().replace(/[^A-Z0-9.]+/g, " ");
+    const identity = `${card?.name || ""} ${card?.ebaySearch || ""}`.toUpperCase();
+    if (!title) return false;
+    const company = String(card?.company || "PSA").toUpperCase();
+    const grade = String(card?.grade || "").match(/\b(10|[1-9](?:\.5)?)\b/)?.[1] || "";
+    if (!new RegExp(`\\b${company}\\b`).test(title)) return false;
+    if (grade && !new RegExp(`\\b${grade.replace(".", "\\.")}\\b`).test(title)) return false;
+    const year = identity.match(/\b((?:19|20)\d{2})\b/)?.[1];
+    if (year && !new RegExp(`\\b${year}\\b`).test(title)) return false;
+    const language = ["JAPANESE","ENGLISH","KOREAN","CHINESE","FRENCH","GERMAN","SPANISH","ITALIAN"]
+      .find((word) => new RegExp(`\\b${word}\\b`).test(identity));
+    if (language && !new RegExp(`\\b${language}\\b`).test(title)) return false;
+    const titleNumbers = new Set((title.match(/\b\d+\b/g) || []).map((number) => String(Number(number))));
+    const fraction = identity.match(/#?\s*(\d{1,3})\s*\/\s*(\d{1,3})/);
+    if (fraction && (!titleNumbers.has(String(Number(fraction[1]))) ||
+        !titleNumbers.has(String(Number(fraction[2]))))) return false;
+    const primary = !fraction && identity.match(/#\s*0*(\d{1,3})\b/)?.[1];
+    if (primary && !titleNumbers.has(String(Number(primary)))) return false;
+    const firstEdition = /\b(?:1ST|FIRST)\s+(?:ED|EDITION)\b/.test(identity);
+    if (firstEdition && !/\b(?:1ST|FIRST)\s+(?:ED|EDITION)\b/.test(title)) return false;
+    if (/\bUNLIMITED\b/.test(identity) && !/\bUNLIMITED\b/.test(title)) return false;
+    return true;
+  }
+
+  function applyClientSafety(card, value) {
+    if (!value || value.clientSafetyChecked) return false;
+    value.clientSafetyChecked = true;
+    const sold = value.comparables || [];
+    value.identityMismatchCount = sold.filter((item) => !listingMatchesCard(card, item)).length;
+    if (value.autoStatus === "automatic" && value.marketValue && value.identityMismatchCount) {
+      value.suspectMarketValue = value.marketValue;
+      value.suggestedValue = value.marketValue;
+      value.marketValue = 0;
+      value.autoStatus = "provisional";
+      return true;
+    }
+    return false;
+  }
+
   function fromRecord(record) {
     const comparables = jsonArray(record.comparables);
     const history = jsonArray(record.history);
@@ -67,6 +107,9 @@
       for (const row of data?.items || []) {
         const value = fromRecord(row);
         if (!values.has(value.cardId)) values.set(value.cardId, value);
+      }
+      if (typeof inventory !== "undefined" && Array.isArray(inventory)) {
+        inventory.forEach((card) => applyClientSafety(card, values.get(idFor(card))));
       }
       render();
       window.dispatchEvent(new CustomEvent("slab-market-updated"));
@@ -125,13 +168,19 @@
   }
 
   function show(card, value = values.get(idFor(card))) {
+    applyClientSafety(card, value);
     const modal = document.getElementById("marketModal");
     modal.rememberMarketFocus?.();
     const desiredComps = Math.max(3, Math.min(
       5, Number(window.slabManagedMarketplace?.schedule?.active?.listing_count) || 3
     ));
-    const comps = value?.autoStatus === "provisional"
-      ? [] : (value?.comparables || []).slice(0, desiredComps);
+    const matchedSold = (value?.comparables || []).filter((item) => listingMatchesCard(card, item));
+    const matchedPending = (value?.pendingBestOffers || []).filter((item) => listingMatchesCard(card, item));
+    const matchedActive = (value?.activeListings || []).filter((item) => listingMatchesCard(card, item));
+    const hiddenEvidence = (value?.comparables || []).length - matchedSold.length
+      + (value?.pendingBestOffers || []).length - matchedPending.length
+      + (value?.activeListings || []).length - matchedActive.length;
+    const comps = value?.autoStatus === "provisional" ? [] : matchedSold.slice(0, desiredComps);
     const history = (value?.history || []).slice().reverse().slice(0, 8);
     const previousTrustedIndex = history.findIndex((item) => {
       const previous = Number(item?.value) || 0;
@@ -157,6 +206,7 @@
       <div class="market-summary"><div><small>Current saved market value</small><div class="market-price">${value?.marketValue ? cash(value.marketValue) : "Not set"}</div></div>
       <div class="market-status">${safe(state.text)}<br>${safe(value?.source || "No trusted value saved")}</div></div>
       ${value?.autoStatus === "provisional" ? `<div class="market-review-alert"><strong>Needs review${value.suggestedValue ? `: ${cash(value.suggestedValue)}` : ""}</strong><br>This result did not replace your saved value because its match, evidence, or price movement needs confirmation.</div>` : ""}
+      ${hiddenEvidence ? `<div class="market-review-alert"><strong>${hiddenEvidence} cached result${hiddenEvidence === 1 ? " was" : "s were"} hidden.</strong><br>${value?.suspectMarketValue ? `The ${cash(value.suspectMarketValue)} automatic value is also excluded from inventory totals. ` : ""}Those listings did not match this card's year, language, printed number, grader, grade, or edition.</div>` : ""}
       ${value?.dramaticChange ? `<div class="market-review-alert"><strong>This saved value is far from its previous value.</strong><br>It may have come from an incorrect match.${previousTrustedIndex >= 0 ? ` <button class="rollback-market-value" type="button" data-index="${previousTrustedIndex}">Restore previous ${cash(history[previousTrustedIndex].value)}</button>` : ""}</div>` : ""}
       <div class="market-page-message" id="marketPageMessage" role="status"></div>
       <div class="market-signals">
@@ -165,9 +215,9 @@
       <span class="market-signal${value?.volatility === "high" ? " warn" : ""}">Volatility ${safe(value?.volatility || "unknown")}</span>
       </div>
       <section class="market-section"><h3>Market evidence</h3><p class="market-section-intro">Sold results support valuation. Active listings are shown separately and never count as sales.</p>
-      <div class="market-subsection"><h4>Recent matched sales</h4><div class="market-evidence-list">${evidenceRows(value?.comparables || [], "sold") || "<p class='market-empty'>No reliable sold matches yet.</p>"}</div></div>
-      ${value?.pendingBestOffers?.length ? `<div class="market-subsection"><h4>Best Offers needing a price</h4><div class="market-evidence-list">${evidenceRows(value.pendingBestOffers, "pending")}</div><div class="market-research-actions"><a href="${safe(ebayResearchUrl(card))}" target="_blank" rel="noopener noreferrer">Verify in Product Research ↗</a></div></div>` : ""}
-      ${value?.activeListings?.length ? `<div class="market-subsection"><h4>Lowest active asking prices</h4><div class="market-evidence-list">${evidenceRows(value.activeListings, "active")}</div></div>` : ""}
+      <div class="market-subsection"><h4>Recent matched sales</h4><div class="market-evidence-list">${evidenceRows(matchedSold, "sold") || "<p class='market-empty'>No reliable sold matches yet.</p>"}</div></div>
+      ${matchedPending.length ? `<div class="market-subsection"><h4>Best Offers needing a price</h4><div class="market-evidence-list">${evidenceRows(matchedPending, "pending")}</div><div class="market-research-actions"><a href="${safe(ebayResearchUrl(card))}" target="_blank" rel="noopener noreferrer">Verify in Product Research ↗</a></div></div>` : ""}
+      ${matchedActive.length ? `<div class="market-subsection"><h4>Lowest active asking prices</h4><div class="market-evidence-list">${evidenceRows(matchedActive, "active")}</div></div>` : ""}
       <div class="market-research-actions"><a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open current eBay sold search ↗</a></div></section>
       ${card.remoteId ? `<details class="market-disclosure"><summary>Automatic check settings</summary><div class="market-disclosure-body"><p class="market-section-intro">Choose how often this card is checked. These settings do not change matching safeguards.</p>
       <div class="mf"><label>Sold-listing schedule</label><select id="cardSoldSchedule">
@@ -454,9 +504,11 @@
 
   function decorate() {
     const shown = visibleInventory();
+    let safetyChanged = false;
     [...document.querySelectorAll("#inventoryList > .slab:not(.editing)")].forEach((tile, index) => {
       const card = shown[index]; if (!card || card.sold) return;
       const value = values.get(idFor(card));
+      safetyChanged = applyClientSafety(card, value) || safetyChanged;
       const status = age(value);
       tile.dataset.marketCard = idFor(card);
       const main = tile.querySelector(".slab-main");
@@ -475,6 +527,10 @@
             !event.target.closest("button,a,input,select,textarea,.slab-thumb")) show(card);
       });
     });
+    if (safetyChanged) {
+      updateSummary();
+      window.renderPortfolioChart?.();
+    }
   }
 
   installUi(); window.openSlabMarket = show; window.refreshSlabMarketData = loadAll;

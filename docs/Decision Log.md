@@ -440,3 +440,22 @@ visible and understandable when a suspect value has already been saved.
 value. Existing large changes are labeled for review and, when history is
 available, expose a one-click restoration action. No provider, credential,
 network boundary, or fallback behavior changes.
+
+## 2026-07-31 — Prefer no valuation over an ambiguous identity
+
+**Decision:** Automatic sold-listing valuation uses the slab's current full
+identity rather than an older shortened search. When present, year, language,
+printed numerator and denominator, grader, grade, and edition are mandatory
+listing-title matches.
+
+Revalidate cached automatic evidence in the app before displaying it. If any
+cached comparable fails those identity checks, hide the mismatched evidence
+and exclude that automatic value from inventory and portfolio totals.
+
+**Why:** Broad eBay searches can return visually or textually similar cards
+whose prices are unrelated. A missing automatic value is safer and more honest
+than a precise-looking value based on a different card.
+
+**Consequence:** Scarce cards may show no automatic estimate until exact sold
+evidence appears. Manual values, Product Research, stored history, active
+listings, and provider fallbacks remain available and unchanged.
