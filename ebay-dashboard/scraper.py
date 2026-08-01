@@ -71,7 +71,7 @@ REPLICA_WORDS = {
     "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
     "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
 }
-VALUATION_ALGORITHM_VERSION = "local-ebay-v3"
+VALUATION_ALGORITHM_VERSION = "local-ebay-v4"
 LANGUAGE_WORDS = {
     "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
     "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
@@ -769,7 +769,7 @@ def card_keywords(name: str) -> str:
     words, seen = [], set()
     clean_name = normalized_card_name(name)
     for word in re.sub(r"[^A-Z0-9/]+", " ", clean_name.upper()).split():
-        if word in generic or re.fullmatch(r"20\d{2}", word) or word in seen:
+        if word in generic or word in seen:
             continue
         seen.add(word)
         words.append(word)
@@ -777,7 +777,7 @@ def card_keywords(name: str) -> str:
 
 
 def ebay_search_terms(card: dict) -> str:
-    """Build a concise query without losing price-critical edition markers."""
+    """Build a specific query that retains price-critical identity markers."""
     company = str(card.get("company") or "PSA").upper()
     grade = grade_number(str(card.get("grade") or ""))
     exact_grade = f'"{company} {grade}"' if grade else company
@@ -785,15 +785,11 @@ def ebay_search_terms(card: dict) -> str:
         exact_grade += ' "Black Label"'
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
-    keywords = str(card.get("ebay_search") or "").strip() or card_keywords(card.get("name", ""))
-    words = keywords.split()
-    concise = [
-        word for word in words
-        if word.upper() not in LANGUAGE_WORDS
-        and not re.fullmatch(r"(?:19|20)\d{2}", word)
-    ]
-    if len(concise) >= 2:
-        keywords = " ".join(concise)
+    generated = card_keywords(card.get("name", ""))
+    saved = str(card.get("ebay_search") or "").strip()
+    # Prefer the current slab identity. Older saved searches were intentionally
+    # shortened and can omit the year, language, set, or denominator.
+    keywords = generated or saved
     return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
 
 
@@ -939,10 +935,35 @@ def comparable(card: dict, listing: dict) -> bool:
     identity = " ".join([
         str(card.get("name") or ""), str(card.get("ebay_search") or "")
     ]).upper()
+    expected_year = re.search(r"\b((?:19|20)\d{2})\b", identity)
+    if expected_year and not re.search(
+        rf"\b{re.escape(expected_year.group(1))}\b", title
+    ):
+        return False
+    expected_language = next(
+        (word for word in LANGUAGE_WORDS if re.search(rf"\b{word}\b", identity)),
+        "",
+    )
+    if expected_language and not re.search(
+        rf"\b{re.escape(expected_language)}\b", title
+    ):
+        return False
+    fraction = re.search(r"#?\s*(\d{1,3})\s*/\s*(\d{1,3})", identity)
+    if fraction:
+        expected_numbers = {
+            fraction.group(1).lstrip("0") or "0",
+            fraction.group(2).lstrip("0") or "0",
+        }
+        title_numbers = {
+            token.lstrip("0") or "0"
+            for token in re.findall(r"\b\d+\b", title)
+        }
+        if not expected_numbers.issubset(title_numbers):
+            return False
     numbered = re.search(
         r"#\s*([A-Z0-9]+)(?:\s*/\s*([A-Z0-9]+))?", identity
     )
-    if numbered:
+    if numbered and not fraction:
         primary = numbered.group(1).lstrip("0") or "0"
         title_numbers = {
             token.lstrip("0") or "0"

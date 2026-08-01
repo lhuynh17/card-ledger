@@ -342,15 +342,33 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(len(result["recentComparables"]), 3)
         self.assertEqual(result["marketValue"], 110)
 
-    def test_query_drops_year_and_language_but_keeps_edition(self):
+    def test_query_keeps_year_language_number_and_edition(self):
         card = {
             "company":"PSA", "grade":"10",
-            "ebay_search":"2014 JAPANESE 090 GENGAR EX 1ST ED",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+            "ebay_search":"090 GENGAR EX 1ST ED",
         }
         query = scraper.ebay_search_terms(card)
-        self.assertNotIn("2014", query)
-        self.assertNotIn("JAPANESE", query)
-        self.assertIn("090 GENGAR EX 1ST ED", query)
+        self.assertIn("2014", query)
+        self.assertIn("JAPANESE", query)
+        self.assertIn("090/088", query)
+        self.assertIn("GENGAR EX 1ST ED", query)
+
+    def test_gengar_requires_year_language_and_full_card_number(self):
+        card = {
+            "company":"PSA", "grade":"10",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+        }
+        valid = {"title":"2014 Japanese Phantom Gate Gengar EX 090/088 PSA 10 1st Edition"}
+        self.assertTrue(scraper.comparable(card, valid))
+        for title in (
+            "2014 Japanese Phantom Gate Gengar EX 090/088 PSA 10 Unlimited",
+            "2014 Japanese Phantom Gate Gengar EX 090/087 PSA 10 1st Edition",
+            "2014 English Phantom Gate Gengar EX 090/088 PSA 10 1st Edition",
+            "2015 Japanese Phantom Gate Gengar EX 090/088 PSA 10 1st Edition",
+            "2014 Japanese Gengar EX 090 PSA 10 1st Edition",
+        ):
+            self.assertFalse(scraper.comparable(card, {"title":title}), title)
 
     def test_first_edition_and_unlimited_are_not_interchangeable(self):
         first = {
@@ -363,16 +381,16 @@ class SoldResultTests(unittest.TestCase):
         }
         base = {"id":"1", "total":100}
         self.assertTrue(scraper.comparable(
-            first, {**base, "title":"Gengar EX 090 PSA 10 1st Edition"}
+            first, {**base, "title":"2014 Gengar EX 090 PSA 10 1st Edition"}
         ))
         self.assertFalse(scraper.comparable(
-            first, {**base, "title":"Gengar EX 090 PSA 10 Unlimited"}
+            first, {**base, "title":"2014 Gengar EX 090 PSA 10 Unlimited"}
         ))
         self.assertFalse(scraper.comparable(
-            unlimited, {**base, "title":"Gengar EX 090 PSA 10 1st Edition"}
+            unlimited, {**base, "title":"2014 Gengar EX 090 PSA 10 1st Edition"}
         ))
         self.assertTrue(scraper.comparable(
-            unlimited, {**base, "title":"Gengar EX 090 PSA 10 Unlimited"}
+            unlimited, {**base, "title":"2014 Gengar EX 090 PSA 10 Unlimited"}
         ))
 
     def test_explicit_card_number_must_match(self):
@@ -381,7 +399,7 @@ class SoldResultTests(unittest.TestCase):
             "name":"2016 Pokemon Japanese XY Promo #279 Pikachu Festa",
         }
         self.assertTrue(scraper.comparable(card, {
-            "title":"2016 Pokemon XY Promo 279 Pikachu Festa PSA 10"
+            "title":"2016 Japanese Pokemon XY Promo 279 Pikachu Festa PSA 10"
         }))
         self.assertFalse(scraper.comparable(card, {
             "title":"2016 Pokemon XY Promo 224 Pikachu PSA 10"
@@ -465,7 +483,7 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["market_value"], 5000)
         self.assertEqual(payload["auto_status"], "automatic")
         self.assertEqual(payload["history"][-1]["value"], 5000)
-        self.assertEqual(payload["algorithm_version"], "local-ebay-v3")
+        self.assertEqual(payload["algorithm_version"], "local-ebay-v4")
 
     def test_low_confidence_is_provisional_and_keeps_trusted_value(self):
         result = {
