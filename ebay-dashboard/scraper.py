@@ -763,6 +763,31 @@ def grade_number(value: str) -> str:
     return match.group(1) if match else ""
 
 
+def title_has_exact_slab_grade(title: str, company: str, grade_value: str) -> bool:
+    """Require the grade attached to the grader, not elsewhere in the title."""
+    expected = grade_number(grade_value)
+    if not expected:
+        return True
+    normalized = re.sub(r"[^A-Z0-9.]+", " ", str(title or "").upper()).strip()
+    grader = re.escape(str(company or "PSA").upper())
+    grade_pattern = r"(10|[1-9](?:\.5)?)"
+    patterns = (
+        rf"\b{grader}\b\s*(?:GRADED\s*)?(?:GEM\s*(?:MINT|MT)\s*)?{grade_pattern}\b",
+        rf"\b{grade_pattern}\b\s*(?:GEM\s*(?:MINT|MT)\s*)?\b{grader}\b",
+    )
+    found = []
+    for pattern in patterns:
+        found.extend(match.group(1) for match in re.finditer(pattern, normalized))
+    if expected not in found:
+        return False
+    raw_grade = str(grade_value or "").upper()
+    if raw_grade == "BL10" and "BLACK LABEL" not in normalized:
+        return False
+    if raw_grade == "P10" and "PRISTINE" not in normalized:
+        return False
+    return True
+
+
 def normalized_card_name(name: str) -> str:
     """Convert slab-label punctuation into the wording sellers commonly use."""
     value = str(name or "").strip()
@@ -868,6 +893,11 @@ def ebay_search_terms(card: dict) -> str:
         exact_grade += ' "Black Label"'
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
+    wrong_grades = " ".join(
+        f'-"{company} {other}"'
+        for other in ("10", "9.5", "9", "8.5", "8", "7", "6", "5")
+        if other != grade
+    )
     edition = (
         "1st Edition" if identity["edition"] == "first_edition"
         else "Unlimited" if identity["edition"] == "unlimited" else ""
@@ -879,7 +909,9 @@ def ebay_search_terms(card: dict) -> str:
     keywords = " ".join(dict.fromkeys(
         str(part).strip() for part in parts if str(part).strip()
     )) or card_keywords(card.get("name", ""))
-    return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
+    return " ".join(filter(None, [
+        keywords, exact_grade, wrong_grades, "-raw", "-ungraded",
+    ]))
 
 
 def edition_identity(card: dict) -> str:
@@ -1032,8 +1064,9 @@ def comparable(card: dict, listing: dict) -> bool:
     if any(word in title for word in REPLICA_WORDS):
         return False
     company = str(card.get("company") or "PSA").upper()
-    grade = grade_number(str(card.get("grade") or ""))
-    if company not in title or (grade and not re.search(rf"\b{re.escape(grade)}\b", title)):
+    if company not in title or not title_has_exact_slab_grade(
+        title, company, str(card.get("grade") or "")
+    ):
         return False
     expected_edition = edition_identity(card)
     found_edition = listing_edition(title)
@@ -1055,6 +1088,23 @@ def comparable(card: dict, listing: dict) -> bool:
         return False
     if not title_has_card_number(title, profile["card_number"]):
         return False
+    subject_words = [
+        word for word in re.sub(
+            r"[^A-Z0-9]+", " ", profile["subject"].upper()
+        ).split()
+        if len(word) > 1 and word not in LANGUAGE_WORDS
+        and word not in {"POKEMON", "CARD", "CARDS", "HOLO", "HOLOFOIL"}
+    ]
+    if subject_words:
+        subject_hits = sum(
+            1 for word in subject_words
+            if re.search(rf"\b{re.escape(word)}\b", title)
+        )
+        if (
+            not re.search(rf"\b{re.escape(subject_words[0])}\b", title)
+            or subject_hits / len(subject_words) < 0.75
+        ):
+            return False
     meaningful = [
         word for word in re.sub(
             r"[^A-Z0-9]+", " ",
@@ -1098,8 +1148,9 @@ def listing_identity_assessment(card: dict, listing: dict) -> tuple[str, list[st
     if subject_words and not re.search(rf"\b{re.escape(subject_words[0])}\b", title):
         return "rejected", ["different_subject"]
     company = identity["company"]
-    grade = identity["grade"]
-    if company not in title or (grade and not re.search(rf"\b{re.escape(grade)}\b", title)):
+    if company not in title or not title_has_exact_slab_grade(
+        title, company, str(card.get("grade") or "")
+    ):
         return "rejected", ["different_grader_or_grade"]
     reasons = []
     title_years = set(re.findall(r"\b(?:19|20)\d{2}\b", title))

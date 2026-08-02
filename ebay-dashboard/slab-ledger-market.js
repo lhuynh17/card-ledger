@@ -27,7 +27,16 @@
     const company = String(card?.company || "PSA").toUpperCase();
     const grade = String(card?.grade || "").match(/\b(10|[1-9](?:\.5)?)\b/)?.[1] || "";
     if (!new RegExp(`\\b${company}\\b`).test(title)) return false;
-    if (grade && !new RegExp(`\\b${grade.replace(".", "\\.")}\\b`).test(title)) return false;
+    if (grade) {
+      const escapedGrade = grade.replace(".", "\\.");
+      const graderGrade = new RegExp(
+        `\\b${company}\\b\\s*(?:GRADED\\s*)?(?:GEM\\s*(?:MINT|MT)\\s*)?${escapedGrade}\\b`
+      );
+      const gradeGrader = new RegExp(
+        `\\b${escapedGrade}\\b\\s*(?:GEM\\s*(?:MINT|MT)\\s*)?\\b${company}\\b`
+      );
+      if (!graderGrade.test(title) && !gradeGrader.test(title)) return false;
+    }
     const year = identity.match(/\b((?:19|20)\d{2})\b/)?.[1];
     if (year && !new RegExp(`\\b${year}\\b`).test(title)) return false;
     const language = ["JAPANESE","ENGLISH","KOREAN","CHINESE","FRENCH","GERMAN","SPANISH","ITALIAN"]
