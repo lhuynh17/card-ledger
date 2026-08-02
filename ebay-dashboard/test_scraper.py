@@ -468,6 +468,23 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["comparables"], [])
         self.assertIn("rejected-sale", payload["rejected_listing_ids"])
 
+    def test_null_rejected_listing_field_is_treated_as_empty(self):
+        result = {
+            "cardId":"card-1", "confidence":"high", "marketValue":500,
+            "lastChecked":"2026-08-02T00:00:00Z",
+            "recentComparables":[{
+                "id":"new-sale", "total":500,
+                "soldAt":"2026-08-01T00:00:00Z",
+            }],
+        }
+        previous = {
+            "market_value":0, "comparables":[], "history":[],
+            "rejected_listing_ids":None,
+        }
+        payload = scraper.automatic_market_payload(result, previous, "owner-1")
+        self.assertEqual(payload["market_value"], 500)
+        self.assertEqual(payload["rejected_listing_ids"], [])
+
     def test_wrong_variant_in_same_set_is_not_an_exact_match(self):
         card = {
             "company":"PSA", "grade":"10", "psa_year":"2016",

@@ -646,9 +646,10 @@ def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
 
 def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dict:
     """Promote one exact latest sale and retain a three-sale rolling record."""
-    rejected_ids = {
-        str(item) for item in previous.get("rejected_listing_ids", []) if str(item)
-    }
+    raw_rejected_ids = previous.get("rejected_listing_ids")
+    if not isinstance(raw_rejected_ids, list):
+        raw_rejected_ids = []
+    rejected_ids = {str(item) for item in raw_rejected_ids if str(item)}
     new_sales = [
         sale for sale in result.get(
             "recentComparables", result.get("comparables", [])
