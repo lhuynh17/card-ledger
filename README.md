@@ -9,19 +9,18 @@ The app tracks:
   slab images, and optional recent-sales estimates through private PocketBase
   routes, with structured, editable eBay search keywords and a guided manual
   fallback;
-- one-tap PSA recent-sale comparables or manual market values from one to five
-  sales, including links, source, notes, update date, and value history;
+- a nightly local marketplace refresh that uses the newest exact sold match as
+  the current value, keeps three confirmed sales, and shows three exact active
+  asking prices; uncertain matches wait for owner confirmation;
 - a default-off Bright Data evaluation adapter behind authenticated PocketBase
   routes, with private usage controls, caching, normalized observations, and a
   Marketplace Usage dashboard; live collection remains disabled until the
   owner's account-specific eBay dataset and schema are validated;
-- separate default-off Apify sold-evidence and Bright Data active-listing
-  schedules at hour/day/week/month intervals, with live free-tier estimates,
-  per-card sold-schedule overrides, and no automatic value replacement;
-- an optional evaluation-only Windows collector paired to an unpacked
-  normal-Chrome extension; it can run a three-card all-day proof, pause for a
-  manual browser check, and retain up to three candidates locally without
-  replacing trusted values;
+- separate default-off managed-provider evaluation paths with usage estimates
+  and no automatic value replacement;
+- an optional Windows collector paired to an unpacked normal-Chrome extension;
+  it runs one paced nightly cycle, pauses for manual browser checks, and never
+  promotes an ambiguous card identity;
 - guarded local rollout with edition-aware matching, provisional
   low-confidence estimates, reversible automatic values, Best Offer
   verification, and owner-private collector alerts;

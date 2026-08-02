@@ -197,7 +197,29 @@ Still required before live record collection:
 - run metadata inspection, then one deliberately bounded live validation;
 - compare a representative card set against manual Product Research.
 
-## Automatic evaluation schedule — Current gated foundation
+## Nightly local collection — Current deployed path
+
+The trusted local collector starts one inventory refresh cycle at 2:00 AM by
+default. It spaces work across a bounded ten-hour window so the dedicated
+computer does not burst requests. For every unique card identity it performs:
+
+- one newest-first sold search;
+- one lowest-price active search;
+- strict local identity validation before either result is stored.
+
+The newest exact sold result becomes the current market value. A new listing ID
+is added to a rolling maximum of three confirmed sales and three value-history
+entries. The three lowest exact active listings are stored separately and never
+affect valuation. Empty results, failures, and rejected listings preserve the
+existing trusted value.
+
+If a result has the right subject, grader, and grade but omits a required PSA
+identity field, it is held as a review candidate. The owner can open the
+listing and explicitly confirm it. An explicit conflict in year, language,
+printed number, edition, grader, grade, or subject is rejected and cannot be
+confirmed through the normal review queue.
+
+## Managed-provider evaluation schedule — Gated foundation
 
 The owner can separately configure one or two Apify sold observations and
 three, four, or five Bright Data active observations in hours, days, weeks, or
@@ -270,15 +292,16 @@ Current automated valuation uses the most recent accepted comparables and stores
 supporting range and confidence. Parse.bot's sales estimate uses the median of
 up to three returned sales.
 
-The local collector uses the median of up to three newest verified sales.
-Identity confidence, evidence level, and volatility are separate. First
-Edition, Unlimited, language, set, variation, grader, and grade are not
-interchangeable. Unknown Best Offer prices remain visible but do not affect
-valuation until manually verified through Product Research.
+The local collector uses the single newest exact sold listing. Over subsequent
+nightly cycles it builds a rolling three-sale history; it does not need to find
+three sales during every search. First Edition, Unlimited, year, language, set,
+printed number, variation, grader, and grade are not interchangeable. Unknown
+Best Offer prices remain visible but do not affect valuation until manually
+verified through Product Research.
 
-After evaluation mode is deliberately disabled, medium/high-confidence local
-evidence may update the current value with rollback history. Low-confidence
-evidence remains a provisional suggestion.
+After evaluation mode is deliberately disabled, an exact local match may update
+the current value with rollback history. Missing identity data remains a
+provisional suggestion, and explicit identity conflicts are discarded.
 
 The normalized valuation record includes:
 

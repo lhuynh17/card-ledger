@@ -37,6 +37,7 @@ MARKET_FIELDS = [
     {"name": "comparables", "type": "json", "maxSize": 2000000},
     {"name": "pending_best_offers", "type": "json", "maxSize": 2000000},
     {"name": "active_listings", "type": "json", "maxSize": 2000000},
+    {"name": "review_candidates", "type": "json", "maxSize": 2000000},
     {"name": "algorithm_version", "type": "text", "max": 80},
     {"name": "source", "type": "text", "max": 200},
     {"name": "notes", "type": "text", "max": 10000},
@@ -62,6 +63,11 @@ BUSINESS_FIELDS = [
 
 CARD_EXTRA_FIELDS = [
     {"name": "ebay_search", "type": "text", "max": 1000},
+    {"name": "psa_year", "type": "text", "max": 20},
+    {"name": "psa_subject", "type": "text", "max": 500},
+    {"name": "psa_brand", "type": "text", "max": 500},
+    {"name": "psa_card_number", "type": "text", "max": 100},
+    {"name": "psa_spec_id", "type": "text", "max": 100},
     {"name": "photo_back", "type": "file", "maxSelect": 1,
      "maxSize": 10485760, "protected": True,
      "mimeTypes": ["image/jpeg", "image/png", "image/webp", "image/heic",

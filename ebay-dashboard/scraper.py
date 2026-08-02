@@ -57,11 +57,11 @@ BROWSER_COLLECTOR = None
 # Continuous mode makes at most one request in each interval. Identical slabs
 # share one query and cached valuation, so duplicates add no eBay traffic.
 PAGES_PER_SEARCH = 1
-MIN_WATCH_INTERVAL_MINUTES = 12
-MAX_WATCH_INTERVAL_MINUTES = 20
-REFRESH_AFTER_HOURS = 22
-EMPTY_RESULT_RETRY_HOURS = 1
-MAX_REQUESTS_PER_DAY = 72
+MIN_WATCH_INTERVAL_MINUTES = 2
+MAX_WATCH_INTERVAL_MINUTES = 4
+REFRESH_AFTER_HOURS = 23
+EMPTY_RESULT_RETRY_HOURS = 23
+MAX_REQUESTS_PER_DAY = 150
 BLOCK_COOLDOWN_HOURS = (3, 12, 24, 72)
 REQUEST_TIMEOUT_SECONDS = 25
 POCKETBASE_POLL_SECONDS = 60
@@ -71,7 +71,7 @@ REPLICA_WORDS = {
     "REPLICA", "REPRINT", "PROXY", "CUSTOM", "ORICA", "FACSIMILE",
     "COUNTERFEIT", "UNOFFICIAL", "METAL CARD",
 }
-VALUATION_ALGORITHM_VERSION = "local-ebay-v4"
+VALUATION_ALGORITHM_VERSION = "local-ebay-v5"
 LANGUAGE_WORDS = {
     "JAPANESE", "ENGLISH", "KOREAN", "CHINESE",
     "FRENCH", "GERMAN", "SPANISH", "ITALIAN",
@@ -182,16 +182,21 @@ def collector_config() -> dict:
     maximum_delay = environment_int(
         "SLAB_COLLECTOR_MAX_DELAY_MINUTES", MAX_WATCH_INTERVAL_MINUTES, 1, 1440
     )
+    daily_start = parse_clock(
+        os.getenv("SLAB_COLLECTOR_DAILY_RUN_TIME", "02:00"), (2, 0)
+    )
+    start_minutes = daily_start[0] * 60 + daily_start[1]
+    end_minutes = (start_minutes + 10 * 60) % (24 * 60)
     return {
-        "start": parse_clock(os.getenv("SLAB_COLLECTOR_START_TIME", "00:00"), (0, 0)),
-        "end": parse_clock(os.getenv("SLAB_COLLECTOR_END_TIME", "00:00"), (0, 0)),
+        "start": daily_start,
+        "end": (end_minutes // 60, end_minutes % 60),
         "minimum_delay_minutes": minimum_delay,
         "maximum_delay_minutes": max(minimum_delay, maximum_delay),
         "daily_ceiling": environment_int(
             "SLAB_COLLECTOR_DAILY_CEILING", MAX_REQUESTS_PER_DAY, 1, MAX_REQUESTS_PER_DAY
         ),
-        "result_limit": environment_int("SLAB_COLLECTOR_RESULT_LIMIT", 3, 1, 3),
-        "proof_limit": environment_int("SLAB_COLLECTOR_PROOF_LIMIT", 3, 0, 500),
+        "result_limit": 1,
+        "proof_limit": environment_int("SLAB_COLLECTOR_PROOF_LIMIT", 0, 0, 500),
         "evaluation_only": environment_bool("SLAB_COLLECTOR_EVALUATION_ONLY", True),
         "captcha_wait_minutes": environment_int(
             "SLAB_COLLECTOR_CAPTCHA_WAIT_MINUTES", 720, 5, 720
@@ -513,10 +518,15 @@ class PocketBaseClient:
                 "cert": str(record.get("cert") or ""),
                 "name": str(record.get("name") or ""),
                 "ebay_search": str(record.get("ebay_search") or ""),
+                "psa_year": str(record.get("psa_year") or ""),
+                "psa_subject": str(record.get("psa_subject") or ""),
+                "psa_brand": str(record.get("psa_brand") or ""),
+                "psa_card_number": str(record.get("psa_card_number") or ""),
+                "psa_spec_id": str(record.get("psa_spec_id") or ""),
                 "grade": str(record.get("grade") or ""),
                 "cost": number(record.get("cost")),
                 "photo": "",
-                "active_listing_count": active_overrides.get(str(record["id"]), 0),
+                "active_listing_count": active_overrides.get(str(record["id"]), 3),
             })
         return cards
 
@@ -617,6 +627,8 @@ def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
             or not (
                 result.get("recentComparables")
                 or result.get("pendingBestOffers")
+                or result.get("reviewCandidates")
+                or result.get("activeListings")
             )
         ):
             continue
@@ -633,7 +645,7 @@ def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
 
 
 def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dict:
-    """Build a reversible automatic update without promoting weak evidence."""
+    """Promote one exact latest sale and retain a three-sale rolling record."""
     confidence = str(result.get("confidence") or "low")
     suggested = number(result.get("marketValue"))
     previous_value = number(previous.get("market_value"))
@@ -650,15 +662,38 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
     market_value = suggested if promote else previous_value
     history = previous.get("history") if isinstance(previous.get("history"), list) else []
     checked = pocketbase_date(result.get("lastChecked", ""))
-    if promote and (not history or number(history[-1].get("value")) != market_value):
+    new_sales = result.get("recentComparables", result.get("comparables", []))[:1]
+    old_sales = previous.get("comparables") if isinstance(previous.get("comparables"), list) else []
+    sales_by_id = {}
+    for sale in [*new_sales, *old_sales]:
+        key = str(sale.get("id") or sale.get("url") or "")
+        if key and key not in sales_by_id:
+            sales_by_id[key] = sale
+    rolling_sales = sorted(
+        sales_by_id.values(), key=lambda sale: str(sale.get("soldAt") or ""),
+        reverse=True,
+    )[:3]
+    newest_id = str(new_sales[0].get("id") or new_sales[0].get("url") or "") if new_sales else ""
+    prior_ids = {
+        str(sale.get("id") or sale.get("url") or "") for sale in old_sales
+    }
+    if promote and newest_id and newest_id not in prior_ids:
         history = [*history, {
-            "date": checked,
+            "date": new_sales[0].get("soldAt") or checked,
             "value": market_value,
-            "source": "Local eBay collector",
+            "source": "Confirmed exact eBay sale",
+            "listingId": newest_id,
+            "title": new_sales[0].get("title", ""),
+            "url": new_sales[0].get("url", ""),
             "confidence": confidence,
-            "volatility": result.get("volatility", "unknown"),
             "algorithmVersion": VALUATION_ALGORITHM_VERSION,
-        }][-100:]
+        }][-3:]
+    review_candidates = result.get("reviewCandidates", [])[:3]
+    if dramatic_change and new_sales:
+        review_candidates = [{
+            **new_sales[0],
+            "reviewReasons": ["price_change_requires_confirmation"],
+        }, *review_candidates][:3]
     return {
             "owner": owner_id,
             "card_id": str(result["cardId"]),
@@ -675,9 +710,10 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "rejected_count": int(result.get("rejectedCount", 0)),
             "low": number(result.get("low")),
             "high": number(result.get("high")),
-            "comparables": result.get("recentComparables", result.get("comparables", []))[:3],
+            "comparables": rolling_sales if promote else old_sales[:3],
             "pending_best_offers": result.get("pendingBestOffers", [])[:3],
             "active_listings": result.get("activeListings", [])[:3],
+            "review_candidates": review_candidates,
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
             "source": "Local eBay collector" if promote else previous.get("source", ""),
             "notes": previous.get("notes", ""),
@@ -776,20 +812,73 @@ def card_keywords(name: str) -> str:
     return " ".join(words) if len(words) >= 2 else str(name or "").strip()
 
 
+def identity_profile(card: dict) -> dict:
+    """Normalize stable PSA identity fields used for search and validation."""
+    name = str(card.get("name") or "")
+    combined = " ".join(filter(None, [
+        name, str(card.get("ebay_search") or ""),
+        str(card.get("psa_brand") or ""),
+    ])).upper()
+    year = str(card.get("psa_year") or "").strip()
+    if not re.fullmatch(r"(?:19|20)\d{2}", year):
+        year = (re.search(r"\b((?:19|20)\d{2})\b", combined) or ["", ""])[1]
+    language = next(
+        (word for word in LANGUAGE_WORDS if re.search(rf"\b{word}\b", combined)),
+        "",
+    )
+    card_number = str(card.get("psa_card_number") or "").strip().lstrip("#")
+    if not card_number:
+        match = re.search(r"#\s*([A-Z0-9]+(?:\s*/\s*[A-Z0-9]+)?)", combined)
+        card_number = re.sub(r"\s+", "", match.group(1)) if match else ""
+    subject = normalized_card_name(str(card.get("psa_subject") or "")).upper()
+    if not subject:
+        after_number = re.search(r"#\s*[A-Z0-9]+(?:\s*/\s*[A-Z0-9]+)?\s+(.+)", name.upper())
+        subject = after_number.group(1) if after_number else card_keywords(name)
+        subject = re.sub(
+            r"\b(?:1ST|FIRST)\s+(?:ED|EDITION)\b|\bUNLIMITED\b", " ", subject
+        )
+        subject = re.sub(r"[^A-Z0-9]+", " ", subject).strip()
+    brand_words = [
+        word for word in re.sub(
+            r"[^A-Z0-9]+", " ", str(card.get("psa_brand") or "").upper()
+        ).split()
+        if word not in LANGUAGE_WORDS
+        and word not in {"POKEMON", "CARD", "CARDS", year}
+    ]
+    return {
+        "year": year,
+        "language": language,
+        "subject": subject,
+        "card_number": card_number,
+        "brand_terms": " ".join(dict.fromkeys(brand_words)),
+        "edition": edition_identity(card),
+        "company": str(card.get("company") or "PSA").upper(),
+        "grade": grade_number(str(card.get("grade") or "")),
+        "spec_id": str(card.get("psa_spec_id") or ""),
+    }
+
+
 def ebay_search_terms(card: dict) -> str:
     """Build a specific query that retains price-critical identity markers."""
-    company = str(card.get("company") or "PSA").upper()
-    grade = grade_number(str(card.get("grade") or ""))
+    identity = identity_profile(card)
+    company = identity["company"]
+    grade = identity["grade"]
     exact_grade = f'"{company} {grade}"' if grade else company
     if card.get("grade") == "BL10":
         exact_grade += ' "Black Label"'
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
-    generated = card_keywords(card.get("name", ""))
-    saved = str(card.get("ebay_search") or "").strip()
-    # Prefer the current slab identity. Older saved searches were intentionally
-    # shortened and can omit the year, language, set, or denominator.
-    keywords = generated or saved
+    edition = (
+        "1st Edition" if identity["edition"] == "first_edition"
+        else "Unlimited" if identity["edition"] == "unlimited" else ""
+    )
+    parts = [
+        identity["year"], identity["language"], identity["brand_terms"],
+        identity["subject"], identity["card_number"], edition,
+    ]
+    keywords = " ".join(dict.fromkeys(
+        str(part).strip() for part in parts if str(part).strip()
+    )) or card_keywords(card.get("name", ""))
     return " ".join(filter(None, [keywords, exact_grade, "-raw", "-ungraded"]))
 
 
@@ -812,6 +901,26 @@ def listing_edition(title: str) -> str:
     if re.search(r"\bUNLIMITED\b", identity):
         return "unlimited"
     return "unknown"
+
+
+def title_has_card_number(title: str, card_number: str) -> bool:
+    """Require the PSA printed number without confusing it with year/grade."""
+    expected = str(card_number or "").strip().upper().lstrip("#")
+    if not expected:
+        return True
+    normalized_title = re.sub(r"[^A-Z0-9]+", " ", str(title or "").upper())
+    parts = [part for part in re.split(r"[^A-Z0-9]+", expected) if part]
+    if not parts:
+        return True
+    patterns = []
+    for part in parts:
+        if part.isdigit():
+            # Sellers vary between 090 and 90, so leading zeroes are optional.
+            number = part.lstrip("0") or "0"
+            patterns.append(rf"0*{re.escape(number)}")
+        else:
+            patterns.append(re.escape(part))
+    return bool(re.search(r"\b" + r"\s*".join(patterns) + r"\b", normalized_title))
 
 
 def fetch_page(session: requests.Session, search: str, page: int,
@@ -932,51 +1041,32 @@ def comparable(card: dict, listing: dict) -> bool:
         return False
     if expected_edition == "unlimited" and found_edition != "unlimited":
         return False
+    profile = identity_profile(card)
     identity = " ".join([
         str(card.get("name") or ""), str(card.get("ebay_search") or "")
     ]).upper()
-    expected_year = re.search(r"\b((?:19|20)\d{2})\b", identity)
-    if expected_year and not re.search(
-        rf"\b{re.escape(expected_year.group(1))}\b", title
+    if profile["year"] and not re.search(
+        rf"\b{re.escape(profile['year'])}\b", title
     ):
         return False
-    expected_language = next(
-        (word for word in LANGUAGE_WORDS if re.search(rf"\b{word}\b", identity)),
-        "",
-    )
-    if expected_language and not re.search(
-        rf"\b{re.escape(expected_language)}\b", title
+    if profile["language"] and not re.search(
+        rf"\b{re.escape(profile['language'])}\b", title
     ):
         return False
-    fraction = re.search(r"#?\s*(\d{1,3})\s*/\s*(\d{1,3})", identity)
-    if fraction:
-        expected_numbers = {
-            fraction.group(1).lstrip("0") or "0",
-            fraction.group(2).lstrip("0") or "0",
-        }
-        title_numbers = {
-            token.lstrip("0") or "0"
-            for token in re.findall(r"\b\d+\b", title)
-        }
-        if not expected_numbers.issubset(title_numbers):
-            return False
-    numbered = re.search(
-        r"#\s*([A-Z0-9]+)(?:\s*/\s*([A-Z0-9]+))?", identity
-    )
-    if numbered and not fraction:
-        primary = numbered.group(1).lstrip("0") or "0"
-        title_numbers = {
-            token.lstrip("0") or "0"
-            for token in re.findall(r"\b\d+\b", title)
-        }
-        if primary not in title_numbers:
-            return False
+    if not title_has_card_number(title, profile["card_number"]):
+        return False
     meaningful = [
-        word for word in card_keywords(card.get("name", "")).split()
+        word for word in re.sub(
+            r"[^A-Z0-9]+", " ",
+            f"{profile['subject']} {profile['brand_terms']}".upper(),
+        ).split()
         if len(word) > 1
         and word not in LANGUAGE_WORDS
         and not re.fullmatch(r"(?:19|20)\d{2}", word)
-        and word not in {"1ST", "FIRST", "ED", "EDITION", "UNLIMITED"}
+        and word not in {
+            "POKEMON", "CARD", "CARDS", "1ST", "FIRST", "ED",
+            "EDITION", "UNLIMITED",
+        }
     ]
     if not meaningful:
         return True
@@ -990,6 +1080,71 @@ def comparable(card: dict, listing: dict) -> bool:
         re.search(rf"\b{re.escape(meaningful[0])}\b", title)
     )
     return first_matches and hits / len(meaningful) >= 0.65
+
+
+def listing_identity_assessment(card: dict, listing: dict) -> tuple[str, list[str]]:
+    """Classify a candidate as exact, reviewable, or rejected."""
+    if comparable(card, listing):
+        return "exact", []
+    raw_title = str(listing.get("title") or "").upper()
+    title = re.sub(r"[^A-Z0-9.]+", " ", raw_title)
+    if not title or any(word in title for word in REPLICA_WORDS):
+        return "rejected", ["replica_or_missing_title"]
+    identity = identity_profile(card)
+    subject_words = [
+        word for word in re.sub(r"[^A-Z0-9]+", " ", identity["subject"]).split()
+        if len(word) > 1 and word not in {"EX", "GX", "V", "VMAX", "VSTAR"}
+    ]
+    if subject_words and not re.search(rf"\b{re.escape(subject_words[0])}\b", title):
+        return "rejected", ["different_subject"]
+    company = identity["company"]
+    grade = identity["grade"]
+    if company not in title or (grade and not re.search(rf"\b{re.escape(grade)}\b", title)):
+        return "rejected", ["different_grader_or_grade"]
+    reasons = []
+    title_years = set(re.findall(r"\b(?:19|20)\d{2}\b", title))
+    if identity["year"] and identity["year"] not in title_years:
+        if title_years:
+            return "rejected", ["different_year"]
+        reasons.append("year_missing")
+    title_languages = {
+        word for word in LANGUAGE_WORDS if re.search(rf"\b{word}\b", title)
+    }
+    if identity["language"] and identity["language"] not in title_languages:
+        if title_languages:
+            return "rejected", ["different_language"]
+        reasons.append("language_missing")
+    if identity["card_number"] and not title_has_card_number(
+        title, identity["card_number"]
+    ):
+        title_has_fraction = bool(re.search(
+            r"\b[A-Z0-9]+\s*/\s*[A-Z0-9]+\b", raw_title
+        ))
+        title_has_explicit_number = bool(re.search(
+            r"#\s*[A-Z0-9]+", raw_title
+        ))
+        if title_has_fraction or title_has_explicit_number:
+            return "rejected", ["different_printed_number"]
+        reasons.append("printed_number_missing")
+    found_edition = listing_edition(title)
+    if identity["edition"] == "first_edition" and found_edition != "first_edition":
+        if found_edition == "unlimited":
+            return "rejected", ["different_edition"]
+        reasons.append("first_edition_missing")
+    if identity["edition"] == "unlimited" and found_edition != "unlimited":
+        if found_edition == "first_edition":
+            return "rejected", ["different_edition"]
+        reasons.append("unlimited_missing")
+    if not reasons:
+        reasons.append("title_identity_incomplete")
+    subject_hits = sum(
+        1 for word in subject_words
+        if re.search(rf"\b{re.escape(word)}\b", title)
+    )
+    candidate = "review" if (
+        not subject_words or subject_hits / len(subject_words) >= 0.6
+    ) else "rejected"
+    return candidate, reasons
 
 
 def lowest_active_comparables(card: dict, listings: list[dict],
@@ -1023,34 +1178,29 @@ def valuation(card: dict, search: str, raw: list[dict], error: str = "",
         item for item in matched
         if not item.get("priceVerificationRequired") and item.get("total", 0) > 0
     ], key=lambda item: item.get("soldAt", ""), reverse=True)
-    recent_results = verified[:max(1, min(3, result_limit))]
+    recent_results = verified[:1]
+    review_candidates = []
+    for item in raw:
+        status, reasons = listing_identity_assessment(card, item)
+        if status == "review" and item.get("soldAt"):
+            review_candidates.append({**item, "reviewReasons": reasons})
+    review_candidates.sort(key=lambda item: item.get("soldAt", ""), reverse=True)
+    review_candidates = review_candidates[:3]
     values = sorted(item["total"] for item in recent_results if item["total"] > 0)
-    estimate = round(statistics.median(values), 2) if values else 0
-    confidence = (
-        "high" if len(values) >= 3
-        else "medium" if len(values) == 2
-        else "low"
-    )
+    estimate = round(values[0], 2) if values else 0
+    confidence = "high" if values else "low"
     volatility = "unknown"
-    if len(values) >= 2 and estimate:
-        spread_ratio = (values[-1] - values[0]) / estimate
-        volatility = (
-            "high" if spread_ratio > 0.5
-            else "moderate" if spread_ratio > 0.2
-            else "stable"
-        )
     return {
         "cardId": card["id"], "query": search,
         "searchUrl": f"{SEARCH_URL}?{urlencode({'_nkw': search, 'LH_Sold': 1, 'LH_Complete': 1, '_sop': 13})}",
-        "marketValue": estimate, "lastThreeAverage": (
-            round(sum(values) / len(values), 2) if values else 0
-        ), "medianValue": estimate,
+        "marketValue": estimate, "latestSaleValue": estimate,
         "confidence": confidence,
         "identityConfidence": confidence, "volatility": volatility,
         "edition": edition_identity(card),
         "comparableCount": len(verified),
         "pendingVerificationCount": len(pending_offers),
         "pendingBestOffers": pending_offers,
+        "reviewCandidates": review_candidates,
         "rejectedCount": len(raw) - len(matched),
         "low": values[0] if values else 0, "high": values[-1] if values else 0,
         "comparables": recent_results, "recentComparables": recent_results,
@@ -1217,7 +1367,11 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
                 card, search, unique,
                 result_limit=collector_config()["result_limit"],
             )
-            if result.get("recentComparables") or result.get("pendingBestOffers"):
+            if (
+                result.get("recentComparables")
+                or result.get("pendingBestOffers")
+                or result.get("reviewCandidates")
+            ):
                 old_active = previous.get(str(card["id"]), {}).get(
                     "activeListings", []
                 )
@@ -1246,12 +1400,11 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
             })
     else:
         for card in cards:
-            old = previous.get(str(card["id"]))
-            if not old:
-                continue
+            old = previous.get(str(card["id"])) or valuation(card, search, [])
             old["activeListings"] = lowest_active_comparables(
                 card, unique, int(card.get("active_listing_count") or 0)
             )
+            old["lastChecked"] = datetime.now(timezone.utc).isoformat()
             updated.append(old)
 
     if updated:
@@ -1289,6 +1442,8 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
             if not (
                 result.get("recentComparables")
                 or result.get("pendingBestOffers")
+                or result.get("reviewCandidates")
+                or result.get("activeListings")
             ):
                 continue
             try:
@@ -1310,6 +1465,18 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
             "A Best Offer price needs verification in Product Research.",
             card_id=str(cards[0]["id"]) if cards else "",
             action_required=True,
+        )
+    elif any(result.get("reviewCandidates") for result in updated):
+        report_cloud_status(
+            "attention",
+            "A possible sale needs card-identity confirmation.",
+            card_id=str(cards[0]["id"]) if cards else "",
+            action_required=True,
+        )
+    elif any(result.get("activeListings") for result in updated):
+        report_cloud_status(
+            "ready", "Active asking prices were updated; no exact sale was found.",
+            card_id=str(cards[0]["id"]) if cards else "",
         )
     else:
         report_cloud_status(

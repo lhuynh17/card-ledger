@@ -137,9 +137,12 @@ company, while the PocketBase record ID remains the storage identity.
 - normalized query and search URL;
 - market value, confidence, checked time, low/high range;
 - accepted and rejected counts;
-- up to five recent comparables for the primary UI;
+- the latest exact sold match as the current value;
+- a rolling maximum of three confirmed sold listings and three exact active
+  asking prices;
+- bounded review candidates that never affect value without owner confirmation;
 - source and notes;
-- append-style value history;
+- bounded value history;
 - last safe error.
 
 Manual values and provider-derived values share the same normalized record so
@@ -152,8 +155,10 @@ collections store daily/monthly usage, bounded recent activity, short-lived
 search cache entries, and normalized observations. A scheduled server task
 removes expired cache, activity, and observation records.
 
-`marketplace_refresh_settings` stores separate default-off owner schedules for
-one-to-two sold observations and three-to-five active observations.
+`marketplace_refresh_settings` remains available for managed-provider
+evaluation. The deployed local collector instead runs one owner-configured
+nightly cycle, starting at 2:00 AM by default. Each card receives one sold
+lookup and one active-listing lookup, paced across the cycle.
 `marketplace_refresh_state` stores per-card due time and the last safe outcome.
 A PocketBase cron checks for due work every 15 minutes, processes only a bounded
 number of active cards, and advances each processed card independently. It
@@ -163,10 +168,10 @@ market value.
 `marketplace_collector_status` stores an owner-private heartbeat and safe
 attention state for offline, cooldown, CAPTCHA/sign-in, and collector errors.
 
-The expanded policy separates one-to-two Apify sold observations from
-three-to-five Bright Data active asking prices. Per-card overrides can inherit
-the owner default, turn a role off, or set a custom interval. Projections
-include inherited cards and overrides before the schedule is saved.
+The local browser collector keeps provider transport replaceable. It promotes
+only a listing whose title matches the structured PSA identity, preserves the
+previous trusted value after empty or failed searches, and sends incomplete but
+plausible identity matches to owner review.
 
 ### Portfolio history
 
