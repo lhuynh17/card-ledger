@@ -21,6 +21,7 @@
   };
 
   function listingMatchesCard(card, item) {
+    if (item?.ownerConfirmed) return true;
     const title = String(item?.title || "").toUpperCase().replace(/[^A-Z0-9.]+/g, " ");
     const identity = `${card?.name || ""} ${card?.ebaySearch || ""}`.toUpperCase();
     if (!title) return false;
@@ -86,6 +87,7 @@
       pendingBestOffers:jsonArray(record.pending_best_offers),
       activeListings:jsonArray(record.active_listings),
       reviewCandidates:jsonArray(record.review_candidates),
+      rejectedListingIds:jsonArray(record.rejected_listing_ids),
       history, searchUrl:record.search_url || "",
       confidence:record.confidence || "low",
       identityConfidence:record.identity_confidence || record.confidence || "low",
@@ -151,6 +153,8 @@
       .market-actions{grid-column:1/-1;display:flex;justify-content:flex-end}.market-message{grid-column:1/-1;min-height:17px;color:#52675a;font-size:12px}.market-message.error{color:#8a332a}.market-message.ok{color:#24633d}.market-history{margin-top:20px;padding-top:16px;border-top:1px solid #e3e8e4}.market-history h3{font-size:14px}.history-row{display:grid;grid-template-columns:105px 100px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #edf0ed;font-size:12px}
       .market-evidence-list{display:grid;gap:8px}.market-evidence-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:11px;border:1px solid #e1e7e2;border-radius:10px;background:#fafbfa}.market-evidence-row strong,.market-evidence-row span{display:block}.market-evidence-row strong{overflow-wrap:anywhere}.market-evidence-row small{color:#617067}.market-evidence-row a{color:#17663e;font-weight:750;text-decoration:none}.market-evidence-row.attention{border-color:#e8c96e;background:#fffaf0}.market-evidence-row button,.history-row button{margin-top:5px;padding:6px 8px;border:1px solid #d5ddd7;border-radius:7px;background:#fff;color:#17462f;font-weight:750;cursor:pointer}.market-empty{margin:0;color:#617067;font-size:12px}.market-preview{grid-column:1/-1;padding:10px 12px;border-radius:9px;background:#eaf2ed;color:#17462f;font-size:13px;font-weight:800}
       .market-candidate-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.market-candidate-actions a,.market-candidate-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;margin:0!important;padding:6px 9px!important}
+      .market-panel{background:var(--surface);color:var(--text);color-scheme:normal}.market-head,.market-footer{border-color:var(--line);background:var(--surface)}.market-body{background:var(--bg)}.market-head h2{color:var(--text)}.market-kicker{color:var(--muted)}.market-close,.market-back{border-color:var(--line);background:var(--surface-2);color:var(--text)}
+      .market-simple-value{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.market-simple-value span{color:var(--muted);font-size:12px;font-weight:700}.market-simple-value strong{color:var(--text);font-size:24px}.market-simple-actions{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:14px}.market-simple-actions a{display:inline-flex;align-items:center;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--accent-readable);font-weight:750;text-decoration:none}.market-simple-section{margin-bottom:14px;padding:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface)}.market-simple-section h3{margin:0;color:var(--text);font-size:16px}.market-simple-section>p{margin:5px 0 13px;color:var(--muted);font-size:12px;line-height:1.45}.market-simple-list{display:grid;gap:9px}.market-simple-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}.market-simple-row.needs-review{border-color:#c5982e}.market-simple-row strong,.market-simple-row small{display:block}.market-simple-row strong{color:var(--text);overflow-wrap:anywhere}.market-simple-row small{margin-top:4px;color:var(--muted)}.market-simple-price{color:var(--text);font-size:18px;font-weight:850;text-align:right}.market-simple-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;margin-top:7px}.market-simple-row-actions a,.market-simple-row-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--accent-readable);font-weight:750;text-decoration:none;cursor:pointer}.market-simple-row-actions .use-sale{border-color:var(--accent);background:var(--accent);color:#fff}.market-simple-row-actions .reject-sale{color:var(--muted)}.market-simple-note{margin:0;color:var(--muted);font-size:12px}
       @media(max-width:620px){.market-modal{padding:0}.market-panel{width:100%;max-height:100vh;height:100%;border-radius:0}.market-head{padding:12px 14px}.market-head h2{font-size:17px}.market-body{padding:12px}.market-footer{padding:10px 14px}.market-back{width:100%}.market-section{padding:14px}.manual-comps{grid-template-columns:1fr}.mf.full{grid-column:1}.comp-row{grid-template-columns:1fr}.market-summary{display:block}.market-status{text-align:left;margin-top:8px}.history-row{grid-template-columns:88px 82px 1fr}.market-evidence-row{grid-template-columns:1fr}.market-evidence-row>div:last-child{display:flex;align-items:center;justify-content:space-between;gap:10px}}
     `;
     document.head.appendChild(style);
@@ -261,7 +265,8 @@
         try {
           const checked = new Date().toISOString();
           const key = String(candidate.id || candidate.url || checked);
-          const sales = [candidate, ...(value.comparables || [])].filter(
+          const confirmedCandidate = {...candidate, ownerConfirmed:true};
+          const sales = [confirmedCandidate, ...(value.comparables || [])].filter(
             (sale, index, all) => all.findIndex((other) =>
               String(other.id || other.url) === String(sale.id || sale.url)
             ) === index
@@ -278,7 +283,10 @@
               market_value:confirmedValue, suggested_value:confirmedValue,
               source:"Owner-confirmed eBay sale", checked_at:checked,
               auto_status:"manual", confidence:"high", identity_confidence:"high",
-              comparables:sales, review_candidates:remaining, history
+              comparables:sales, review_candidates:remaining,
+              rejected_listing_ids:(value.rejectedListingIds || []).filter(
+                (id) => String(id) !== String(candidate.id || candidate.url)
+              ), history
             })
           });
           const confirmed = fromRecord(row);
@@ -382,6 +390,131 @@
     });
   }
 
+  function showSimple(card, value = values.get(idFor(card))) {
+    applyClientSafety(card, value);
+    const modal = document.getElementById("marketModal");
+    modal.rememberMarketFocus?.();
+    const query = ebaySearchTerms(card);
+    const soldUrl = "https://www.ebay.com/sch/i.html?" + new URLSearchParams({
+      _nkw:query, LH_Sold:"1", LH_Complete:"1", LH_TitleDesc:"1", _ipg:"240", _sop:"13"
+    });
+    const confirmed = (value?.comparables || [])
+      .filter((item) => listingMatchesCard(card, item))
+      .map((item) => ({...item, review:false}));
+    const uncertain = (value?.reviewCandidates || [])
+      .slice(0, 3).map((item, index) => ({...item, review:true, reviewIndex:index}));
+    const soldItems = [...confirmed, ...uncertain]
+      .sort((a, b) => String(b.soldAt || "").localeCompare(String(a.soldAt || "")))
+      .slice(0, 3);
+    const active = (value?.activeListings || [])
+      .filter((item) => listingMatchesCard(card, item))
+      .sort((a, b) => Number(a.total || a.price) - Number(b.total || b.price))
+      .slice(0, 3);
+    const soldRows = soldItems.map((item) => {
+      const price = Number(item.total || item.price) || 0;
+      const reason = item.review
+        ? "Needs your review—the title does not prove the exact grader, grade, or variant."
+        : `Confirmed match · Sold ${safe(shortDate(item.soldAt) || "date unavailable")}`;
+      return `<article class="market-simple-row${item.review ? " needs-review" : ""}"><div><strong>${safe(item.title || "eBay sold listing")}</strong><small>${reason}</small></div><div><div class="market-simple-price">${price ? cash(price) : "Price unknown"}</div><div class="market-simple-row-actions">${item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">View listing ↗</a>` : ""}${item.review && price ? `<button class="use-sale" type="button" data-index="${item.reviewIndex}">Use this sale</button><button class="reject-sale" type="button" data-index="${item.reviewIndex}">Reject</button>` : ""}</div></div></article>`;
+    }).join("");
+    const activeRows = active.map((item) => `<article class="market-simple-row"><div><strong>${safe(item.title || "eBay active listing")}</strong><small>Active asking price—not a completed sale</small></div><div><div class="market-simple-price">${cash(item.total || item.price)}</div><div class="market-simple-row-actions">${item.url ? `<a href="${safe(item.url)}" target="_blank" rel="noopener noreferrer">View listing ↗</a>` : ""}</div></div></article>`).join("");
+    document.getElementById("marketModalTitle").textContent = card.name || "Market details";
+    document.getElementById("marketModalBody").innerHTML = `
+      <div class="market-simple-value"><span>Current market value</span><strong>${value?.marketValue ? cash(value.marketValue) : "Not set"}</strong></div>
+      <nav class="market-simple-actions"><a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open eBay sold listings ↗</a><a href="${safe(ebayResearchUrl(card))}" target="_blank" rel="noopener noreferrer">Open Product Research ↗</a></nav>
+      <div class="market-page-message" id="marketPageMessage" role="status"></div>
+      <section class="market-simple-section"><h3>Most recent eBay sold listings</h3><p>Exact matches update automatically. Uncertain matches wait for your Use or Reject decision.</p><div class="market-simple-list">${soldRows || '<p class="market-simple-note">No matching sold listing has been saved yet.</p>'}</div></section>
+      <section class="market-simple-section"><h3>Lowest-priced active listings</h3><p>Up to three matching asking prices, ordered from lowest to highest.</p><div class="market-simple-list">${activeRows || '<p class="market-simple-note">No matching active listing has been saved yet.</p>'}</div></section>`;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    modal.querySelector(".market-close")?.focus();
+
+    const setMessage = (kind, text) => {
+      const message = document.getElementById("marketPageMessage");
+      if (!message) return;
+      message.className = `market-page-message ${kind}`;
+      message.textContent = text;
+    };
+    document.querySelectorAll(".use-sale").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const candidate = value?.reviewCandidates?.[Number(button.dataset.index)];
+        const confirmedValue = Number(candidate?.total || candidate?.price) || 0;
+        if (!candidate || !confirmedValue || !value?.recordId) return;
+        button.disabled = true;
+        try {
+          const checked = new Date().toISOString();
+          const confirmedCandidate = {...candidate, ownerConfirmed:true};
+          const sales = [confirmedCandidate, ...(value.comparables || [])].filter(
+            (sale, index, all) => all.findIndex((other) =>
+              String(other.id || other.url) === String(sale.id || sale.url)
+            ) === index
+          ).sort((a, b) => String(b.soldAt || "").localeCompare(String(a.soldAt || ""))).slice(0, 3);
+          const history = [...(value.history || []), {
+            date:candidate.soldAt || checked, value:confirmedValue,
+            source:"Owner-confirmed eBay sale", listingId:String(candidate.id || candidate.url || checked),
+            title:candidate.title || "", url:candidate.url || ""
+          }].slice(-3);
+          const remaining = (value.reviewCandidates || []).filter(
+            (_, index) => index !== Number(button.dataset.index)
+          );
+          const row = await pbRequest(`/api/collections/market_values/records/${value.recordId}`, {
+            method:"PATCH", headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              market_value:confirmedValue, suggested_value:confirmedValue,
+              source:"Owner-confirmed eBay sale", checked_at:checked,
+              auto_status:"manual", confidence:"high", identity_confidence:"high",
+              comparables:sales, review_candidates:remaining,
+              rejected_listing_ids:(value.rejectedListingIds || []).filter(
+                (id) => String(id) !== String(candidate.id || candidate.url)
+              ), history
+            })
+          });
+          const next = fromRecord(row);
+          values.set(next.cardId, next);
+          render();
+          window.dispatchEvent(new CustomEvent("slab-market-updated"));
+          showSimple(card, next);
+        } catch (error) {
+          button.disabled = false;
+          setMessage("error", error.message || "The sale could not be confirmed.");
+        }
+      });
+    });
+    document.querySelectorAll(".reject-sale").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!value?.recordId) return;
+        button.disabled = true;
+        try {
+          const remaining = (value.reviewCandidates || []).filter(
+            (_, index) => index !== Number(button.dataset.index)
+          );
+          const rejectedId = String(
+            value.reviewCandidates?.[Number(button.dataset.index)]?.id ||
+            value.reviewCandidates?.[Number(button.dataset.index)]?.url || ""
+          );
+          const rejected = [...new Set([
+            ...(value.rejectedListingIds || []), rejectedId
+          ].filter(Boolean))].slice(-100);
+          const row = await pbRequest(`/api/collections/market_values/records/${value.recordId}`, {
+            method:"PATCH", headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              review_candidates:remaining,
+              rejected_listing_ids:rejected,
+              suggested_value:Number(remaining[0]?.total || remaining[0]?.price) || 0
+            })
+          });
+          const next = fromRecord(row);
+          values.set(next.cardId, next);
+          render();
+          showSimple(card, next);
+        } catch (error) {
+          button.disabled = false;
+          setMessage("error", error.message || "The listing could not be rejected.");
+        }
+      });
+    });
+  }
+
   async function save(card, previous) {
     if (!cloudSession?.token || !card.remoteId) throw new Error("Sign in and sync this card first.");
     const prices = [...document.querySelectorAll(".comp-price")].map((input) => Number(input.value));
@@ -449,8 +582,7 @@
         main.insertBefore(badge, main.querySelector(".slab-actions"));
       }
       tile.addEventListener("click", (event) => {
-        if (!tile.closest(".grid-view") &&
-            !event.target.closest("button,a,input,select,textarea,.slab-thumb")) show(card);
+        if (!event.target.closest("button,a,input,select,textarea,.slab-thumb")) showSimple(card);
       });
     });
     if (safetyChanged) {
@@ -459,7 +591,7 @@
     }
   }
 
-  installUi(); window.openSlabMarket = show; window.refreshSlabMarketData = loadAll;
+  installUi(); window.openSlabMarket = showSimple; window.refreshSlabMarketData = loadAll;
   const baseRender = render;
   render = function () { baseRender(); decorate(); };
   window.addEventListener("focus", loadAll);

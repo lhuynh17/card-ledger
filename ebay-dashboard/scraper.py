@@ -646,8 +646,17 @@ def sync_cached_valuations_to_cloud(client: PocketBaseClient) -> int:
 
 def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dict:
     """Promote one exact latest sale and retain a three-sale rolling record."""
+    rejected_ids = {
+        str(item) for item in previous.get("rejected_listing_ids", []) if str(item)
+    }
+    new_sales = [
+        sale for sale in result.get(
+            "recentComparables", result.get("comparables", [])
+        )[:1]
+        if str(sale.get("id") or sale.get("url") or "") not in rejected_ids
+    ]
     confidence = str(result.get("confidence") or "low")
-    suggested = number(result.get("marketValue"))
+    suggested = number(result.get("marketValue")) if new_sales else 0
     previous_value = number(previous.get("market_value"))
     dramatic_change = bool(
         previous_value > 0
@@ -662,7 +671,6 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
     market_value = suggested if promote else previous_value
     history = previous.get("history") if isinstance(previous.get("history"), list) else []
     checked = pocketbase_date(result.get("lastChecked", ""))
-    new_sales = result.get("recentComparables", result.get("comparables", []))[:1]
     old_sales = previous.get("comparables") if isinstance(previous.get("comparables"), list) else []
     sales_by_id = {}
     for sale in [*new_sales, *old_sales]:
@@ -688,7 +696,10 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "confidence": confidence,
             "algorithmVersion": VALUATION_ALGORITHM_VERSION,
         }][-3:]
-    review_candidates = result.get("reviewCandidates", [])[:3]
+    review_candidates = [
+        item for item in result.get("reviewCandidates", [])
+        if str(item.get("id") or item.get("url") or "") not in rejected_ids
+    ][:3]
     if dramatic_change and new_sales:
         review_candidates = [{
             **new_sales[0],
@@ -714,6 +725,7 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "pending_best_offers": result.get("pendingBestOffers", [])[:3],
             "active_listings": result.get("activeListings", [])[:3],
             "review_candidates": review_candidates,
+            "rejected_listing_ids": list(rejected_ids)[-100:],
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
             "source": "Local eBay collector" if promote else previous.get("source", ""),
             "notes": previous.get("notes", ""),
@@ -786,6 +798,21 @@ def title_has_exact_slab_grade(title: str, company: str, grade_value: str) -> bo
     if raw_grade == "P10" and "PRISTINE" not in normalized:
         return False
     return True
+
+
+def title_slab_grades(title: str, company: str) -> list[str]:
+    """Return grades explicitly attached to a grading company in a title."""
+    normalized = re.sub(r"[^A-Z0-9.]+", " ", str(title or "").upper()).strip()
+    grader = re.escape(str(company or "PSA").upper())
+    grade_pattern = r"(10|[1-9](?:\.5)?)"
+    patterns = (
+        rf"\b{grader}\b\s*(?:GRADED\s*)?(?:GEM\s*(?:MINT|MT)\s*)?{grade_pattern}\b",
+        rf"\b{grade_pattern}\b\s*(?:GEM\s*(?:MINT|MT)\s*)?\b{grader}\b",
+    )
+    found = []
+    for pattern in patterns:
+        found.extend(match.group(1) for match in re.finditer(pattern, normalized))
+    return list(dict.fromkeys(found))
 
 
 def normalized_card_name(name: str) -> str:
@@ -895,7 +922,10 @@ def ebay_search_terms(card: dict) -> str:
         exact_grade += " Pristine"
     wrong_grades = " ".join(
         f'-"{company} {other}"'
-        for other in ("10", "9.5", "9", "8.5", "8", "7", "6", "5")
+        for other in (
+            "10", "9.5", "9", "8.5", "8", "7", "6", "5",
+            "4", "3", "2", "1",
+        )
         if other != grade
     )
     edition = (
@@ -1148,11 +1178,15 @@ def listing_identity_assessment(card: dict, listing: dict) -> tuple[str, list[st
     if subject_words and not re.search(rf"\b{re.escape(subject_words[0])}\b", title):
         return "rejected", ["different_subject"]
     company = identity["company"]
-    if company not in title or not title_has_exact_slab_grade(
-        title, company, str(card.get("grade") or "")
-    ):
+    expected_grade = identity["grade"]
+    explicit_grades = title_slab_grades(title, company)
+    if explicit_grades and expected_grade not in explicit_grades:
         return "rejected", ["different_grader_or_grade"]
     reasons = []
+    if not title_has_exact_slab_grade(
+        title, company, str(card.get("grade") or "")
+    ):
+        reasons.append("grader_or_grade_missing")
     title_years = set(re.findall(r"\b(?:19|20)\d{2}\b", title))
     if identity["year"] and identity["year"] not in title_years:
         if title_years:
