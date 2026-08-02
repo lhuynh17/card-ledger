@@ -38,6 +38,7 @@ MARKET_FIELDS = [
     {"name": "pending_best_offers", "type": "json", "maxSize": 2000000},
     {"name": "active_listings", "type": "json", "maxSize": 2000000},
     {"name": "review_candidates", "type": "json", "maxSize": 2000000},
+    {"name": "rejected_listing_ids", "type": "json", "maxSize": 200000},
     {"name": "algorithm_version", "type": "text", "max": 80},
     {"name": "source", "type": "text", "max": 200},
     {"name": "notes", "type": "text", "max": 10000},

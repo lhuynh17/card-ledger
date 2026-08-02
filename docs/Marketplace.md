@@ -213,11 +213,13 @@ entries. The three lowest exact active listings are stored separately and never
 affect valuation. Empty results, failures, and rejected listings preserve the
 existing trusted value.
 
-If a result has the right subject, grader, and grade but omits a required PSA
-identity field, it is held as a review candidate. The owner can open the
-listing and explicitly confirm it. An explicit conflict in year, language,
-printed number, edition, grader, grade, or subject is rejected and cannot be
-confirmed through the normal review queue.
+If a plausible result omits the grader, grade, or another required PSA identity
+field, up to three newest candidates are held for review. The owner can open
+each listing and explicitly use or reject it. An explicit conflict in year,
+language, printed number, edition, grader, grade, or subject is rejected and
+cannot be confirmed through the normal review queue. The card detail screen is
+limited to two evidence sections—recent sold listings and the three lowest
+matching active listings—plus direct eBay and Product Research links.
 
 ## Managed-provider evaluation schedule — Gated foundation
 

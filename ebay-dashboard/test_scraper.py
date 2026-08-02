@@ -404,6 +404,70 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(status, "rejected")
         self.assertIn("different_grader_or_grade", reasons)
 
+    def test_matching_card_with_grade_omitted_is_reviewable(self):
+        card = {
+            "company":"PSA", "grade":"10", "psa_year":"2006",
+            "psa_subject":"Rayquaza Holo", "psa_brand":"Pokemon EX Holon Phantoms",
+            "psa_card_number":"16", "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        status, reasons = scraper.listing_identity_assessment(card, {
+            "title":"2006 Pokemon EX Holon Phantoms #16 Rayquaza Holo"
+        })
+        self.assertEqual(status, "review")
+        self.assertIn("grader_or_grade_missing", reasons)
+
+    def test_explicit_wrong_grade_is_rejected_even_for_the_right_card(self):
+        card = {
+            "company":"PSA", "grade":"10", "psa_year":"2006",
+            "psa_subject":"Rayquaza Holo", "psa_brand":"Pokemon EX Holon Phantoms",
+            "psa_card_number":"16", "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        status, reasons = scraper.listing_identity_assessment(card, {
+            "title":"2006 EX Holon Phantoms #16 Rayquaza Holo PSA 1"
+        })
+        self.assertEqual(status, "rejected")
+        self.assertIn("different_grader_or_grade", reasons)
+
+    def test_uncertain_newest_sale_keeps_three_review_choices(self):
+        card = {
+            "id":"rayquaza", "company":"PSA", "grade":"10",
+            "psa_year":"2006", "psa_subject":"Rayquaza Holo",
+            "psa_brand":"Pokemon EX Holon Phantoms", "psa_card_number":"16",
+            "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        listings = [{
+            "id":str(index),
+            "title":"2006 Pokemon EX Holon Phantoms #16 Rayquaza Holo",
+            "total":200 + index,
+            "soldAt":f"2026-07-{30-index:02d}T00:00:00Z",
+        } for index in range(4)]
+        result = scraper.valuation(card, scraper.ebay_search_terms(card), listings)
+        self.assertEqual(result["marketValue"], 0)
+        self.assertEqual(len(result["reviewCandidates"]), 3)
+        self.assertTrue(all(
+            "grader_or_grade_missing" in item["reviewReasons"]
+            for item in result["reviewCandidates"]
+        ))
+
+    def test_owner_rejected_listing_cannot_be_promoted_again(self):
+        result = {
+            "cardId":"card-1", "confidence":"high", "marketValue":244.50,
+            "lastChecked":"2026-08-02T00:00:00Z",
+            "recentComparables":[{
+                "id":"rejected-sale", "total":244.50,
+                "soldAt":"2026-08-01T00:00:00Z",
+            }],
+        }
+        previous = {
+            "market_value":5000, "comparables":[], "history":[],
+            "rejected_listing_ids":["rejected-sale"],
+        }
+        payload = scraper.automatic_market_payload(result, previous, "owner-1")
+        self.assertEqual(payload["market_value"], 5000)
+        self.assertEqual(payload["suggested_value"], 0)
+        self.assertEqual(payload["comparables"], [])
+        self.assertIn("rejected-sale", payload["rejected_listing_ids"])
+
     def test_wrong_variant_in_same_set_is_not_an_exact_match(self):
         card = {
             "company":"PSA", "grade":"10", "psa_year":"2016",
