@@ -385,6 +385,38 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("090/088", query)
         self.assertIn("GENGAR EX", query)
         self.assertIn("1st Edition", query)
+        self.assertIn('-"PSA 9"', query)
+
+    def test_grade_must_be_attached_to_the_grading_company(self):
+        card = {
+            "company":"PSA", "grade":"10",
+            "name":"2023 Pokemon #010 Charizard",
+        }
+        self.assertTrue(scraper.comparable(card, {
+            "title":"2023 Pokemon Charizard 010 PSA 10 GEM MINT"
+        }))
+        self.assertFalse(scraper.comparable(card, {
+            "title":"2023 Pokemon Charizard 010 PSA 9 MINT"
+        }))
+        status, reasons = scraper.listing_identity_assessment(card, {
+            "title":"2023 Pokemon Charizard 010 PSA 9 MINT"
+        })
+        self.assertEqual(status, "rejected")
+        self.assertIn("different_grader_or_grade", reasons)
+
+    def test_wrong_variant_in_same_set_is_not_an_exact_match(self):
+        card = {
+            "company":"PSA", "grade":"10", "psa_year":"2016",
+            "psa_subject":"Pikachu 20th Anniversary Festa",
+            "psa_brand":"Pokemon Japanese XY Promo",
+            "name":"2016 Pokemon Japanese XY Promo Pikachu Festa",
+        }
+        self.assertTrue(scraper.comparable(card, {
+            "title":"2016 Japanese XY Promo Pikachu 20th Anniversary Festa PSA 10"
+        }))
+        self.assertFalse(scraper.comparable(card, {
+            "title":"2016 Japanese XY Promo Pikachu Battle Festa PSA 10"
+        }))
 
     def test_query_prefers_structured_psa_identity_fields(self):
         card = {
