@@ -1571,6 +1571,32 @@ def next_due_group(payload: dict) -> Optional[list[dict]]:
     return min(due, key=lambda item: item[0], default=(None, None))[1]
 
 
+def prepare_one_time_refresh(payload: dict) -> int:
+    """Make current inventory due locally without deleting trusted evidence."""
+    active_ids = {
+        str(card.get("id") or "") for card in payload.get("inventory", [])
+        if str(card.get("id") or "")
+    }
+    searches = {
+        ebay_search_terms(cards[0]).casefold()
+        for cards in query_groups(payload).values() if cards
+    }
+    for valuation in payload.get("valuations", []):
+        if str(valuation.get("cardId") or "") in active_ids:
+            valuation["lastChecked"] = ""
+    collector = payload.setdefault("collector", {})
+    collector["extensionJobs"] = [
+        job for job in collector.get("extensionJobs", [])
+        if not (
+            str(job.get("role") or "sold") == "sold"
+            and str(job.get("status") or "") == "complete"
+            and str(job.get("search") or "").casefold() in searches
+        )
+    ]
+    write_data(payload)
+    return len(searches)
+
+
 def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -> bool:
     """Make one request and apply its valuation to all identical slabs."""
     latest_active_ids = {str(card["id"]) for card in read_data().get("inventory", [])}
@@ -1700,7 +1726,7 @@ def scrape_due_once(session: requests.Session) -> bool:
     return refresh_group(session, payload, cards)
 
 
-def watch() -> None:
+def watch(force_cycle: bool = False) -> None:
     """Refresh one due slab at a time inside the configured local window."""
     session = requests.Session()
     session.headers.update(headers())
@@ -1717,6 +1743,12 @@ def watch() -> None:
             "Chrome extension pairing code: "
             f"{extension_pairing_key()}\n"
             "Enter this code only in the Slab Ledger Collector extension."
+        )
+    if force_cycle:
+        forced_count = prepare_one_time_refresh(read_data())
+        print(
+            f"One-time refresh requested for {forced_count} unique inventory "
+            "search(es). The normal nightly schedule will resume afterward."
         )
     completed_in_window = 0
     active_window_date = None
@@ -1740,7 +1772,10 @@ def watch() -> None:
             active_window_date = local_now.date()
             completed_in_window = 0
 
-        if not within_collection_window(local_now, config["start"], config["end"]):
+        if (
+            not force_cycle
+            and not within_collection_window(local_now, config["start"], config["end"])
+        ):
             resume = next_window_start(local_now, config["start"])
             delay = max(60, (resume - local_now).total_seconds())
             print(f"Quiet hours; collection resumes at {resume.strftime('%I:%M %p')}.")
@@ -1802,6 +1837,12 @@ def watch() -> None:
                             config["maximum_delay_minutes"] * 60,
                         )
             else:
+                if force_cycle:
+                    force_cycle = False
+                    print(
+                        "One-time inventory refresh is complete. Returning to "
+                        "the normal 2:00 AM schedule."
+                    )
                 delay = 30 * 60
                 print("All unique slab searches are current; checking again in 30 minutes.")
         print(f"Next check in {delay / 60:.0f} minutes.")
@@ -2050,6 +2091,10 @@ if __name__ == "__main__":
     parser.add_argument("--serve-only", action="store_true")
     parser.add_argument("--refresh-only", action="store_true")
     parser.add_argument("--watch", action="store_true", help="pace one slab at a time throughout the day")
+    parser.add_argument(
+        "--refresh-all-now", action="store_true",
+        help="run every current inventory search once, then resume the nightly schedule",
+    )
     parser.add_argument("--test-cloud", action="store_true", help="test PocketBase login and inventory access, then exit")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -2079,9 +2124,11 @@ if __name__ == "__main__":
         print(f"Cloud test passed. Found {len(read_data().get('inventory', []))} active inventory cards.")
         raise SystemExit(0)
     if args.watch and args.refresh_only:
-        watch()
+        watch(force_cycle=args.refresh_all_now)
     elif args.watch:
-        threading.Thread(target=watch, daemon=True).start()
+        threading.Thread(
+            target=watch, kwargs={"force_cycle":args.refresh_all_now}, daemon=True
+        ).start()
     elif not args.serve_only:
         one_session = requests.Session()
         one_session.headers.update(headers())

@@ -5,6 +5,12 @@ paced daily refresh cycle at 2:00 AM local time. The most recent exact-match
 sale becomes the market value. Up to three confirmed sales and the three lowest
 exact-match active listings remain visible for context.
 
+To populate a new or small inventory immediately, stop the normal collector
+and double-click `refresh-inventory-now.bat`. It runs every current unique
+inventory search once at the normal safe pace, preserves existing values when
+evidence is uncertain or unavailable, and then returns to the regular 2:00 AM
+schedule.
+
 ## First-time Windows setup
 
 1. Pull the latest `card-ledger` changes in GitHub Desktop.

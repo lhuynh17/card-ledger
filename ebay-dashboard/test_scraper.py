@@ -13,6 +13,36 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_one_time_refresh_preserves_evidence_and_clears_freshness(self):
+        payload = {
+            "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
+            "valuations":[{
+                "cardId":"card-1", "lastChecked":"2026-08-01T00:00:00Z",
+                "marketValue":3000, "recentComparables":[{"id":"sale-1"}],
+            }],
+            "collector":{"extensionJobs":[
+                {
+                    "role":"sold", "status":"complete",
+                    "search":"Pikachu PSA 10 -raw -ungraded",
+                },
+                {"role":"active", "status":"pending", "search":"other"},
+            ]},
+        }
+        with patch.object(scraper, "write_data") as write_data, \
+                patch.object(
+                    scraper, "ebay_search_terms",
+                    return_value="Pikachu PSA 10 -raw -ungraded",
+                ):
+            count = scraper.prepare_one_time_refresh(payload)
+        self.assertEqual(count, 1)
+        self.assertEqual(payload["valuations"][0]["lastChecked"], "")
+        self.assertEqual(payload["valuations"][0]["marketValue"], 3000)
+        self.assertEqual(
+            payload["valuations"][0]["recentComparables"], [{"id":"sale-1"}]
+        )
+        self.assertEqual(len(payload["collector"]["extensionJobs"]), 1)
+        write_data.assert_called_once_with(payload)
+
     def test_optional_status_failure_never_stops_collection(self):
         client = MagicMock()
         client.report_collector_status.side_effect = TypeError("bad status")
