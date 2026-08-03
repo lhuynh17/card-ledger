@@ -385,7 +385,8 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("090/088", query)
         self.assertIn("GENGAR EX", query)
         self.assertIn("1st Edition", query)
-        self.assertIn('-"PSA 9"', query)
+        self.assertIn("PSA 10", query)
+        self.assertNotIn('"PSA 10"', query)
 
     def test_grade_must_be_attached_to_the_grading_company(self):
         card = {
@@ -510,9 +511,44 @@ class SoldResultTests(unittest.TestCase):
         query = scraper.ebay_search_terms(card)
         for required in (
             "2014", "JAPANESE", "XY PHANTOM GATE", "GENGAR EX",
-            "090/088", '"PSA 10"', "-raw", "-ungraded",
+            "090/088", "PSA 10", "-raw", "-ungraded",
         ):
             self.assertIn(required, query)
+
+    def test_rayquaza_search_is_unquoted_and_real_sale_is_reviewable(self):
+        card = {
+            "id":"rayquaza", "company":"PSA", "grade":"10",
+            "psa_year":"2006", "psa_subject":"Rayquaza Holo",
+            "psa_brand":"Pokemon EX Holon Phantoms", "psa_card_number":"16",
+            "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        query = scraper.ebay_search_terms(card)
+        self.assertIn("2006 EX HOLON PHANTOMS 16 RAYQUAZA", query)
+        self.assertIn("PSA 10", query)
+        self.assertNotIn('"PSA 10"', query)
+
+        real_sale = {
+            "id":"real", "title":"Pokemon Card - PSA 10 Rayquaza 16/110 - Ex Holon",
+            "total":10786.40, "soldAt":"2026-07-19T00:00:00Z",
+        }
+        wrong_card = {
+            "id":"wrong", "title":"Rayquaza PSA 10 2005 Pokemon EX Deoxys #22",
+            "total":1050, "soldAt":"2026-07-30T00:00:00Z",
+        }
+        status, reasons = scraper.listing_identity_assessment(card, real_sale)
+        self.assertEqual(status, "review")
+        self.assertIn("year_missing", reasons)
+        wrong_status, wrong_reasons = scraper.listing_identity_assessment(
+            card, wrong_card
+        )
+        self.assertEqual(wrong_status, "rejected")
+        self.assertTrue(
+            {"different_year", "different_printed_number"} & set(wrong_reasons)
+        )
+
+        result = scraper.valuation(card, query, [wrong_card, real_sale])
+        self.assertEqual(result["marketValue"], 0)
+        self.assertEqual([item["id"] for item in result["reviewCandidates"]], ["real"])
 
     def test_gengar_requires_year_language_and_full_card_number(self):
         card = {
