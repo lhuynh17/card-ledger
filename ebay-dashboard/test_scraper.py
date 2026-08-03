@@ -27,6 +27,10 @@ class CollectorConfigurationTests(unittest.TestCase):
                 },
                 {"role":"active", "status":"pending", "search":"other"},
             ]},
+            "extensionJobs":[{
+                "role":"sold", "status":"running",
+                "search":'Pikachu "PSA 10" -"PSA 9"',
+            }],
         }
         with patch.object(scraper, "write_data") as write_data, \
                 patch.object(
@@ -40,7 +44,8 @@ class CollectorConfigurationTests(unittest.TestCase):
         self.assertEqual(
             payload["valuations"][0]["recentComparables"], [{"id":"sale-1"}]
         )
-        self.assertEqual(len(payload["collector"]["extensionJobs"]), 1)
+        self.assertEqual(payload["collector"]["extensionJobs"], [])
+        self.assertEqual(payload["extensionJobs"], [])
         write_data.assert_called_once_with(payload)
 
     def test_optional_status_failure_never_stops_collection(self):
@@ -529,6 +534,33 @@ class SoldResultTests(unittest.TestCase):
             "090/088", "PSA 10", "-raw", "-ungraded",
         ):
             self.assertIn(required, query)
+
+    def test_psa_label_shorthand_is_removed_from_search_subject(self):
+        pikachu = {
+            "company":"PSA", "grade":"10", "psa_year":"2019",
+            "psa_subject":"FA/PIKACHU LMTD.COLL.MASTER BTL.SET",
+            "psa_brand":"Pokemon Japanese SM Promo", "psa_card_number":"400",
+            "name":"2019 Pokemon Japanese SM Promo #400 Pikachu",
+        }
+        gengar = {
+            "company":"PSA", "grade":"10", "psa_year":"2014",
+            "psa_subject":"Gengar EX",
+            "psa_brand":"Pokemon Japanese XY Phantom Gate",
+            "psa_card_number":"090/088",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+        }
+        pikachu_query = scraper.ebay_search_terms(pikachu)
+        gengar_query = scraper.ebay_search_terms(gengar)
+        self.assertIn(
+            "2019 JAPANESE SM PROMO 400 PIKACHU PSA 10", pikachu_query
+        )
+        for noise in (" FA ", " LMTD ", " COLL ", " MASTER ", " BTL "):
+            self.assertNotIn(noise, f" {pikachu_query} ")
+        self.assertIn(
+            "2014 JAPANESE XY PHANTOM GATE 090/088 GENGAR EX "
+            "1st Edition PSA 10",
+            gengar_query,
+        )
 
     def test_rayquaza_search_is_unquoted_and_real_sale_is_reviewable(self):
         card = {

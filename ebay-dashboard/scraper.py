@@ -931,9 +931,19 @@ def ebay_search_terms(card: dict) -> str:
         "1st Edition" if identity["edition"] == "first_edition"
         else "Unlimited" if identity["edition"] == "unlimited" else ""
     )
+    subject_noise = {
+        "FA", "FULL", "ART", "HOLO", "HOLOFOIL", "LMTD", "LIMITED",
+        "COLL", "COLLECTION", "MASTER", "BTL", "BATTLE", "SET",
+    }
+    subject = " ".join(
+        word for word in re.sub(
+            r"[^A-Z0-9]+", " ", identity["subject"]
+        ).split()
+        if word not in subject_noise
+    ) or identity["subject"]
     parts = [
         identity["year"], identity["language"], identity["brand_terms"],
-        identity["card_number"], identity["subject"], edition,
+        identity["card_number"], subject, edition,
     ]
     keywords = " ".join(dict.fromkeys(
         str(part).strip() for part in parts if str(part).strip()
@@ -1682,15 +1692,12 @@ def prepare_one_time_refresh(payload: dict) -> int:
     for valuation in payload.get("valuations", []):
         if str(valuation.get("cardId") or "") in active_ids:
             valuation["lastChecked"] = ""
+    # A forced refresh must never resume a job built by an older query format.
+    # The extension reads the top-level queue; older releases also wrote a
+    # nested copy, so clear both while preserving all trusted valuations.
+    payload["extensionJobs"] = []
     collector = payload.setdefault("collector", {})
-    collector["extensionJobs"] = [
-        job for job in collector.get("extensionJobs", [])
-        if not (
-            str(job.get("role") or "sold") == "sold"
-            and str(job.get("status") or "") == "complete"
-            and str(job.get("search") or "").casefold() in searches
-        )
-    ]
+    collector["extensionJobs"] = []
     write_data(payload)
     return len(searches)
 
