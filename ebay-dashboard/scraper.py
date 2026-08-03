@@ -941,9 +941,14 @@ def ebay_search_terms(card: dict) -> str:
         ).split()
         if word not in subject_noise
     ) or identity["subject"]
+    # Quote only a distinctive short subject (for example "GENGAR EX").
+    # Quoting the full label, set, or grade hides legitimate seller-title
+    # variations, while leaving every identity word loose creates noise.
+    subject_words = subject.split()
+    subject_query = f'"{subject}"' if 2 <= len(subject_words) <= 3 else subject
     parts = [
         identity["year"], identity["language"], identity["brand_terms"],
-        identity["card_number"], subject, edition,
+        identity["card_number"], subject_query, edition,
     ]
     keywords = " ".join(dict.fromkeys(
         str(part).strip() for part in parts if str(part).strip()

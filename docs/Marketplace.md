@@ -185,7 +185,9 @@ Implemented safeguards:
 - owner-only usage, activity, cache, and normalized observation records;
 - duplicate-operation blocking and shared recent-query cache;
 - side-by-side UI evaluation that never writes a value automatically;
-- a Marketplace Usage dashboard.
+- a dormant Marketplace Usage dashboard module retained for future managed-
+  provider validation. Its old top-level button is hidden while the deployed
+  Windows collector is the active path.
 - separate owner-controlled schedules for one-to-two sold observations and
   three-to-five active observations, with per-card due state and overrides.
 
@@ -213,7 +215,10 @@ entries. The three lowest exact active listings are stored separately and never
 affect valuation. Empty results, failures, and rejected listings preserve the
 existing trusted value.
 
-If a plausible result omits the grader, grade, or another required PSA identity
+The eBay query stays broad enough for normal seller-title variations, quotes
+only a distinctive two- or three-word subject when useful, and applies eBay's
+native numeric Grade facet in addition to local exact-grade validation. If a
+plausible result omits the grader, grade, or another required PSA identity
 field, up to three newest candidates are held for review. The owner can open
 each listing and explicitly use or reject it. An explicit conflict in year,
 language, printed number, edition, grader, grade, or subject is rejected and
@@ -221,7 +226,7 @@ cannot be confirmed through the normal review queue. The card detail screen is
 limited to two evidence sections—recent sold listings and the three lowest
 matching active listings—plus direct eBay and Product Research links.
 
-## Managed-provider evaluation schedule — Gated foundation
+## Managed-provider evaluation schedule — Gated, dormant foundation
 
 The owner can separately configure one or two Apify sold observations and
 three, four, or five Bright Data active observations in hours, days, weeks, or

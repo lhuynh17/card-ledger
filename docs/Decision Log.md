@@ -484,3 +484,25 @@ or reduce an existing trusted value. The card-detail UI centers current value,
 confirmed sales, active asks, and a single confirmation path. The local-only
 collector, owner-only PocketBase records, outbound-only network boundary,
 manual values, Product Research, and provider fallbacks remain unchanged.
+
+## 2026-08-03 — Card-level collector alerts and focused search controls
+
+**Decision:** Replace the large global collector-attention banner with a small
+red notification on the affected inventory tile. The notification explains
+whether a sale needs review or the Windows collector needs operator attention.
+Hide the obsolete top-level managed-provider dashboard button while keeping its
+default-off implementation available for future validation.
+
+Use eBay's native numeric grade facet for sold and active searches, keep grader
+and grade terms in the query, and quote only a short distinctive card subject.
+Continue to make final acceptance through strict local year, language, printed
+number, edition, grader, grade, and subject checks.
+
+**Why:** Collector problems should be visible without displacing the primary
+inventory workflow. Full-label exact phrases suppress legitimate listings,
+while wholly loose searches create noisy candidates. A selective retrieval
+query plus strict local identity validation provides a safer balance.
+
+**Consequence:** No provider, credential, network boundary, stored value, or
+manual fallback changes. Managed-provider controls remain dormant rather than
+deleted, and ambiguous sales still require explicit owner confirmation.
