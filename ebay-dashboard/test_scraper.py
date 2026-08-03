@@ -350,6 +350,21 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("LH_Sold=1", result["searchUrl"])
         self.assertIn("LH_Complete=1", result["searchUrl"])
         self.assertIn("_sop=13", result["searchUrl"])
+        self.assertIn("Grade=10", result["searchUrl"])
+
+    def test_native_grade_filter_is_applied_to_sold_and_active_urls(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        sold = scraper.ebay_search_params("Rayquaza PSA 10", card)
+        active = scraper.ebay_search_params(
+            "Rayquaza PSA 10", card, role="active"
+        )
+        self.assertEqual(sold["Grade"], "10")
+        self.assertEqual(active["Grade"], "10")
+        self.assertEqual(sold["LH_Sold"], 1)
+        self.assertNotIn("LH_Sold", active)
 
     def test_valuation_uses_only_the_most_recent_exact_sale(self):
         card = {
