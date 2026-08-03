@@ -916,32 +916,27 @@ def ebay_search_terms(card: dict) -> str:
     identity = identity_profile(card)
     company = identity["company"]
     grade = identity["grade"]
-    exact_grade = f'"{company} {grade}"' if grade else company
+    # eBay's sold search can suppress legitimate results when the slab grade is
+    # quoted as an exact phrase. Keep the grader and grade unquoted, then apply
+    # the stricter card-identity checks below to every returned listing.
+    exact_grade = f"{company} {grade}" if grade else company
     if card.get("grade") == "BL10":
         exact_grade += ' "Black Label"'
     if card.get("grade") == "P10":
         exact_grade += " Pristine"
-    wrong_grades = " ".join(
-        f'-"{company} {other}"'
-        for other in (
-            "10", "9.5", "9", "8.5", "8", "7", "6", "5",
-            "4", "3", "2", "1",
-        )
-        if other != grade
-    )
     edition = (
         "1st Edition" if identity["edition"] == "first_edition"
         else "Unlimited" if identity["edition"] == "unlimited" else ""
     )
     parts = [
         identity["year"], identity["language"], identity["brand_terms"],
-        identity["subject"], identity["card_number"], edition,
+        identity["card_number"], identity["subject"], edition,
     ]
     keywords = " ".join(dict.fromkeys(
         str(part).strip() for part in parts if str(part).strip()
     )) or card_keywords(card.get("name", ""))
     return " ".join(filter(None, [
-        keywords, exact_grade, wrong_grades, "-raw", "-ungraded",
+        keywords, exact_grade, "-raw", "-ungraded",
     ]))
 
 
@@ -1174,7 +1169,9 @@ def listing_identity_assessment(card: dict, listing: dict) -> tuple[str, list[st
     identity = identity_profile(card)
     subject_words = [
         word for word in re.sub(r"[^A-Z0-9]+", " ", identity["subject"]).split()
-        if len(word) > 1 and word not in {"EX", "GX", "V", "VMAX", "VSTAR"}
+        if len(word) > 1 and word not in {
+            "EX", "GX", "V", "VMAX", "VSTAR", "HOLO", "HOLOFOIL",
+        }
     ]
     if subject_words and not re.search(rf"\b{re.escape(subject_words[0])}\b", title):
         return "rejected", ["different_subject"]
