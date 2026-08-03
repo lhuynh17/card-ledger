@@ -229,16 +229,17 @@ Only after the account details above are confirmed:
 3. set `BRIGHT_DATA_ENABLED=1`;
 4. set `BRIGHT_DATA_KILL_SWITCH=0`;
 5. restart PocketBase;
-6. sign in, open **Marketplace Usage**, and confirm evaluation mode is ready;
+6. confirm the private managed-provider evaluation configuration is ready;
 7. evaluate one manually reviewed card;
 8. compare candidates, rejections, record usage, and cost against eBay Product
    Research before saving anything.
 
-After live validation succeeds, open **Marketplace Usage** to configure
-automatic checks. Choose one or two Apify sold observations and three to five
-Bright Data active observations, each with its own hour/day/week/month
-interval. Review the projected monthly records, estimated Apify cost, and
-free-tier percentage before enabling either schedule.
+The old top-level **Marketplace Usage** control is intentionally hidden while
+the normal-Chrome Windows collector is the deployed path. The dormant managed
+provider dashboard and its configuration remain available in the source for a
+future, separately approved provider rollout. Do not enable either provider
+schedule without first reviewing projected usage, cost, schema compatibility,
+and the documented network boundary.
 
 If the live response does not match the adapter schema, turn the kill switch on
 and leave `BRIGHT_DATA_SCHEMA_CONFIRMED=0` until the adapter is updated.

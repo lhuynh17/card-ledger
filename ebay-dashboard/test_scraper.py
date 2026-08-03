@@ -531,7 +531,7 @@ class SoldResultTests(unittest.TestCase):
         query = scraper.ebay_search_terms(card)
         for required in (
             "2014", "JAPANESE", "XY PHANTOM GATE", "GENGAR EX",
-            "090/088", "PSA 10", "-raw", "-ungraded",
+            "090/088", '"GENGAR EX"', "PSA 10", "-raw", "-ungraded",
         ):
             self.assertIn(required, query)
 
@@ -557,7 +557,7 @@ class SoldResultTests(unittest.TestCase):
         for noise in (" FA ", " LMTD ", " COLL ", " MASTER ", " BTL "):
             self.assertNotIn(noise, f" {pikachu_query} ")
         self.assertIn(
-            "2014 JAPANESE XY PHANTOM GATE 090/088 GENGAR EX "
+            '2014 JAPANESE XY PHANTOM GATE 090/088 "GENGAR EX" '
             "1st Edition PSA 10",
             gengar_query,
         )
