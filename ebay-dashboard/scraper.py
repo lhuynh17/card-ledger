@@ -309,13 +309,16 @@ class BrowserCollector:
         finally:
             self._playwright.stop()
 
-    def fetch(self, search: str, page_number: int, role: str = "sold") -> str:
+    def fetch(self, search: str, page_number: int, role: str = "sold",
+              grade: str = "") -> str:
         params = {
             "_nkw": search, "_pgn": page_number, "_ipg": 60,
             "_sop": 13 if role == "sold" else 15,
         }
         if role == "sold":
             params.update({"LH_Sold": 1, "LH_Complete": 1})
+        if grade:
+            params["Grade"] = grade
         url = f"{SEARCH_URL}?{urlencode(params)}"
         page = self._context.new_page()
         try:
@@ -940,6 +943,21 @@ def ebay_search_terms(card: dict) -> str:
     ]))
 
 
+def ebay_search_params(search: str, card: dict, role: str = "sold",
+                       page: int = 1) -> dict:
+    """Build an eBay search URL with its native numeric grade facet."""
+    params = {
+        "_nkw": search, "_pgn": page, "_ipg": 60,
+        "_sop": 13 if role == "sold" else 15,
+    }
+    if role == "sold":
+        params.update({"LH_Sold": 1, "LH_Complete": 1})
+    grade = identity_profile(card)["grade"]
+    if grade:
+        params["Grade"] = grade
+    return params
+
+
 def edition_identity(card: dict) -> str:
     identity = " ".join([
         str(card.get("name") or ""),
@@ -982,10 +1000,10 @@ def title_has_card_number(title: str, card_number: str) -> bool:
 
 
 def fetch_page(session: requests.Session, search: str, page: int,
-               role: str = "sold") -> str:
+               role: str = "sold", grade: str = "") -> str:
     backend = os.getenv("SLAB_SCRAPER_BACKEND", "browser").strip().lower()
     if backend == "browser":
-        return browser_collector().fetch(search, page, role)
+        return browser_collector().fetch(search, page, role, grade)
     if backend != "requests":
         raise RuntimeError(
             "SLAB_SCRAPER_BACKEND must be 'browser' or 'requests'."
@@ -996,6 +1014,8 @@ def fetch_page(session: requests.Session, search: str, page: int,
     }
     if role == "sold":
         params.update({"LH_Sold": 1, "LH_Complete": 1})
+    if grade:
+        params["Grade"] = grade
     response = session.get(
         f"{SEARCH_URL}?{urlencode(params)}",
         timeout=REQUEST_TIMEOUT_SECONDS,
@@ -1275,7 +1295,7 @@ def valuation(card: dict, search: str, raw: list[dict], error: str = "",
     volatility = "unknown"
     return {
         "cardId": card["id"], "query": search,
-        "searchUrl": f"{SEARCH_URL}?{urlencode({'_nkw': search, 'LH_Sold': 1, 'LH_Complete': 1, '_sop': 13})}",
+        "searchUrl": f"{SEARCH_URL}?{urlencode(ebay_search_params(search, card))}",
         "marketValue": estimate, "latestSaleValue": estimate,
         "confidence": confidence,
         "identityConfidence": confidence, "volatility": volatility,
@@ -1343,10 +1363,7 @@ def queue_extension_group(payload: dict, cards: list[dict]) -> None:
         return
     representative = cards[0]
     search = ebay_search_terms(representative)
-    search_params = {
-        "_nkw": search, "_pgn": 1, "_ipg": 60,
-        "LH_Sold": 1, "LH_Complete": 1, "_sop": 13,
-    }
+    search_params = ebay_search_params(search, representative)
     job = {
         "id": secrets.token_urlsafe(12),
         "role": "sold",
@@ -1469,9 +1486,7 @@ def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
             if int(card.get("active_listing_count") or 0) > 0
         ]
         if active_cards:
-            params = {
-                "_nkw": search, "_pgn": 1, "_ipg": 60, "_sop": 15,
-            }
+            params = ebay_search_params(search, active_cards[0], "active")
             extension_jobs(payload).append({
                 "id": secrets.token_urlsafe(12),
                 "role": "active",
@@ -1695,7 +1710,8 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
     requests_made = 0
     try:
         requests_made += 1
-        found = parse_listings(fetch_page(session, search, 1), search)
+        grade = identity_profile(representative)["grade"]
+        found = parse_listings(fetch_page(session, search, 1, grade=grade), search)
         unique = list({str(item["id"]): item for item in found}.values())
         result_limit = collector_config()["result_limit"]
         results = [
@@ -1707,7 +1723,7 @@ def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -
             requests_made += 1
             try:
                 active_found = parse_active_listings(
-                    fetch_page(session, search, 1, "active"), search
+                    fetch_page(session, search, 1, "active", grade), search
                 )
                 active_unique = list(
                     {str(item["id"]): item for item in active_found}.values()
