@@ -506,3 +506,17 @@ query plus strict local identity validation provides a safer balance.
 **Consequence:** No provider, credential, network boundary, stored value, or
 manual fallback changes. Managed-provider controls remain dormant rather than
 deleted, and ambiguous sales still require explicit owner confirmation.
+
+## 2026-08-04 — Empty cloud responses cannot erase local inventory
+
+**Decision:** When the browser already contains synced cards, treat an empty
+PocketBase card response as ambiguous. Preserve the local inventory and report
+**Inventory protected** instead of deleting the local copies.
+
+**Why:** An authenticated request may return zero visible records because of a
+signed-in-account or ownership-rule mismatch. A successful connection alone
+does not prove that the owner intentionally deleted every card.
+
+**Consequence:** Recovery of an already-empty browser still requires checking
+the private `cards` collection or a known-good PocketBase backup. The guard does
+not invent records or overwrite cloud data.

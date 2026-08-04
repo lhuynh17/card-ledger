@@ -1536,8 +1536,19 @@ async function syncCloud() {
     }
 
     remote = await fetchRemoteCards();
-    const currentRemoteIds = new Set(remote.map((r) => r.id));
+    // An authenticated PocketBase request can succeed with an empty result
+    // when ownership rules or account context are wrong. Never interpret that
+    // ambiguous response as permission to erase a populated local inventory.
     local = await dbGetAll();
+    const locallySyncedCards = local.filter((card) => card.remoteId && !card._deleted);
+    if (remote.length === 0 && locallySyncedCards.length > 0) {
+      const error = new Error(
+        "PocketBase returned no visible inventory cards. Local inventory was preserved; check the signed-in account and cards ownership rules."
+      );
+      error.code = "EMPTY_REMOTE_INVENTORY";
+      throw error;
+    }
+    const currentRemoteIds = new Set(remote.map((r) => r.id));
     const localByRemote = new Map(local.filter((c) => c.remoteId).map((c) => [c.remoteId, c]));
     for (const record of remote) {
       const existing = localByRemote.get(record.id);
@@ -1563,6 +1574,8 @@ async function syncCloud() {
       localStorage.removeItem(PB_AUTH_KEY);
       setSyncStatus("Sign in to sync", "error");
       document.getElementById("cloudModal").classList.add("open");
+    } else if (error.code === "EMPTY_REMOTE_INVENTORY") {
+      setSyncStatus("Inventory protected", "error");
     } else setSyncStatus("Sync paused", "error");
     console.warn("Slab Ledger sync:", error);
   } finally { syncInProgress = false; }
