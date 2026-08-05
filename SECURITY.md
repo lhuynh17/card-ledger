@@ -194,12 +194,14 @@ saves the superuser password or MFA code.
 
 ## Marketplace collection safeguards
 
-The optional eBay collector intentionally:
+The optional marketplace collector intentionally:
 
 - begins one paced nightly cycle at 2:00 AM by default and processes one due
   unique card at a time;
-- performs at most one sold and one active lookup per unique card identity in
-  that cycle;
+- performs one exact-cert Alt lookup per PSA card when authorized and
+  available, otherwise the existing eBay sold and active lookups;
+- caps Alt at 59 lookups per rolling 24 hours and does not buy, bid, message,
+  list, or perform account actions;
 - treats results as fresh for 23 hours;
 - caps requests at 150 per rolling 24 hours, enough for at most 75 unique
   two-request card refreshes;
@@ -226,13 +228,16 @@ retain budgets, rate controls, observability, and an immediate kill switch.
 ### Chrome extension boundary
 
 - The unpacked extension runs only in the owner's normal Chrome profile and
-  requests access only to eBay and `http://127.0.0.1:8000`.
+  requests access only to Alt, eBay, and `http://127.0.0.1:8000`.
 - A randomly generated local pairing key authenticates bridge calls. It is
   stored only in the Windows user's local application-data folder and Chrome
   extension-local storage; it is not a provider or PocketBase credential.
 - The bridge stays bound to `127.0.0.1`, restricts extension API CORS to
   `chrome-extension://` origins, bounds request bodies, and validates returned
-  URLs, prices, sold dates, card matches, and result counts.
+  URLs, prices, sold dates, card matches, exact Alt identity, and result counts.
+- The extension stores no Alt credentials. It uses the owner's visible Chrome
+  session under separately retained written authorization and types only the
+  inventory cert number into Alt's own search field.
 - The localhost file server explicitly denies collector environment, lock,
   log, browser-profile, and private state paths.
 - The extension never receives PocketBase credentials and cannot write trusted
