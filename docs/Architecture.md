@@ -18,7 +18,7 @@ flowchart LR
     HOOKS --> PARSE["Parse.bot PSA API"]
     HOOKS --> BRIGHT["Bright Data API (default-off evaluation)"]
     HOOKS --> PSAIMG["Allowlisted PSA image hosts"]
-    COL["Optional local eBay collector"] <--> PB
+    COL["Optional local marketplace collector"] <--> PB
     COL --> EBAY["eBay sold-search pages"]
     COL --> LOOP["Localhost-only market dashboard"]
     PB --> BAK["NAS backup plus encrypted off-site backup"]
@@ -59,6 +59,8 @@ The external browser libraries are pinned and loaded with Subresource Integrity,
 - Python 3;
 - `requests`, Beautiful Soup, and Playwright;
 - an unpacked extension in the owner's normal signed-in Google Chrome profile;
+- exact-cert Alt retrieval under the owner's written low-frequency
+  authorization, with structured eBay retrieval retained as fallback;
 - a random localhost-only extension pairing key;
 - an owner-configurable local window, all-day default, and visible
   manual-check pause;
@@ -168,10 +170,11 @@ market value.
 `marketplace_collector_status` stores an owner-private heartbeat and safe
 attention state for offline, cooldown, CAPTCHA/sign-in, and collector errors.
 
-The local browser collector keeps provider transport replaceable. It promotes
-only a listing whose title matches the structured PSA identity, preserves the
-previous trusted value after empty or failed searches, and sends incomplete but
-plausible identity matches to owner review.
+The local browser collector keeps provider transport replaceable. Alt-specific
+DOM handling stays in the extension adapter. The localhost boundary accepts an
+Alt result only after independently matching cert, grader, grade, year, printed
+number, and subject. Empty or conflicting Alt output queues eBay and preserves
+the trusted value.
 
 ### Portfolio history
 

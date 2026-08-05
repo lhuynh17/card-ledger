@@ -287,8 +287,10 @@ MFA and IP restriction options before exposing any additional network path.
 8. Keep receipts, invoices, bank statements, and annual exports with your tax
    records. Slab Ledger organizes records but does not determine tax treatment.
 
-The Windows scraper is optional and is not required for manual market values or
-the business ledger.
+The Windows collector is optional and is not required for manual market values
+or the business ledger. Its authorized Alt exact-cert path and eBay fallback
+both terminate at the same localhost-only normalized boundary; neither requires
+a PocketBase schema change.
 
 For the initial local sold-listing proof, keep
 `SLAB_COLLECTOR_EVALUATION_ONLY=1`, `SLAB_COLLECTOR_PROOF_LIMIT=3`, and

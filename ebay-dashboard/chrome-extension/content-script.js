@@ -1,6 +1,7 @@
 "use strict";
 
 let lastStatus = "";
+const startedAt = Date.now();
 
 function text(node, selector) {
   return node.querySelector(selector)?.textContent?.trim() || "";
@@ -16,6 +17,13 @@ function pageNeedsOwner() {
     "unusual activity",
     "sign in to your account",
     "hcaptcha",
+  ].some((marker) => body.includes(marker));
+}
+
+function altPageNeedsOwner() {
+  const body = document.body?.innerText?.toLowerCase() || "";
+  return [
+    "verify you are human", "security check", "unusual activity", "captcha",
   ].some((marker) => body.includes(marker));
 }
 
@@ -104,7 +112,193 @@ function report(status, payload = {}) {
   }).catch(() => {});
 }
 
-function inspect() {
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function typeNormally(input, value) {
+  input.focus();
+  const setValue = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype, "value"
+  )?.set;
+  if (setValue) setValue.call(input, "");
+  else input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles:true }));
+  for (const character of value) {
+    const nextValue = input.value + character;
+    if (setValue) setValue.call(input, nextValue);
+    else input.value = nextValue;
+    input.dispatchEvent(new Event("input", { bubbles:true }));
+    await wait(120 + Math.floor(Math.random() * 140));
+  }
+  input.dispatchEvent(new Event("change", { bubbles:true }));
+}
+
+function altSearchInput() {
+  return [...document.querySelectorAll("input")].find((input) => {
+    const label = `${input.placeholder || ""} ${input.getAttribute("aria-label") || ""}`;
+    return /name\s+or\s+cert|cert\s*#/i.test(label);
+  }) || null;
+}
+
+function altRow(anchor) {
+  return anchor.closest(
+    "article, li, [role='listitem'], [class*='listing'], [class*='result'], [class*='card']"
+  ) || anchor.parentElement;
+}
+
+function altPriceText(row) {
+  return row?.innerText?.match(/(?:US\s*)?\$[\d,]+(?:\.\d{2})?/i)?.[0] || "";
+}
+
+function altSoldDate(rowText) {
+  return rowText.match(/\b(?:Sold\s+(?:on\s+)?)?([A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})\b/i)?.[1] || "";
+}
+
+function collectAltRows() {
+  const seen = new Set();
+  const soldItems = [];
+  const activeItems = [];
+  for (const anchor of document.querySelectorAll("a[href]")) {
+    const url = anchor.href || "";
+    const allowedUrl = (
+      /^https:\/\/(?:[a-z0-9-]+\.)?alt\.xyz\//i.test(url)
+      || /^https:\/\/www\.ebay\.com\/itm\//i.test(url)
+    );
+    if (!allowedUrl || seen.has(url)) continue;
+    const row = altRow(anchor);
+    const rowText = row?.innerText?.replace(/\s+/g, " ").trim() || "";
+    const priceText = altPriceText(row);
+    if (!rowText || !priceText) continue;
+    let title = (
+      anchor.getAttribute("aria-label") || anchor.textContent ||
+      row.querySelector("h1,h2,h3,h4,[class*='title']")?.textContent || ""
+    ).replace(/\s+/g, " ").trim();
+    if (!title) continue;
+    seen.add(url);
+    const raw = {
+      id:url.match(/(?:asset|listing|item|card)[\/-]([A-Za-z0-9_-]+)/i)?.[1] || url,
+      title, priceText, url,
+    };
+    const soldAt = altSoldDate(rowText);
+    if (soldAt && (/\bsold\b/i.test(rowText) || (
+      /^https:\/\/www\.ebay\.com\/itm\//i.test(url)
+      && /\b(?:auction|sale|fixed price)\b/i.test(rowText)
+    ))) {
+      const assetTitle = document.querySelector("main h1")?.textContent
+        ?.replace(/\s+/g, " ").trim();
+      if (assetTitle && !title.includes(assetTitle)) {
+        title = `${assetTitle} — ${title}`;
+        raw.title = title;
+      }
+      soldItems.push({ ...raw, soldText:`Sold ${soldAt}`, soldAt });
+    } else if (/\b(?:available|active|listing|buy now|buy\s*\/\s*offer|for sale|bid)\b/i.test(rowText)) {
+      activeItems.push(raw);
+    }
+  }
+  return { soldItems, activeItems };
+}
+
+function altIdentityText(cert) {
+  const exact = String(cert || "").replace(/\D/g, "");
+  const candidates = [...document.querySelectorAll(
+    "article, li, [role='listitem'], [class*='asset'], [class*='result'], [class*='card'], main"
+  )];
+  const match = candidates.find((node) => {
+    return (node.innerText || "").replace(/\D/g, "").includes(exact);
+  });
+  const rendered = match?.innerText || "";
+  const structured = [...document.querySelectorAll("script")].find((script) => {
+    const value = script.textContent || "";
+    return new RegExp(
+      `(?:Certification Number|certificationNumber|certNumber)[^0-9]{0,80}${exact}(?:\\D|$)`,
+      "i"
+    ).test(value);
+  });
+  if (!structured) return "";
+  const mainText = document.querySelector("main")?.innerText || rendered;
+  return `${mainText} PSA Certification Number ${exact}`;
+}
+
+async function inspectAlt(job) {
+  if (altPageNeedsOwner()) {
+    report("operator_required");
+    return;
+  }
+  const cert = String(job.cert || "").replace(/\D/g, "");
+  if (!cert || job.provider !== "alt") return;
+  const input = altSearchInput();
+  const pageText = document.body?.innerText || "";
+  if (!pageText.replace(/\D/g, "").includes(cert) && input) {
+    if (sessionStorage.getItem(`slab-alt-search-${job.id}`) !== "started") {
+      sessionStorage.setItem(`slab-alt-search-${job.id}`, "started");
+      await typeNormally(input, cert);
+      await wait(500 + Math.floor(Math.random() * 700));
+      const form = input.closest("form");
+      if (form?.requestSubmit) form.requestSubmit();
+      else input.dispatchEvent(new KeyboardEvent("keydown", {
+        key:"Enter", code:"Enter", bubbles:true,
+      }));
+    }
+    return;
+  }
+  const identityText = altIdentityText(cert);
+  if (!identityText && /^\/browse\b/i.test(location.pathname)) {
+    const itemUrls = [...new Set(
+      [...document.querySelectorAll("a[href^='/itm/']")].map((link) => link.href)
+    )];
+    if (
+      itemUrls.length === 1
+      && sessionStorage.getItem(`slab-alt-detail-${job.id}`) !== "opened"
+    ) {
+      sessionStorage.setItem(`slab-alt-detail-${job.id}`, "opened");
+      sessionStorage.setItem(
+        `slab-alt-active-${job.id}`,
+        JSON.stringify(collectAltRows().activeItems.slice(0, 3))
+      );
+      await wait(700 + Math.floor(Math.random() * 900));
+      location.href = itemUrls[0];
+      return;
+    }
+  }
+  if (identityText) {
+    const collected = collectAltRows();
+    let browseActive = [];
+    try {
+      browseActive = JSON.parse(
+        sessionStorage.getItem(`slab-alt-active-${job.id}`) || "[]"
+      );
+    } catch (_) {
+      browseActive = [];
+    }
+    const normalized = SlabAltAdapter.normalizeResult(
+      {
+        identityText,
+        soldItems:collected.soldItems,
+        activeItems:[...browseActive, ...collected.activeItems],
+      },
+      job.expectedIdentity || {}
+    );
+    report("complete", {
+      identity:{
+        exact:normalized.exact,
+        checks:normalized.checks,
+        text:identityText.replace(/\s+/g, " ").trim().slice(0, 4000),
+      },
+      soldItems:normalized.soldItems,
+      activeItems:normalized.activeItems,
+    });
+    return;
+  }
+  if (Date.now() - startedAt > 15000) {
+    report("complete", {
+      identity:{ exact:false, reason:"exact_cert_not_found" },
+      soldItems:[], activeItems:[],
+    });
+  }
+}
+
+function inspectEbay() {
   if (pageNeedsOwner()) {
     report("operator_required");
     return;
@@ -113,6 +307,17 @@ function inspect() {
   if (items.length) {
     report("complete", { items });
   }
+}
+
+async function inspect() {
+  if (/(?:^|\.)alt\.xyz$/i.test(location.hostname)) {
+    const response = await chrome.runtime.sendMessage({
+      type:"SLAB_LEDGER_GET_ACTIVE_JOB",
+    }).catch(() => null);
+    if (response?.job) await inspectAlt(response.job);
+    return;
+  }
+  inspectEbay();
 }
 
 inspect();

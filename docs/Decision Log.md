@@ -520,3 +520,24 @@ does not prove that the owner intentionally deleted every card.
 **Consequence:** Recovery of an already-empty browser still requires checking
 the private `cards` collection or a known-good PocketBase backup. The guard does
 not invent records or overwrite cloud data.
+
+## 2026-08-04 — Prefer authorized Alt exact-cert evidence with eBay fallback
+
+**Decision:** Under the owner's retained written Alt authorization, the local
+visible-Chrome collector first enters the exact PSA certification number into
+Alt's `name or cert #` search. Accept data only when the returned cert, PSA
+grader, exact grade, year, printed card number, and card identity all match.
+Collect at most the latest sold price and three lowest active listings in one
+pass. Cap Alt at 59 lookups per rolling 24 hours.
+
+If Alt is empty, ambiguous, unavailable, or over its cap, queue the existing
+eBay workflow. Never clear or replace a trusted value on an Alt failure.
+
+**Why:** Certification number is a stronger retrieval key than varying seller
+titles and removes much of the query guesswork that caused wrong-card results.
+
+**Consequence:** The extension gains outbound access to Alt only; PocketBase,
+the NAS, and the localhost bridge remain private. No Alt credential is stored,
+and no buying, bidding, listing, messaging, CAPTCHA solving, stealth, or proxy
+behavior is introduced. Manual entry, Product Research, and eBay remain
+available.

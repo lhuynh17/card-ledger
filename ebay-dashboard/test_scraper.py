@@ -180,6 +180,98 @@ class CollectorConfigurationTests(unittest.TestCase):
 
 
 class SoldResultTests(unittest.TestCase):
+    def alt_card(self):
+        return {
+            "id":"card-alt", "company":"PSA", "cert":"68410100",
+            "grade":"10", "name":"2006 Pokemon EX Holon Phantoms #16 Rayquaza",
+            "psa_year":"2006", "psa_subject":"Rayquaza Holon Phantoms",
+            "psa_card_number":"16", "active_listing_count":3,
+        }
+
+    def test_alt_exact_cert_normalizes_one_sale_and_three_lowest_active(self):
+        card = self.alt_card()
+        job = {"cert":"68410100"}
+        incoming = {
+            "identity":{
+                "exact":True,
+                "text":"2006 EX Holon Phantoms #16 Rayquaza PSA 10 Cert 68410100",
+            },
+            "soldItems":[{
+                "id":"sale-1", "title":"Rayquaza #16 PSA 10",
+                "priceText":"$10,786.40", "soldAt":"2026-07-19",
+                "url":"https://alt.xyz/marketplace/sale-1",
+            }],
+            "activeItems":[
+                {"id":"high", "title":"Rayquaza #16", "priceText":"$12,000", "url":"https://alt.xyz/marketplace/high"},
+                {"id":"low", "title":"Rayquaza #16", "priceText":"$11,000", "url":"https://alt.xyz/marketplace/low"},
+                {"id":"middle", "title":"Rayquaza #16", "priceText":"$11,500", "url":"https://alt.xyz/marketplace/middle"},
+                {"id":"extra", "title":"Rayquaza #16", "priceText":"$13,000", "url":"https://alt.xyz/marketplace/extra"},
+            ],
+        }
+        result = scraper.alt_valuation(card, job, incoming)
+        self.assertEqual(result["marketValue"], 10786.40)
+        self.assertEqual([item["id"] for item in result["activeListings"]],
+                         ["low", "middle", "high"])
+        self.assertEqual(result["source"], "Alt exact-cert collector")
+
+    def test_alt_wrong_identity_returns_no_value(self):
+        card = self.alt_card()
+        incoming = {
+            "identity":{
+                "exact":True,
+                "text":"2005 EX Deoxys #22 Rayquaza PSA 10 Cert 68410100",
+            },
+            "soldItems":[{
+                "id":"wrong", "title":"Wrong card", "priceText":"$1,050",
+                "soldAt":"2026-07-30", "url":"https://alt.xyz/wrong",
+            }],
+        }
+        self.assertIsNone(scraper.alt_valuation(
+            card, {"cert":"68410100"}, incoming
+        ))
+
+    def test_alt_empty_exact_match_queues_ebay_and_preserves_value(self):
+        card = self.alt_card()
+        payload = {
+            "inventory":[card],
+            "valuations":[{"cardId":"card-alt", "marketValue":10786.40}],
+            "collector":{}, "extensionJobs":[],
+        }
+        job = {
+            "id":"alt-job", "provider":"alt", "role":"market",
+            "cert":"68410100", "cards":[card], "status":"running",
+        }
+        payload["extensionJobs"].append(job)
+        config = {
+            "minimum_delay_minutes":2, "evaluation_only":True,
+            "result_limit":1,
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(scraper, "OUTPUT", Path(folder) / "data.json"), \
+                    patch.object(scraper, "collector_config", return_value=config):
+                scraper.finish_alt_extension_job(payload, job, {
+                    "identity":{"exact":False}, "soldItems":[], "activeItems":[],
+                })
+        self.assertEqual(payload["valuations"][0]["marketValue"], 10786.40)
+        fallback = payload["extensionJobs"][-1]
+        self.assertEqual(fallback["provider"], "ebay")
+        self.assertEqual(fallback["role"], "sold")
+
+    def test_alt_daily_limit_is_strictly_under_sixty(self):
+        now = datetime.now().astimezone()
+        payload = {
+            "collector":{"altRequestLog":[now.isoformat()] * 59},
+            "extensionJobs":[],
+        }
+        self.assertEqual(scraper.alt_jobs_in_window(payload), 59)
+        with patch.object(scraper, "collector_config", return_value={
+            "alt_daily_ceiling":59,
+        }), patch.object(scraper, "read_data", return_value={
+            "inventory":[self.alt_card()],
+        }), patch.object(scraper, "write_data"):
+            scraper.queue_extension_group(payload, [self.alt_card()])
+        self.assertEqual(payload["extensionJobs"][-1]["provider"], "ebay")
+
     def test_extension_items_require_ebay_url_price_and_sold_date(self):
         items = scraper.normalize_extension_items([
             {

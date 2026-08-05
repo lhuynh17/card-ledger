@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Slab Ledger Collector",
-  "version": "0.2.1",
-  "description": "Processes the private Slab Ledger eBay research queue in normal Chrome.",
+  "version": "0.3.0",
+  "description": "Processes the private Slab Ledger market research queue in normal Chrome.",
   "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [
     "http://127.0.0.1:8000/*",
+    "https://alt.xyz/*",
+    "https://*.alt.xyz/*",
     "https://www.ebay.com/*",
     "https://signin.ebay.com/*"
   ],
@@ -15,10 +17,12 @@
   "content_scripts": [
     {
       "matches": [
+        "https://alt.xyz/*",
+        "https://*.alt.xyz/*",
         "https://www.ebay.com/*",
         "https://signin.ebay.com/*"
       ],
-      "js": ["content-script.js"],
+      "js": ["alt-adapter.js", "content-script.js"],
       "run_at": "document_idle"
     }
   ],
