@@ -2,6 +2,7 @@
 
 const BRIDGE = "http://127.0.0.1:8000";
 const ALARM = "slab-ledger-poll";
+const JOB_TIMEOUT_MS = 15 * 60 * 1000;
 
 async function settings() {
   return chrome.storage.local.get({ pairingKey:"", enabled:false });
@@ -38,7 +39,22 @@ async function poll() {
   const config = await settings();
   if (!config.enabled || !config.pairingKey) return;
   const active = await chrome.storage.session.get({ activeJob:null });
-  if (active.activeJob) return;
+  if (active.activeJob) {
+    const claimedAt = Number(active.activeJob.claimedAt || 0);
+    if (claimedAt && Date.now() - claimedAt < JOB_TIMEOUT_MS) return;
+    await bridge("/api/extension/result", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        jobId:active.activeJob.id,
+        status:"failed",
+        error:"Chrome lookup timed out; existing market data was preserved.",
+      }),
+    }).catch(() => {});
+    await closeJobTab(active.activeJob.tabId);
+    await chrome.storage.session.remove("activeJob");
+    await setBadge("!", "#b42318");
+  }
   try {
     const result = await bridge("/api/extension/next");
     if (!result.job) {
@@ -47,7 +63,7 @@ async function poll() {
     }
     const tab = await chrome.tabs.create({ url:result.job.url, active:false });
     await chrome.storage.session.set({
-      activeJob:{ ...result.job, tabId:tab.id },
+      activeJob:{ ...result.job, tabId:tab.id, claimedAt:Date.now() },
     });
     await setBadge("1", "#357a50");
   } catch (_) {
