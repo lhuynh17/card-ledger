@@ -2,7 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +13,37 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_stale_extension_job_fails_without_changing_valuation(self):
+        now = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+        payload = {
+            "inventory":[{"id":"card-1"}],
+            "valuations":[{"cardId":"card-1", "marketValue":4000}],
+            "collector":{},
+            "extensionJobs":[{
+                "id":"job-1", "provider":"alt", "role":"market",
+                "status":"running", "cards":[{"id":"card-1"}],
+                "startedAt":(now - timedelta(minutes=16)).isoformat(),
+            }],
+        }
+        with patch.object(scraper, "write_data") as write_data, \
+                patch.object(scraper, "report_cloud_status") as status:
+            expired = scraper.expire_stale_extension_job(payload, now)
+        self.assertEqual(expired["status"], "failed")
+        self.assertEqual(payload["valuations"][0]["marketValue"], 4000)
+        self.assertIn("preserved", expired["safeError"])
+        write_data.assert_called_once_with(payload)
+        status.assert_called_once()
+
+    def test_fresh_extension_job_is_not_expired(self):
+        now = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+        payload = {"extensionJobs":[{
+            "status":"running",
+            "startedAt":(now - timedelta(minutes=5)).isoformat(),
+        }]}
+        with patch.object(scraper, "write_data") as write_data:
+            self.assertIsNone(scraper.expire_stale_extension_job(payload, now))
+        write_data.assert_not_called()
+
     def test_one_time_refresh_preserves_evidence_and_clears_freshness(self):
         payload = {
             "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],

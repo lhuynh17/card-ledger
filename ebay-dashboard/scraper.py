@@ -64,6 +64,7 @@ REFRESH_AFTER_HOURS = 23
 EMPTY_RESULT_RETRY_HOURS = 23
 MAX_REQUESTS_PER_DAY = 150
 MAX_ALT_LOOKUPS_PER_DAY = 59
+EXTENSION_JOB_TIMEOUT_MINUTES = 15
 BLOCK_COOLDOWN_HOURS = (3, 12, 24, 72)
 REQUEST_TIMEOUT_SECONDS = 25
 POCKETBASE_POLL_SECONDS = 60
@@ -1380,6 +1381,37 @@ def active_extension_job(payload: dict) -> Optional[dict]:
     )
 
 
+def expire_stale_extension_job(
+    payload: dict, now: Optional[datetime] = None
+) -> Optional[dict]:
+    """Fail a browser job that stopped reporting without changing evidence."""
+    job = active_extension_job(payload)
+    if not job or job.get("status") == "operator_required":
+        return None
+    moment = now or datetime.now(timezone.utc)
+    started = checked_at(job.get("startedAt") or job.get("createdAt") or "")
+    if started > moment - timedelta(minutes=EXTENSION_JOB_TIMEOUT_MINUTES):
+        return None
+    job["status"] = "failed"
+    job["completedAt"] = moment.isoformat()
+    job["safeError"] = (
+        "Chrome did not return a result within 15 minutes. Reload and reconnect "
+        "the Slab Ledger Collector extension. Existing market data was preserved."
+    )
+    payload.setdefault("errors", []).append(job["safeError"])
+    payload.setdefault("collector", {})["nextEligibleAt"] = (
+        moment + timedelta(hours=3)
+    ).isoformat()
+    write_data(payload)
+    report_cloud_status(
+        "attention",
+        "The Chrome market collector stopped responding and needs to be reconnected.",
+        card_id=str((job.get("cards") or [{}])[0].get("id") or ""),
+        action_required=True,
+    )
+    return job
+
+
 def alt_identity(card: dict) -> dict:
     """Return only the non-secret fields needed to prove an exact Alt result."""
     return {
@@ -2159,6 +2191,10 @@ def watch(force_cycle: bool = False) -> None:
         now = datetime.now(timezone.utc)
         local_now = datetime.now()
         payload = read_data()
+        expired_job = expire_stale_extension_job(payload, now)
+        if expired_job:
+            print(expired_job["safeError"])
+            payload = read_data()
         collector = payload.setdefault("collector", {})
         request_times = [checked_at(stamp) for stamp in collector.get("requestLog", [])
                          if checked_at(stamp) > now - timedelta(days=1)]
