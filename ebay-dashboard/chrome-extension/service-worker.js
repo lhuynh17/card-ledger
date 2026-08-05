@@ -72,6 +72,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "SLAB_LEDGER_GET_ACTIVE_JOB") {
+    chrome.storage.session.get({ activeJob:null }).then(({ activeJob }) => {
+      sendResponse({ job:activeJob });
+    });
+    return true;
+  }
   if (message?.type !== "SLAB_LEDGER_PAGE_RESULT") return;
   (async () => {
     const stored = await chrome.storage.session.get({ activeJob:null });
@@ -84,6 +90,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         jobId:job.id,
         status:message.status,
         items:message.items || [],
+        soldItems:message.soldItems || [],
+        activeItems:message.activeItems || [],
+        identity:message.identity || {},
         error:message.error || "",
       }),
     });

@@ -1,4 +1,4 @@
-"""Paced eBay sold-search collector for the Slab Ledger dashboard.
+"""Paced marketplace collector for the Slab Ledger dashboard.
 
 Install once on Windows:
     setup-windows.bat
@@ -44,6 +44,7 @@ LOCAL_STATE_DIR = (
 )
 OUTPUT = ROOT / "data.json"
 SEARCH_URL = "https://www.ebay.com/sch/i.html"
+ALT_URL = "https://alt.xyz/"
 DATA_LOCK = threading.RLock()
 ENV_FILE = ROOT / "collector.env"
 CLOUD_CLIENT = None
@@ -62,6 +63,7 @@ MAX_WATCH_INTERVAL_MINUTES = 4
 REFRESH_AFTER_HOURS = 23
 EMPTY_RESULT_RETRY_HOURS = 23
 MAX_REQUESTS_PER_DAY = 150
+MAX_ALT_LOOKUPS_PER_DAY = 59
 BLOCK_COOLDOWN_HOURS = (3, 12, 24, 72)
 REQUEST_TIMEOUT_SECONDS = 25
 POCKETBASE_POLL_SECONDS = 60
@@ -194,6 +196,10 @@ def collector_config() -> dict:
         "maximum_delay_minutes": max(minimum_delay, maximum_delay),
         "daily_ceiling": environment_int(
             "SLAB_COLLECTOR_DAILY_CEILING", MAX_REQUESTS_PER_DAY, 1, MAX_REQUESTS_PER_DAY
+        ),
+        "alt_daily_ceiling": environment_int(
+            "SLAB_ALT_DAILY_CEILING", MAX_ALT_LOOKUPS_PER_DAY,
+            1, MAX_ALT_LOOKUPS_PER_DAY,
         ),
         "result_limit": 1,
         "proof_limit": environment_int("SLAB_COLLECTOR_PROOF_LIMIT", 0, 0, 500),
@@ -693,7 +699,7 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
         history = [*history, {
             "date": new_sales[0].get("soldAt") or checked,
             "value": market_value,
-            "source": "Confirmed exact eBay sale",
+            "source": str(result.get("source") or "Confirmed exact eBay sale"),
             "listingId": newest_id,
             "title": new_sales[0].get("title", ""),
             "url": new_sales[0].get("url", ""),
@@ -731,7 +737,10 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "review_candidates": review_candidates,
             "rejected_listing_ids": list(rejected_ids)[-100:],
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
-            "source": "Local eBay collector" if promote else previous.get("source", ""),
+            "source": (
+                str(result.get("source") or "Local eBay collector")
+                if promote else previous.get("source", "")
+            ),
             "notes": previous.get("notes", ""),
             "history": history,
             "error": result.get("error", ""),
@@ -1371,35 +1380,113 @@ def active_extension_job(payload: dict) -> Optional[dict]:
     )
 
 
+def alt_identity(card: dict) -> dict:
+    """Return only the non-secret fields needed to prove an exact Alt result."""
+    return {
+        "cert": re.sub(r"\D", "", str(card.get("cert") or "")),
+        "grader": str(card.get("company") or "PSA").upper(),
+        "grade": grade_number(str(card.get("grade") or "")),
+        "year": str(card.get("psa_year") or ""),
+        "subject": str(card.get("psa_subject") or card.get("name") or ""),
+        "cardNumber": str(card.get("psa_card_number") or ""),
+        "name": str(card.get("name") or ""),
+    }
+
+
+def alt_jobs_in_window(payload: dict, now: Optional[datetime] = None) -> int:
+    moment = now or datetime.now(timezone.utc)
+    log = [
+        stamp for stamp in payload.get("collector", {}).get("altRequestLog", [])
+        if checked_at(stamp) > moment - timedelta(days=1)
+    ]
+    in_flight = [
+        job for job in extension_jobs(payload)
+        if job.get("provider") == "alt"
+        and job.get("status") in ("pending", "running", "operator_required")
+        and checked_at(job.get("createdAt", "")) > moment - timedelta(days=1)
+    ]
+    return len(log) + len(in_flight)
+
+
+def queue_ebay_extension_job(payload: dict, cards: list[dict]) -> dict:
+    representative = cards[0]
+    search = ebay_search_terms(representative)
+    params = ebay_search_params(search, representative)
+    job = {
+        "id": secrets.token_urlsafe(12),
+        "provider": "ebay",
+        "role": "sold",
+        "status": "pending",
+        "search": search,
+        "url": f"{SEARCH_URL}?{urlencode(params)}",
+        "cards": cards,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    extension_jobs(payload).append(job)
+    return job
+
+
+def queue_ebay_active_job(payload: dict, cards: list[dict]) -> dict:
+    representative = cards[0]
+    search = ebay_search_terms(representative)
+    job = {
+        "id": secrets.token_urlsafe(12),
+        "provider": "ebay",
+        "role": "active",
+        "status": "pending",
+        "search": search,
+        "url": f"{SEARCH_URL}?{urlencode(ebay_search_params(search, representative, 'active'))}",
+        "cards": cards,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    }
+    extension_jobs(payload).append(job)
+    return job
+
+
 def queue_extension_group(payload: dict, cards: list[dict]) -> None:
     latest_active_ids = {str(card["id"]) for card in read_data().get("inventory", [])}
     cards = [card for card in cards if str(card["id"]) in latest_active_ids]
     if not cards:
         return
     representative = cards[0]
-    search = ebay_search_terms(representative)
-    search_params = ebay_search_params(search, representative)
-    job = {
-        "id": secrets.token_urlsafe(12),
-        "role": "sold",
-        "status": "pending",
-        "search": search,
-        "url": f"{SEARCH_URL}?{urlencode(search_params)}",
-        "cards": cards,
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-    }
+    identity = alt_identity(representative)
+    config = collector_config()
+    if (
+        identity["cert"] and identity["grader"] == "PSA"
+        and alt_jobs_in_window(payload) < config.get(
+            "alt_daily_ceiling", MAX_ALT_LOOKUPS_PER_DAY
+        )
+    ):
+        job = {
+            "id": secrets.token_urlsafe(12),
+            "provider": "alt",
+            "role": "market",
+            "status": "pending",
+            "search": identity["cert"],
+            "cert": identity["cert"],
+            "url": ALT_URL,
+            "expectedIdentity": identity,
+            # An Alt cert is unique, so duplicates with other certs receive
+            # their own later lookup rather than sharing unverified evidence.
+            "cards": [representative],
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        job = queue_ebay_extension_job(payload, cards)
     jobs = extension_jobs(payload)
-    jobs.append(job)
+    if job not in jobs:
+        jobs.append(job)
     payload["extensionJobs"] = jobs[-20:]
     collector = payload.setdefault("collector", {})
     collector["extensionLastQueuedAt"] = job["createdAt"]
     write_data(payload)
     print(
         f"Queued {representative.get('name', representative['id'])!r} for "
-        "the normal-Chrome extension."
+        f"the normal-Chrome {job.get('provider', 'ebay')} lookup."
     )
     report_cloud_status(
-        "working", "Checking sold listings.", card_id=str(representative["id"])
+        "working", "Checking private marketplace evidence.",
+        card_id=str(representative["id"])
     )
 
 
@@ -1458,6 +1545,210 @@ def normalize_extension_items(items, role: str, search: str) -> list[dict]:
             item["listingRole"] = "active"
         normalized.append(item)
     return normalized
+
+
+def alt_identity_matches(card: dict, identity: dict) -> bool:
+    """Recheck exact Alt identity at the localhost trust boundary."""
+    if not isinstance(identity, dict) or not bool(identity.get("exact")):
+        return False
+    text = re.sub(r"\s+", " ", str(identity.get("text") or ""))[:4000]
+    upper = text.upper()
+    digits = re.sub(r"\D", "", text)
+    expected = alt_identity(card)
+    profile = identity_profile(card)
+    if not expected["cert"] or expected["cert"] not in digits:
+        return False
+    if not re.search(r"\bPSA\b", upper):
+        return False
+    wanted_grade = profile["grade"]
+    if not wanted_grade or not re.search(
+        rf"\b(?:PSA\s*)?{re.escape(wanted_grade)}\b", upper
+    ):
+        return False
+    if profile["year"] and profile["year"] not in upper:
+        return False
+    if profile["card_number"] and not title_has_card_number(
+        upper, profile["card_number"]
+    ):
+        return False
+    generic = {
+        "POKEMON", "JAPANESE", "ENGLISH", "HOLO", "CARD", "CARDS",
+        "THE", "SET", "PROMO", "FULL", "ART", "FA",
+    }
+    subject_tokens = [
+        token for token in re.sub(
+            r"[^A-Z0-9]+", " ", profile["subject"]
+        ).split()
+        if len(token) >= 3 and token not in generic
+    ][:3]
+    return not subject_tokens or all(token in upper for token in subject_tokens)
+
+
+def normalize_alt_items(items, role: str, cert: str) -> list[dict]:
+    """Normalize only bounded Alt fields; raw provider shapes stop here."""
+    if not isinstance(items, list):
+        return []
+    normalized = []
+    for raw in items[:10]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or "").strip()[:500]
+        url = str(raw.get("url") or "").strip()
+        price = number(raw.get("price")) or amount(str(raw.get("priceText") or ""))
+        if (
+            not title or price <= 0
+            or not (
+                re.match(r"^https://(?:[a-z0-9-]+\.)?alt\.xyz/", url, re.I)
+                or re.match(r"^https://www\.ebay\.com/itm/", url, re.I)
+            )
+        ):
+            continue
+        item = {
+            "id": str(raw.get("id") or url)[:240],
+            "search": cert,
+            "title": title,
+            "price": price,
+            "shipping": 0,
+            "total": price,
+            "currency": "USD",
+            "condition": "Not specified",
+            "url": url,
+            "source": "alt",
+        }
+        if role == "sold":
+            raw_date = str(raw.get("soldAt") or "").strip()
+            completed_at = (
+                raw_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_date)
+                else sold_date(str(raw.get("soldText") or f"Sold {raw_date}"))
+            )
+            if not completed_at:
+                continue
+            item.update({
+                "soldText": str(raw.get("soldText") or f"Sold {completed_at}")[:200],
+                "soldAt": completed_at,
+                "priceVerificationRequired": False,
+            })
+        else:
+            item["listingRole"] = "active"
+        normalized.append(item)
+    if role == "sold":
+        return sorted(normalized, key=lambda item: item["soldAt"], reverse=True)[:1]
+    return sorted(normalized, key=lambda item: item["total"])[:3]
+
+
+def alt_valuation(card: dict, job: dict, incoming: dict) -> Optional[dict]:
+    if not alt_identity_matches(card, incoming.get("identity", {})):
+        return None
+    sold = normalize_alt_items(incoming.get("soldItems", []), "sold", job["cert"])
+    active = normalize_alt_items(
+        incoming.get("activeItems", []), "active", job["cert"]
+    )[:min(3, int(card.get("active_listing_count") or 0))]
+    if not sold and not active:
+        return None
+    value = number(sold[0]["total"]) if sold else 0
+    return {
+        "cardId": card["id"],
+        "query": job["cert"],
+        "searchUrl": ALT_URL,
+        "marketValue": value,
+        "latestSaleValue": value,
+        "confidence": "high" if sold else "low",
+        "identityConfidence": "high",
+        "volatility": "unknown",
+        "edition": edition_identity(card),
+        "comparableCount": len(sold),
+        "pendingVerificationCount": 0,
+        "pendingBestOffers": [],
+        "reviewCandidates": [],
+        "rejectedCount": 0,
+        "low": value,
+        "high": value,
+        "comparables": sold,
+        "recentComparables": sold,
+        "activeListings": active,
+        "source": "Alt exact-cert collector",
+        "error": "",
+        "lastChecked": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def finish_alt_extension_job(payload: dict, job: dict, incoming: dict) -> None:
+    cards = [card for card in job.get("cards", []) if isinstance(card, dict)]
+    card = cards[0] if cards else None
+    result = alt_valuation(card, job, incoming) if card else None
+    job["status"] = "complete"
+    job["completedAt"] = datetime.now(timezone.utc).isoformat()
+    job["acceptedCount"] = (
+        len(result.get("recentComparables", []))
+        + len(result.get("activeListings", []))
+        if result else 0
+    )
+    if not result:
+        fallback = queue_ebay_extension_job(payload, cards) if cards else None
+        job["fallbackJobId"] = fallback["id"] if fallback else ""
+        payload.setdefault("errors", []).append(
+            f"Alt cert {job.get('cert', '')}: no exact verified result; eBay fallback queued"
+        )
+    else:
+        alt_has_sale = bool(result.get("recentComparables"))
+        prior = {
+            str(item.get("cardId")): item for item in payload.get("valuations", [])
+        }.get(str(result["cardId"]), {})
+        if not result.get("recentComparables"):
+            result["marketValue"] = number(prior.get("marketValue"))
+            result["recentComparables"] = prior.get("recentComparables", [])
+            result["comparables"] = prior.get("comparables", [])
+        payload["valuations"] = [
+            item for item in payload.get("valuations", [])
+            if str(item.get("cardId")) != str(result["cardId"])
+        ] + [result]
+        fallback = None
+        if not alt_has_sale:
+            fallback = queue_ebay_extension_job(payload, cards)
+        elif (
+            int(card.get("active_listing_count") or 0) > 0
+            and not result.get("activeListings")
+        ):
+            fallback = queue_ebay_active_job(payload, cards)
+        if fallback:
+            job["fallbackJobId"] = fallback["id"]
+    request_time = datetime.now(timezone.utc)
+    collector = payload.setdefault("collector", {})
+    alt_request_log = [
+        stamp for stamp in collector.get("altRequestLog", [])
+        if checked_at(stamp) > request_time - timedelta(days=1)
+    ]
+    alt_request_log.append(request_time.isoformat())
+    request_log = [
+        stamp for stamp in collector.get("requestLog", [])
+        if checked_at(stamp) > request_time - timedelta(days=1)
+    ]
+    request_log.append(request_time.isoformat())
+    collector.update({
+        "requestLog": request_log,
+        "altRequestLog": alt_request_log,
+        "lastRequestAt": request_time.isoformat(),
+        "nextEligibleAt": (
+            request_time + timedelta(minutes=collector_config()["minimum_delay_minutes"])
+        ).isoformat(),
+    })
+    write_data(payload)
+    config = collector_config()
+    if result and CLOUD_CLIENT and not config["evaluation_only"]:
+        try:
+            CLOUD_CLIENT.upsert_valuation(result)
+        except requests.RequestException as error:
+            report(f"PocketBase Alt evidence save failed: {error}", logging.WARNING)
+    if result:
+        report_cloud_status(
+            "ready", "Exact-cert Alt marketplace evidence was collected.",
+            card_id=str(result["cardId"]),
+        )
+    elif card:
+        report_cloud_status(
+            "working", "Alt had no exact cert match; checking the eBay fallback.",
+            card_id=str(card["id"]),
+        )
 
 
 def finish_extension_job(payload: dict, job: dict, items: list[dict]) -> None:
@@ -1875,7 +2166,8 @@ def watch(force_cycle: bool = False) -> None:
         extension_job = active_extension_job(payload) if backend == "extension" else None
         extension_completed = len([
             job for job in extension_jobs(payload)
-            if job.get("role") == "sold" and job.get("status") == "complete"
+            if job.get("role") in ("sold", "market")
+            and job.get("status") == "complete"
             and checked_at(job.get("completedAt", "")) > now - timedelta(days=1)
         ])
 
@@ -1915,7 +2207,14 @@ def watch(force_cycle: bool = False) -> None:
         else:
             due = next_due_group(payload)
             if due:
-                expected_requests = 1 + int(any(
+                can_use_alt = bool(
+                    re.sub(r"\D", "", str(due[0].get("cert") or ""))
+                    and str(due[0].get("company") or "PSA").upper() == "PSA"
+                    and alt_jobs_in_window(payload) < config.get(
+                        "alt_daily_ceiling", MAX_ALT_LOOKUPS_PER_DAY
+                    )
+                )
+                expected_requests = 1 if can_use_alt else 1 + int(any(
                     int(card.get("active_listing_count") or 0) > 0 for card in due
                 ))
                 if len(request_times) + expected_requests > config["daily_ceiling"]:
@@ -2045,7 +2344,10 @@ def serve(port: int) -> None:
                 "job": {
                     "id": job["id"],
                     "role": job["role"],
+                    "provider": job.get("provider", "ebay"),
                     "url": job["url"],
+                    "cert": job.get("cert", ""),
+                    "expectedIdentity": job.get("expectedIdentity", {}),
                 },
             })
 
@@ -2089,18 +2391,26 @@ def serve(port: int) -> None:
                     status = str(incoming.get("status") or "")
                     if status == "operator_required":
                         job["status"] = "operator_required"
+                        provider_name = (
+                            "Alt" if job.get("provider") == "alt" else "eBay"
+                        )
                         report_cloud_status(
                             "attention",
-                            "eBay needs a sign-in or verification in Chrome.",
+                            f"{provider_name} needs a sign-in or verification in Chrome.",
                             card_id=str((job.get("cards") or [{}])[0].get("id") or ""),
                             action_required=True,
                         )
-                        job["safeError"] = "eBay requires a manual browser check."
+                        job["safeError"] = (
+                            f"{provider_name} requires a manual browser check."
+                        )
                         write_data(payload)
                     elif status == "complete":
-                        finish_extension_job(
-                            payload, job, incoming.get("items", [])
-                        )
+                        if job.get("provider") == "alt":
+                            finish_alt_extension_job(payload, job, incoming)
+                        else:
+                            finish_extension_job(
+                                payload, job, incoming.get("items", [])
+                            )
                     else:
                         job["status"] = "failed"
                         job["safeError"] = str(
