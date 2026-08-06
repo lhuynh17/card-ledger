@@ -190,11 +190,11 @@ function altPageTitle() {
 
 function altCompactRow(priceNode) {
   let row = priceNode;
-  for (let depth = 0; row?.parentElement && depth < 7; depth += 1) {
+  for (let depth = 0; row?.parentElement && depth < 12; depth += 1) {
     const text = row.innerText?.replace(/\s+/g, " ").trim() || "";
     const hasContext = /\b(?:fixed price|auction|buy now|offer|bid|listing)\b/i.test(text)
       || Boolean(altSoldDate(text));
-    if (hasContext && text.length <= 700) return row;
+    if (hasContext && text.length <= 1500) return row;
     row = row.parentElement;
   }
   return priceNode.parentElement;
@@ -210,7 +210,10 @@ function collectAltResearchRows() {
   const activeItems = [];
   const seen = new Set();
   const pageTitle = altPageTitle();
-  const priceNodes = [...document.querySelectorAll("main *")].filter((node) => {
+  // Alt's research screen currently has no semantic <main> wrapper. Search
+  // the rendered page, then keep only compact rows with transaction/listing
+  // context so the Alt Value and unrelated recommendations are ignored.
+  const priceNodes = [...document.querySelectorAll("body *")].filter((node) => {
     if (node.children.length > 0) return false;
     return /^(?:US\s*)?\$[\d,]+(?:\.\d{2})?$/.test(
       node.textContent?.replace(/\s+/g, " ").trim() || ""
