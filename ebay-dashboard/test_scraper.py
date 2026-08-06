@@ -13,6 +13,42 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_single_alt_test_queues_only_requested_inventory_cert(self):
+        payload = {
+            "inventory":[
+                {"id":"card-1", "company":"PSA", "cert":"111", "name":"One"},
+                {"id":"card-2", "company":"PSA", "cert":"222", "name":"Two"},
+            ],
+            "valuations":[{"cardId":"card-2", "marketValue":900}],
+            "collector":{},
+            "extensionJobs":[{"status":"pending", "id":"old"}],
+        }
+        written = {}
+
+        def capture(value):
+            written.clear()
+            written.update(value)
+
+        with patch.object(scraper, "write_data", side_effect=capture), \
+                patch.object(scraper, "read_data", side_effect=lambda: written), \
+                patch.object(scraper, "queue_extension_group") as queue:
+            selected = scraper.prepare_single_alt_test(payload, "222")
+        self.assertEqual(selected["id"], "card-2")
+        self.assertEqual(written["extensionJobs"], [])
+        self.assertEqual(written["valuations"][0]["marketValue"], 900)
+        queue.assert_called_once()
+        self.assertEqual(queue.call_args.args[1][0]["cert"], "222")
+
+    def test_single_alt_test_rejects_cert_outside_active_inventory(self):
+        payload = {
+            "inventory":[
+                {"id":"card-1", "company":"PSA", "cert":"111", "name":"One"}
+            ],
+            "collector":{}, "extensionJobs":[],
+        }
+        with self.assertRaisesRegex(ValueError, "not in the current active inventory"):
+            scraper.prepare_single_alt_test(payload, "999")
+
     def test_stale_extension_job_fails_without_changing_valuation(self):
         now = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
         payload = {

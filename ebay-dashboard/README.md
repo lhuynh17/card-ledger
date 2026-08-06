@@ -11,6 +11,12 @@ inventory search once at the normal safe pace, preserves existing values when
 evidence is uncertain or unavailable, and then returns to the regular 2:00 AM
 schedule.
 
+To test the Alt extension without waiting or searching the whole inventory,
+stop the normal collector and double-click `test-one-alt-lookup.bat`. Enter an
+active-inventory PSA cert number, or press Enter to use the first eligible
+card. It runs exactly one immediate cert lookup and prints a clear passed,
+failed, or needs-attention result. No other cards are searched.
+
 ## First-time Windows setup
 
 1. Pull the latest `card-ledger` changes in GitHub Desktop.
