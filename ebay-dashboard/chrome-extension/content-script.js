@@ -141,6 +141,31 @@ function altSearchInput() {
   }) || null;
 }
 
+function altExactResultButton(job) {
+  const expected = job.expectedIdentity || {};
+  const normalize = SlabAltAdapter.normalized;
+  const year = normalize(expected.year);
+  const number = normalize(expected.cardNumber).replace(/^0+/, "");
+  const subjectTokens = normalize(expected.subject || expected.name)
+    .split(" ").filter((token) => token.length >= 3 && ![
+      "POKEMON", "JAPANESE", "ENGLISH", "HOLO", "CARD", "THE",
+      "PROMO", "PSA", "GEM", "MINT",
+    ].includes(token)).slice(0, 5);
+  const candidates = [...document.querySelectorAll("main button")].filter((button) => {
+    const value = normalize(button.innerText || button.textContent || "");
+    if (value.length < 12) return false;
+    const yearMatches = !year || value.includes(year);
+    const numberMatches = !number || new RegExp(
+      `(?:^| )0*${number}(?:[A-Z]*)(?: |$)`
+    ).test(value);
+    const subjectMatches = subjectTokens.length === 0 || subjectTokens.some(
+      (token) => value.includes(token)
+    );
+    return yearMatches && numberMatches && subjectMatches;
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 function altRow(anchor) {
   return anchor.closest(
     "article, li, [role='listitem'], [class*='listing'], [class*='result'], [class*='card']"
@@ -229,7 +254,8 @@ async function inspectAlt(job) {
   if (!cert || job.provider !== "alt") return;
   const input = altSearchInput();
   const pageText = document.body?.innerText || "";
-  if (!pageText.replace(/\D/g, "").includes(cert) && input) {
+  const inputHasCert = String(input?.value || "").replace(/\D/g, "") === cert;
+  if (!pageText.replace(/\D/g, "").includes(cert) && input && !inputHasCert) {
     if (sessionStorage.getItem(`slab-alt-search-${job.id}`) !== "started") {
       sessionStorage.setItem(`slab-alt-search-${job.id}`, "started");
       await typeNormally(input, cert);
@@ -243,12 +269,13 @@ async function inspectAlt(job) {
     return;
   }
   const identityText = altIdentityText(cert);
-  if (!identityText && /^\/browse\b/i.test(location.pathname)) {
+  if (!identityText && inputHasCert) {
     const itemUrls = [...new Set(
       [...document.querySelectorAll("a[href^='/itm/']")].map((link) => link.href)
     )];
+    const resultButton = altExactResultButton(job);
     if (
-      itemUrls.length === 1
+      (itemUrls.length === 1 || resultButton)
       && sessionStorage.getItem(`slab-alt-detail-${job.id}`) !== "opened"
     ) {
       sessionStorage.setItem(`slab-alt-detail-${job.id}`, "opened");
@@ -257,7 +284,8 @@ async function inspectAlt(job) {
         JSON.stringify(collectAltRows().activeItems.slice(0, 3))
       );
       await wait(700 + Math.floor(Math.random() * 900));
-      location.href = itemUrls[0];
+      if (resultButton) resultButton.click();
+      else location.href = itemUrls[0];
       return;
     }
   }
@@ -320,7 +348,11 @@ async function inspect() {
   inspectEbay();
 }
 
-inspect();
-const observer = new MutationObserver(() => inspect());
+function runInspectSafely() {
+  inspect().catch(() => {});
+}
+
+runInspectSafely();
+const observer = new MutationObserver(runInspectSafely);
 observer.observe(document.documentElement, { childList:true, subtree:true });
-setInterval(inspect, 5000);
+setInterval(runInspectSafely, 5000);
