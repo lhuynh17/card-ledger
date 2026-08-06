@@ -67,6 +67,10 @@ Extension 0.3.4 reads those rows from Alt's rendered page even when the site
 does not provide a semantic `main` wrapper. The local bridge also ignores a
 duplicate completion from an older Alt tab.
 
+Extension 0.3.5 transfers the queued job when Alt opens the exact-cert card in
+a new tab, closes the obsolete search tab, and waits for Recent Transactions
+to render before returning evidence.
+
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.

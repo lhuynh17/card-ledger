@@ -87,6 +87,25 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 
+chrome.tabs.onCreated.addListener((tab) => {
+  (async () => {
+    if (!tab.id || !tab.openerTabId) return;
+    const stored = await chrome.storage.session.get({ activeJob:null });
+    const job = stored.activeJob;
+    if (!job || tab.openerTabId !== job.tabId || job.provider !== "alt") return;
+    const pendingUrl = String(tab.pendingUrl || tab.url || "");
+    if (pendingUrl && !/^https:\/\/(?:www\.)?alt\.xyz\//i.test(pendingUrl)) return;
+    const searchTabId = job.tabId;
+    await chrome.storage.session.set({
+      activeJob:{ ...job, tabId:tab.id, searchTabId },
+    });
+    // Alt opens the selected exact-cert result in a new tab. Transfer the
+    // job before closing the now-obsolete search tab so only one Alt tab is
+    // left to inspect and report the result.
+    await closeJobTab(searchTabId);
+  })().catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "SLAB_LEDGER_GET_ACTIVE_JOB") {
     chrome.storage.session.get({ activeJob:null }).then(({ activeJob }) => {
