@@ -364,6 +364,23 @@ async function inspectAlt(job) {
   }
   if (identityText) {
     const collected = collectAltRows();
+    const researchText = document.body?.innerText || "";
+    const transactionHeading = [...document.querySelectorAll("body *")].find((node) => {
+      return node.children.length === 0
+        && /^\s*recent transactions\s*$/i.test(node.textContent || "");
+    });
+    if (collected.soldItems.length === 0 && Date.now() - startedAt <= 20000) {
+      transactionHeading?.scrollIntoView({ block:"center" });
+      // The research panels load after the card shell. Do not complete the
+      // job from the shell while Recent Transactions is still rendering.
+      return;
+    }
+    const noTransactions = /\bno (?:recent )?transactions\b/i.test(researchText);
+    if (
+      collected.soldItems.length === 0
+      && !noTransactions
+      && Date.now() - startedAt <= 30000
+    ) return;
     let browseActive = [];
     try {
       browseActive = JSON.parse(
