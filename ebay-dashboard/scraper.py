@@ -2041,6 +2041,41 @@ def prepare_one_time_refresh(payload: dict) -> int:
     return len(searches)
 
 
+def prepare_single_alt_test(payload: dict, cert: str = "") -> dict:
+    """Queue exactly one PSA cert lookup without changing valuation freshness."""
+    requested = re.sub(r"\D", "", cert)
+    candidates = [
+        card for card in payload.get("inventory", [])
+        if str(card.get("company") or "PSA").upper() == "PSA"
+        and re.sub(r"\D", "", str(card.get("cert") or ""))
+    ]
+    if requested:
+        candidates = [
+            card for card in candidates
+            if re.sub(r"\D", "", str(card.get("cert") or "")) == requested
+        ]
+    if not candidates:
+        raise ValueError(
+            "That PSA certification number is not in the current active inventory."
+            if requested else "No active PSA certification number is available to test."
+        )
+    stale_extension_timeout = any(
+        job.get("status") == "failed"
+        and "Chrome did not return a result within 15 minutes"
+        in str(job.get("safeError") or "")
+        for job in extension_jobs(payload)
+    )
+    payload["extensionJobs"] = []
+    collector = payload.setdefault("collector", {})
+    collector["extensionJobs"] = []
+    if stale_extension_timeout:
+        collector["nextEligibleAt"] = ""
+    write_data(payload)
+    selected = candidates[0]
+    queue_extension_group(read_data(), [selected])
+    return selected
+
+
 def refresh_group(session: requests.Session, payload: dict, cards: list[dict]) -> bool:
     """Make one request and apply its valuation to all identical slabs."""
     latest_active_ids = {str(card["id"]) for card in read_data().get("inventory", [])}
@@ -2171,7 +2206,7 @@ def scrape_due_once(session: requests.Session) -> bool:
     return refresh_group(session, payload, cards)
 
 
-def watch(force_cycle: bool = False) -> None:
+def watch(force_cycle: bool = False, test_alt_cert: Optional[str] = None) -> None:
     """Refresh one due slab at a time inside the configured local window."""
     session = requests.Session()
     session.headers.update(headers())
@@ -2195,6 +2230,20 @@ def watch(force_cycle: bool = False) -> None:
             f"One-time refresh requested for {forced_count} unique inventory "
             "search(es). The normal nightly schedule will resume afterward."
         )
+    test_job_id = ""
+    if test_alt_cert is not None:
+        try:
+            selected = prepare_single_alt_test(read_data(), test_alt_cert)
+        except ValueError as error:
+            print(f"Single Alt test could not start: {error}")
+            return
+        test_job = active_extension_job(read_data())
+        test_job_id = str(test_job.get("id") or "") if test_job else ""
+        print(
+            "Single Alt test started for "
+            f"{selected.get('name', selected.get('cert', 'the selected card'))!r}."
+        )
+        print("Only this one cert lookup will run. Existing values remain protected.")
     completed_in_window = 0
     active_window_date = None
     while True:
@@ -2206,6 +2255,36 @@ def watch(force_cycle: bool = False) -> None:
         if expired_job:
             print(expired_job["safeError"])
             payload = read_data()
+        if test_job_id:
+            test_job = next(
+                (
+                    job for job in extension_jobs(payload)
+                    if str(job.get("id") or "") == test_job_id
+                ),
+                None,
+            )
+            test_status = str((test_job or {}).get("status") or "")
+            if test_status in ("complete", "failed", "operator_required"):
+                if test_status == "complete":
+                    print(
+                        "SINGLE ALT TEST PASSED: Chrome returned the lookup. "
+                        f"Accepted {int(test_job.get('acceptedCount') or 0)} sold result(s)."
+                    )
+                elif test_status == "operator_required":
+                    print(
+                        "SINGLE ALT TEST NEEDS ATTENTION: complete the visible "
+                        "Alt sign-in or verification in Chrome."
+                    )
+                else:
+                    print(
+                        "SINGLE ALT TEST FAILED: "
+                        f"{test_job.get('safeError') or 'Chrome returned no result.'}"
+                    )
+                print("The test is finished. No other inventory cards will be searched.")
+                return
+            print("Single Alt test is waiting for Chrome to return its result.")
+            time.sleep(5)
+            continue
         collector = payload.setdefault("collector", {})
         request_times = [checked_at(stamp) for stamp in collector.get("requestLog", [])
                          if checked_at(stamp) > now - timedelta(days=1)]
@@ -2563,6 +2642,14 @@ if __name__ == "__main__":
         "--refresh-all-now", action="store_true",
         help="run every current inventory search once, then resume the nightly schedule",
     )
+    parser.add_argument(
+        "--test-alt-once", action="store_true",
+        help="run exactly one immediate Alt cert lookup, then stop the test",
+    )
+    parser.add_argument(
+        "--test-cert", default="",
+        help="optional active-inventory PSA cert number for --test-alt-once",
+    )
     parser.add_argument("--test-cloud", action="store_true", help="test PocketBase login and inventory access, then exit")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -2593,9 +2680,14 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if args.watch and args.refresh_only:
         watch(force_cycle=args.refresh_all_now)
-    elif args.watch:
+    elif args.watch or args.test_alt_once:
         threading.Thread(
-            target=watch, kwargs={"force_cycle":args.refresh_all_now}, daemon=True
+            target=watch,
+            kwargs={
+                "force_cycle":args.refresh_all_now,
+                "test_alt_cert":args.test_cert if args.test_alt_once else None,
+            },
+            daemon=True,
         ).start()
     elif not args.serve_only:
         one_session = requests.Session()
