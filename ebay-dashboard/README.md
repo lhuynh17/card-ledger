@@ -54,6 +54,11 @@ stored in the Windows user's private local application-data folder, not under
 the dashboard server. It is not a PocketBase, eBay, or provider credential. Do
 not share it.
 
+Alt's header search renders cert matches as selectable result buttons rather
+than submitting a traditional HTML form. Extension 0.3.2 and later types the
+cert, waits for the one year/number/subject-matched result button, and opens it
+before attempting to read market evidence.
+
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
