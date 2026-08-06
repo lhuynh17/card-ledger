@@ -2515,6 +2515,12 @@ def serve(port: int) -> None:
                     if not job:
                         raise ValueError("unknown job")
                     status = str(incoming.get("status") or "")
+                    if str(job.get("status") or "") == "complete":
+                        # Multiple already-open Alt tabs can receive the same
+                        # queued job. The first exact result wins; later tab
+                        # reports must not save the same evidence twice.
+                        self.send_json(200, {"ok": True, "duplicate": True})
+                        return
                     if status == "operator_required":
                         job["status"] = "operator_required"
                         provider_name = (

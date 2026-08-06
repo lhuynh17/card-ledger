@@ -63,6 +63,10 @@ Extension 0.3.3 also reads Alt's table-style `Recent Transactions` and
 `Listings` rows after the exact research page opens. Empty or unmatched
 results still cannot replace an existing value.
 
+Extension 0.3.4 reads those rows from Alt's rendered page even when the site
+does not provide a semantic `main` wrapper. The local bridge also ignores a
+duplicate completion from an older Alt tab.
+
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
