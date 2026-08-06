@@ -2009,6 +2009,12 @@ def next_due_group(payload: dict) -> Optional[list[dict]]:
 
 def prepare_one_time_refresh(payload: dict) -> int:
     """Make current inventory due locally without deleting trusted evidence."""
+    stale_extension_timeout = any(
+        job.get("status") == "failed"
+        and "Chrome did not return a result within 15 minutes"
+        in str(job.get("safeError") or "")
+        for job in extension_jobs(payload)
+    )
     active_ids = {
         str(card.get("id") or "") for card in payload.get("inventory", [])
         if str(card.get("id") or "")
@@ -2026,6 +2032,11 @@ def prepare_one_time_refresh(payload: dict) -> int:
     payload["extensionJobs"] = []
     collector = payload.setdefault("collector", {})
     collector["extensionJobs"] = []
+    # A manual refresh may retry immediately after the owner has repaired a
+    # disconnected extension. Other cooldowns (including block responses)
+    # remain intact.
+    if stale_extension_timeout:
+        collector["nextEligibleAt"] = ""
     write_data(payload)
     return len(searches)
 

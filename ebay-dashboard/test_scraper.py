@@ -79,6 +79,42 @@ class CollectorConfigurationTests(unittest.TestCase):
         self.assertEqual(payload["extensionJobs"], [])
         write_data.assert_called_once_with(payload)
 
+    def test_one_time_refresh_clears_only_extension_timeout_cooldown(self):
+        payload = {
+            "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
+            "valuations":[],
+            "collector":{"nextEligibleAt":"2026-08-06T10:00:00Z"},
+            "extensionJobs":[{
+                "status":"failed",
+                "safeError":(
+                    "Chrome did not return a result within 15 minutes. "
+                    "Existing market data was preserved."
+                ),
+            }],
+        }
+        with patch.object(scraper, "write_data"), patch.object(
+            scraper, "ebay_search_terms", return_value="Pikachu PSA 10"
+        ):
+            scraper.prepare_one_time_refresh(payload)
+        self.assertEqual(payload["collector"]["nextEligibleAt"], "")
+
+    def test_one_time_refresh_keeps_unrelated_safety_cooldown(self):
+        payload = {
+            "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
+            "valuations":[],
+            "collector":{"nextEligibleAt":"2026-08-06T10:00:00Z"},
+            "extensionJobs":[{
+                "status":"failed", "safeError":"eBay returned a block response."
+            }],
+        }
+        with patch.object(scraper, "write_data"), patch.object(
+            scraper, "ebay_search_terms", return_value="Pikachu PSA 10"
+        ):
+            scraper.prepare_one_time_refresh(payload)
+        self.assertEqual(
+            payload["collector"]["nextEligibleAt"], "2026-08-06T10:00:00Z"
+        )
+
     def test_optional_status_failure_never_stops_collection(self):
         client = MagicMock()
         client.report_collector_status.side_effect = TypeError("bad status")
