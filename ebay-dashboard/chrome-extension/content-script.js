@@ -180,6 +180,72 @@ function altSoldDate(rowText) {
   return rowText.match(/\b(?:Sold\s+(?:on\s+)?)?([A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4})\b/i)?.[1] || "";
 }
 
+function altPageTitle() {
+  return [...document.querySelectorAll("main h1, main h2, h1, h2")]
+    .map((node) => node.textContent?.replace(/\s+/g, " ").trim() || "")
+    .find((value) => /\b(?:PSA|BGS|CGC|SGC)\b/i.test(value) || /#\w+/.test(value))
+    || document.querySelector("main h1")?.textContent?.replace(/\s+/g, " ").trim()
+    || "Alt card";
+}
+
+function altCompactRow(priceNode) {
+  let row = priceNode;
+  for (let depth = 0; row?.parentElement && depth < 7; depth += 1) {
+    const text = row.innerText?.replace(/\s+/g, " ").trim() || "";
+    const hasContext = /\b(?:fixed price|auction|buy now|offer|bid|listing)\b/i.test(text)
+      || Boolean(altSoldDate(text));
+    if (hasContext && text.length <= 700) return row;
+    row = row.parentElement;
+  }
+  return priceNode.parentElement;
+}
+
+function altRowUrl(row) {
+  const link = row?.closest?.("a[href]") || row?.querySelector?.("a[href]");
+  return link?.href || location.href;
+}
+
+function collectAltResearchRows() {
+  const soldItems = [];
+  const activeItems = [];
+  const seen = new Set();
+  const pageTitle = altPageTitle();
+  const priceNodes = [...document.querySelectorAll("main *")].filter((node) => {
+    if (node.children.length > 0) return false;
+    return /^(?:US\s*)?\$[\d,]+(?:\.\d{2})?$/.test(
+      node.textContent?.replace(/\s+/g, " ").trim() || ""
+    );
+  });
+  priceNodes.forEach((priceNode, index) => {
+    const row = altCompactRow(priceNode);
+    const rowText = row?.innerText?.replace(/\s+/g, " ").trim() || "";
+    const priceText = priceNode.textContent?.replace(/\s+/g, " ").trim() || "";
+    if (!rowText || !priceText) return;
+    const soldAt = altSoldDate(rowText);
+    const role = soldAt ? "sold" : (
+      /\b(?:fixed price|buy now|offer|listing)\b/i.test(rowText) ? "active" : ""
+    );
+    if (!role) return;
+    const url = altRowUrl(row);
+    const key = `${role}|${soldAt}|${priceText}|${rowText}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const marketplace = rowText.match(/\b(?:eBay|Card Hobby|Heritage|Goldin|PWCC|Alt)\b/i)?.[0] || "Alt";
+    const item = {
+      id:`alt-${role}-${index}-${soldAt || priceText}`,
+      title:`${pageTitle} — ${marketplace} ${role === "sold" ? "sale" : "listing"}`,
+      priceText,
+      url,
+    };
+    if (role === "sold") {
+      soldItems.push({ ...item, soldText:`Sold ${soldAt}`, soldAt });
+    } else {
+      activeItems.push(item);
+    }
+  });
+  return { soldItems, activeItems };
+}
+
 function collectAltRows() {
   const seen = new Set();
   const soldItems = [];
@@ -221,7 +287,11 @@ function collectAltRows() {
       activeItems.push(raw);
     }
   }
-  return { soldItems, activeItems };
+  const research = collectAltResearchRows();
+  return {
+    soldItems:[...soldItems, ...research.soldItems],
+    activeItems:[...activeItems, ...research.activeItems],
+  };
 }
 
 function altIdentityText(cert) {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Slab Ledger Collector",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Processes the private Slab Ledger market research queue in normal Chrome.",
   "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [

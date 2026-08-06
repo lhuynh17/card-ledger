@@ -59,6 +59,10 @@ than submitting a traditional HTML form. Extension 0.3.2 and later types the
 cert, waits for the one year/number/subject-matched result button, and opens it
 before attempting to read market evidence.
 
+Extension 0.3.3 also reads Alt's table-style `Recent Transactions` and
+`Listings` rows after the exact research page opens. Empty or unmatched
+results still cannot replace an existing value.
+
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
