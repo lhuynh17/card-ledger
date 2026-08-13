@@ -11,6 +11,12 @@ inventory search once at the normal safe pace, preserves existing values when
 evidence is uncertain or unavailable, and then returns to the regular 2:00 AM
 schedule.
 
+To test the Alt extension without waiting or searching the whole inventory,
+stop the normal collector and double-click `test-one-alt-lookup.bat`. Enter an
+active-inventory PSA cert number, or press Enter to use the first eligible
+card. It runs exactly one immediate cert lookup and prints a clear passed,
+failed, or needs-attention result. No other cards are searched.
+
 ## First-time Windows setup
 
 1. Pull the latest `card-ledger` changes in GitHub Desktop.
@@ -25,15 +31,15 @@ schedule.
    screen is fine.
 
 `setup-windows.bat` installs the Python collector components. Install the
-current Google Chrome for Windows separately. The default proof uses the
-unpacked extension under `chrome-extension/` in the owner's normal signed-in
-Chrome profile. Local pairing data, logs, credentials, and live results are
-excluded from Git.
+current Google Chrome for Windows separately. The unpacked extension under
+`chrome-extension/` uses Alt exact-cert lookups first for PSA cards and keeps
+the existing eBay search as the automatic fallback. Local pairing data, logs,
+credentials, and live results are excluded from Git.
 
 ## Install the normal-Chrome extension
 
-1. Open `chrome://extensions` in the normal Chrome profile that can sign in to
-   eBay.
+1. Open `chrome://extensions` in the normal Chrome profile used for the
+   owner's authorized Alt and eBay research.
 2. Turn on **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select the repository's `ebay-dashboard/chrome-extension` folder.
@@ -48,12 +54,34 @@ stored in the Windows user's private local application-data folder, not under
 the dashboard server. It is not a PocketBase, eBay, or provider credential. Do
 not share it.
 
+Alt's header search renders cert matches as selectable result buttons rather
+than submitting a traditional HTML form. Extension 0.3.2 and later types the
+cert, waits for the one year/number/subject-matched result button, and opens it
+before attempting to read market evidence.
+
+Extension 0.3.3 also reads Alt's table-style `Recent Transactions` and
+`Listings` rows after the exact research page opens. Empty or unmatched
+results still cannot replace an existing value.
+
+Extension 0.3.4 reads those rows from Alt's rendered page even when the site
+does not provide a semantic `main` wrapper. The local bridge also ignores a
+duplicate completion from an older Alt tab.
+
+Extension 0.3.5 transfers the queued job when Alt opens the exact-cert card in
+a new tab, closes the obsolete search tab, and waits for Recent Transactions
+to render before returning evidence.
+
 ## Collection safeguards
 
 - Active PocketBase inventory is authoritative; sold cards are skipped.
 - Identical slab identities share a cached result.
-- One daily cycle starts at 2:00 AM and paces requests every 2–4 minutes.
-- Each card gets one sold-results lookup and one active-results lookup.
+- One daily cycle starts at 2:00 AM and paces lookups every 2–4 minutes.
+- A PSA card first gets one Alt lookup by exact cert number. That single pass
+  can return its latest sale and up to three active listings.
+- Alt is capped at 59 cert lookups per rolling 24 hours, strictly below the
+  written-authorization limit of 60. Cards beyond that cap use eBay.
+- If Alt has no exact cert, grader, grade, year, printed number, and card-name
+  match, it returns no value and the existing eBay lookup is queued instead.
 - Only the most recent exact sale changes the market value.
 - Up to three confirmed sales and three lowest exact active listings are kept.
 - Ambiguous candidates never change the value until the owner confirms one.
@@ -68,6 +96,9 @@ not share it.
   PocketBase market value.
 
 The default collector uses an unpacked extension in normal Google Chrome.
+Alt use depends on the owner's retained written authorization for this
+low-frequency personal tool. The extension does not store an Alt password,
+cookie, API key, or PocketBase credential and never buys, bids, or lists cards.
 Playwright remains a disabled troubleshooting fallback. Neither path includes
 stealth plugins,
 fingerprint disguises, challenge solvers, proxy rotation, or other blocking
@@ -85,6 +116,7 @@ SLAB_COLLECTOR_DAILY_RUN_TIME=02:00
 SLAB_COLLECTOR_MIN_DELAY_MINUTES=2
 SLAB_COLLECTOR_MAX_DELAY_MINUTES=4
 SLAB_COLLECTOR_DAILY_CEILING=150
+SLAB_ALT_DAILY_CEILING=59
 SLAB_COLLECTOR_PROOF_LIMIT=0
 SLAB_COLLECTOR_EVALUATION_ONLY=1
 ```

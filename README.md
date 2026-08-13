@@ -14,8 +14,10 @@ The app tracks:
   asking prices; uncertain matches wait for owner confirmation;
 - a default-off Bright Data evaluation adapter behind authenticated PocketBase
   routes, with private usage controls, caching, normalized observations, and a
-  Marketplace Usage dashboard; live collection remains disabled until the
-  owner's account-specific eBay dataset and schema are validated;
+  dormant managed-provider dashboard retained for future validation; it is not
+  shown in the current local-collector interface, and live collection remains
+  disabled until the owner's account-specific eBay dataset and schema are
+  validated;
 - separate default-off managed-provider evaluation paths with usage estimates
   and no automatic value replacement;
 - an optional Windows collector paired to an unpacked normal-Chrome extension;

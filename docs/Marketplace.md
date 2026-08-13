@@ -44,31 +44,36 @@ The Research action opens eBay's seller Product Research interface with:
 
 The user remains in control and can inspect best offers and listing details.
 
-### Local eBay collector — Current, optional legacy companion
+### Local visible-browser collector — Current, optional companion
 
-The Python collector:
+The Python collector and paired Chrome extension:
 
 - reads active PocketBase inventory;
-- builds normalized searches;
-- queues one rendered sold-results page for an unpacked extension in the
-  owner's normal signed-in Google Chrome profile;
+- uses an exact PSA cert-number Alt lookup as the primary path when available;
+- independently requires the displayed cert, grader, grade, year, printed
+  number, and card identity to match before accepting Alt data;
+- extracts one latest sold observation and up to three lowest active listings
+  from that single exact-cert pass;
+- queues the existing structured eBay sold and active searches when Alt has no
+  exact match, the Alt daily cap is reached, or Alt is unavailable;
 - filters candidates locally;
 - calculates a valuation;
 - defaults to evaluation-only so proof candidates remain local;
 - serves a separate dashboard only on `127.0.0.1`.
 
-The initial proof runs three unique searches throughout the day on the
-dedicated computer, paces them 12–20 minutes apart, and retains the latest three verified sold
-candidates per card.
-The normal Chrome tab pauses when eBay requests a sign-in or CAPTCHA and
+Alt access is limited to the owner's written authorization for fewer than 60
+slow cert lookups per day in a visible personal Chrome session. Slab Ledger
+hard-stops Alt at 59 rolling-day lookups. No automated buying, bidding, account
+action, or bulk database crawl is implemented.
+
+The normal Chrome tab pauses when Alt or eBay requests a sign-in or CAPTCHA and
 resumes only after the owner manually completes it. It does not solve, route
 around, or intensify traffic after a challenge. A provider failure or unfinished
 challenge preserves the last known good data.
 
-For scarce cards selected by the owner, the collector may make one separate
-active-results request and retain the three lowest locally matched asking
-prices. These remain labeled active observations and are never used as proof of
-a completed transaction.
+The Alt exact-cert path returns active context in the same lookup. The eBay
+fallback may make one separate active-results request. Active observations are
+never used as proof of a completed transaction.
 
 After the proof output has been reviewed, accepted candidates can be migrated
 through the normalized owner-private observation boundary. Enabling that import
@@ -185,7 +190,9 @@ Implemented safeguards:
 - owner-only usage, activity, cache, and normalized observation records;
 - duplicate-operation blocking and shared recent-query cache;
 - side-by-side UI evaluation that never writes a value automatically;
-- a Marketplace Usage dashboard.
+- a dormant Marketplace Usage dashboard module retained for future managed-
+  provider validation. Its old top-level button is hidden while the deployed
+  Windows collector is the active path.
 - separate owner-controlled schedules for one-to-two sold observations and
   three-to-five active observations, with per-card due state and overrides.
 
@@ -201,10 +208,11 @@ Still required before live record collection:
 
 The trusted local collector starts one inventory refresh cycle at 2:00 AM by
 default. It spaces work across a bounded ten-hour window so the dedicated
-computer does not burst requests. For every unique card identity it performs:
+computer does not burst requests. For every PSA card identity it attempts:
 
-- one newest-first sold search;
-- one lowest-price active search;
+- one exact-cert Alt lookup for the latest sale and active listings;
+- the original newest-first eBay sold and lowest-price active lookups only as
+  fallbacks;
 - strict local identity validation before either result is stored.
 
 The newest exact sold result becomes the current market value. A new listing ID
@@ -213,7 +221,10 @@ entries. The three lowest exact active listings are stored separately and never
 affect valuation. Empty results, failures, and rejected listings preserve the
 existing trusted value.
 
-If a plausible result omits the grader, grade, or another required PSA identity
+The eBay query stays broad enough for normal seller-title variations, quotes
+only a distinctive two- or three-word subject when useful, and applies eBay's
+native numeric Grade facet in addition to local exact-grade validation. If a
+plausible result omits the grader, grade, or another required PSA identity
 field, up to three newest candidates are held for review. The owner can open
 each listing and explicitly use or reject it. An explicit conflict in year,
 language, printed number, edition, grader, grade, or subject is rejected and
@@ -221,7 +232,7 @@ cannot be confirmed through the normal review queue. The card detail screen is
 limited to two evidence sections—recent sold listings and the three lowest
 matching active listings—plus direct eBay and Product Research links.
 
-## Managed-provider evaluation schedule — Gated foundation
+## Managed-provider evaluation schedule — Gated, dormant foundation
 
 The owner can separately configure one or two Apify sold observations and
 three, four, or five Bright Data active observations in hours, days, weeks, or

@@ -484,3 +484,60 @@ or reduce an existing trusted value. The card-detail UI centers current value,
 confirmed sales, active asks, and a single confirmation path. The local-only
 collector, owner-only PocketBase records, outbound-only network boundary,
 manual values, Product Research, and provider fallbacks remain unchanged.
+
+## 2026-08-03 — Card-level collector alerts and focused search controls
+
+**Decision:** Replace the large global collector-attention banner with a small
+red notification on the affected inventory tile. The notification explains
+whether a sale needs review or the Windows collector needs operator attention.
+Hide the obsolete top-level managed-provider dashboard button while keeping its
+default-off implementation available for future validation.
+
+Use eBay's native numeric grade facet for sold and active searches, keep grader
+and grade terms in the query, and quote only a short distinctive card subject.
+Continue to make final acceptance through strict local year, language, printed
+number, edition, grader, grade, and subject checks.
+
+**Why:** Collector problems should be visible without displacing the primary
+inventory workflow. Full-label exact phrases suppress legitimate listings,
+while wholly loose searches create noisy candidates. A selective retrieval
+query plus strict local identity validation provides a safer balance.
+
+**Consequence:** No provider, credential, network boundary, stored value, or
+manual fallback changes. Managed-provider controls remain dormant rather than
+deleted, and ambiguous sales still require explicit owner confirmation.
+
+## 2026-08-04 — Empty cloud responses cannot erase local inventory
+
+**Decision:** When the browser already contains synced cards, treat an empty
+PocketBase card response as ambiguous. Preserve the local inventory and report
+**Inventory protected** instead of deleting the local copies.
+
+**Why:** An authenticated request may return zero visible records because of a
+signed-in-account or ownership-rule mismatch. A successful connection alone
+does not prove that the owner intentionally deleted every card.
+
+**Consequence:** Recovery of an already-empty browser still requires checking
+the private `cards` collection or a known-good PocketBase backup. The guard does
+not invent records or overwrite cloud data.
+
+## 2026-08-04 — Prefer authorized Alt exact-cert evidence with eBay fallback
+
+**Decision:** Under the owner's retained written Alt authorization, the local
+visible-Chrome collector first enters the exact PSA certification number into
+Alt's `name or cert #` search. Accept data only when the returned cert, PSA
+grader, exact grade, year, printed card number, and card identity all match.
+Collect at most the latest sold price and three lowest active listings in one
+pass. Cap Alt at 59 lookups per rolling 24 hours.
+
+If Alt is empty, ambiguous, unavailable, or over its cap, queue the existing
+eBay workflow. Never clear or replace a trusted value on an Alt failure.
+
+**Why:** Certification number is a stronger retrieval key than varying seller
+titles and removes much of the query guesswork that caused wrong-card results.
+
+**Consequence:** The extension gains outbound access to Alt only; PocketBase,
+the NAS, and the localhost bridge remain private. No Alt credential is stored,
+and no buying, bidding, listing, messaging, CAPTCHA solving, stealth, or proxy
+behavior is introduced. Manual entry, Product Research, and eBay remain
+available.

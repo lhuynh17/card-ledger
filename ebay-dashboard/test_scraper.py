@@ -2,7 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +13,73 @@ import scraper
 
 
 class CollectorConfigurationTests(unittest.TestCase):
+    def test_single_alt_test_queues_only_requested_inventory_cert(self):
+        payload = {
+            "inventory":[
+                {"id":"card-1", "company":"PSA", "cert":"111", "name":"One"},
+                {"id":"card-2", "company":"PSA", "cert":"222", "name":"Two"},
+            ],
+            "valuations":[{"cardId":"card-2", "marketValue":900}],
+            "collector":{},
+            "extensionJobs":[{"status":"pending", "id":"old"}],
+        }
+        written = {}
+
+        def capture(value):
+            written.clear()
+            written.update(value)
+
+        with patch.object(scraper, "write_data", side_effect=capture), \
+                patch.object(scraper, "read_data", side_effect=lambda: written), \
+                patch.object(scraper, "queue_extension_group") as queue:
+            selected = scraper.prepare_single_alt_test(payload, "222")
+        self.assertEqual(selected["id"], "card-2")
+        self.assertEqual(written["extensionJobs"], [])
+        self.assertEqual(written["valuations"][0]["marketValue"], 900)
+        queue.assert_called_once()
+        self.assertEqual(queue.call_args.args[1][0]["cert"], "222")
+
+    def test_single_alt_test_rejects_cert_outside_active_inventory(self):
+        payload = {
+            "inventory":[
+                {"id":"card-1", "company":"PSA", "cert":"111", "name":"One"}
+            ],
+            "collector":{}, "extensionJobs":[],
+        }
+        with self.assertRaisesRegex(ValueError, "not in the current active inventory"):
+            scraper.prepare_single_alt_test(payload, "999")
+
+    def test_stale_extension_job_fails_without_changing_valuation(self):
+        now = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+        payload = {
+            "inventory":[{"id":"card-1"}],
+            "valuations":[{"cardId":"card-1", "marketValue":4000}],
+            "collector":{},
+            "extensionJobs":[{
+                "id":"job-1", "provider":"alt", "role":"market",
+                "status":"running", "cards":[{"id":"card-1"}],
+                "startedAt":(now - timedelta(minutes=16)).isoformat(),
+            }],
+        }
+        with patch.object(scraper, "write_data") as write_data, \
+                patch.object(scraper, "report_cloud_status") as status:
+            expired = scraper.expire_stale_extension_job(payload, now)
+        self.assertEqual(expired["status"], "failed")
+        self.assertEqual(payload["valuations"][0]["marketValue"], 4000)
+        self.assertIn("preserved", expired["safeError"])
+        write_data.assert_called_once_with(payload)
+        status.assert_called_once()
+
+    def test_fresh_extension_job_is_not_expired(self):
+        now = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+        payload = {"extensionJobs":[{
+            "status":"running",
+            "startedAt":(now - timedelta(minutes=5)).isoformat(),
+        }]}
+        with patch.object(scraper, "write_data") as write_data:
+            self.assertIsNone(scraper.expire_stale_extension_job(payload, now))
+        write_data.assert_not_called()
+
     def test_one_time_refresh_preserves_evidence_and_clears_freshness(self):
         payload = {
             "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
@@ -27,6 +94,10 @@ class CollectorConfigurationTests(unittest.TestCase):
                 },
                 {"role":"active", "status":"pending", "search":"other"},
             ]},
+            "extensionJobs":[{
+                "role":"sold", "status":"running",
+                "search":'Pikachu "PSA 10" -"PSA 9"',
+            }],
         }
         with patch.object(scraper, "write_data") as write_data, \
                 patch.object(
@@ -40,8 +111,45 @@ class CollectorConfigurationTests(unittest.TestCase):
         self.assertEqual(
             payload["valuations"][0]["recentComparables"], [{"id":"sale-1"}]
         )
-        self.assertEqual(len(payload["collector"]["extensionJobs"]), 1)
+        self.assertEqual(payload["collector"]["extensionJobs"], [])
+        self.assertEqual(payload["extensionJobs"], [])
         write_data.assert_called_once_with(payload)
+
+    def test_one_time_refresh_clears_only_extension_timeout_cooldown(self):
+        payload = {
+            "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
+            "valuations":[],
+            "collector":{"nextEligibleAt":"2026-08-06T10:00:00Z"},
+            "extensionJobs":[{
+                "status":"failed",
+                "safeError":(
+                    "Chrome did not return a result within 15 minutes. "
+                    "Existing market data was preserved."
+                ),
+            }],
+        }
+        with patch.object(scraper, "write_data"), patch.object(
+            scraper, "ebay_search_terms", return_value="Pikachu PSA 10"
+        ):
+            scraper.prepare_one_time_refresh(payload)
+        self.assertEqual(payload["collector"]["nextEligibleAt"], "")
+
+    def test_one_time_refresh_keeps_unrelated_safety_cooldown(self):
+        payload = {
+            "inventory":[{"id":"card-1", "name":"Pikachu PSA 10"}],
+            "valuations":[],
+            "collector":{"nextEligibleAt":"2026-08-06T10:00:00Z"},
+            "extensionJobs":[{
+                "status":"failed", "safeError":"eBay returned a block response."
+            }],
+        }
+        with patch.object(scraper, "write_data"), patch.object(
+            scraper, "ebay_search_terms", return_value="Pikachu PSA 10"
+        ):
+            scraper.prepare_one_time_refresh(payload)
+        self.assertEqual(
+            payload["collector"]["nextEligibleAt"], "2026-08-06T10:00:00Z"
+        )
 
     def test_optional_status_failure_never_stops_collection(self):
         client = MagicMock()
@@ -175,6 +283,98 @@ class CollectorConfigurationTests(unittest.TestCase):
 
 
 class SoldResultTests(unittest.TestCase):
+    def alt_card(self):
+        return {
+            "id":"card-alt", "company":"PSA", "cert":"68410100",
+            "grade":"10", "name":"2006 Pokemon EX Holon Phantoms #16 Rayquaza",
+            "psa_year":"2006", "psa_subject":"Rayquaza Holon Phantoms",
+            "psa_card_number":"16", "active_listing_count":3,
+        }
+
+    def test_alt_exact_cert_normalizes_one_sale_and_three_lowest_active(self):
+        card = self.alt_card()
+        job = {"cert":"68410100"}
+        incoming = {
+            "identity":{
+                "exact":True,
+                "text":"2006 EX Holon Phantoms #16 Rayquaza PSA 10 Cert 68410100",
+            },
+            "soldItems":[{
+                "id":"sale-1", "title":"Rayquaza #16 PSA 10",
+                "priceText":"$10,786.40", "soldAt":"2026-07-19",
+                "url":"https://alt.xyz/marketplace/sale-1",
+            }],
+            "activeItems":[
+                {"id":"high", "title":"Rayquaza #16", "priceText":"$12,000", "url":"https://alt.xyz/marketplace/high"},
+                {"id":"low", "title":"Rayquaza #16", "priceText":"$11,000", "url":"https://alt.xyz/marketplace/low"},
+                {"id":"middle", "title":"Rayquaza #16", "priceText":"$11,500", "url":"https://alt.xyz/marketplace/middle"},
+                {"id":"extra", "title":"Rayquaza #16", "priceText":"$13,000", "url":"https://alt.xyz/marketplace/extra"},
+            ],
+        }
+        result = scraper.alt_valuation(card, job, incoming)
+        self.assertEqual(result["marketValue"], 10786.40)
+        self.assertEqual([item["id"] for item in result["activeListings"]],
+                         ["low", "middle", "high"])
+        self.assertEqual(result["source"], "Alt exact-cert collector")
+
+    def test_alt_wrong_identity_returns_no_value(self):
+        card = self.alt_card()
+        incoming = {
+            "identity":{
+                "exact":True,
+                "text":"2005 EX Deoxys #22 Rayquaza PSA 10 Cert 68410100",
+            },
+            "soldItems":[{
+                "id":"wrong", "title":"Wrong card", "priceText":"$1,050",
+                "soldAt":"2026-07-30", "url":"https://alt.xyz/wrong",
+            }],
+        }
+        self.assertIsNone(scraper.alt_valuation(
+            card, {"cert":"68410100"}, incoming
+        ))
+
+    def test_alt_empty_exact_match_queues_ebay_and_preserves_value(self):
+        card = self.alt_card()
+        payload = {
+            "inventory":[card],
+            "valuations":[{"cardId":"card-alt", "marketValue":10786.40}],
+            "collector":{}, "extensionJobs":[],
+        }
+        job = {
+            "id":"alt-job", "provider":"alt", "role":"market",
+            "cert":"68410100", "cards":[card], "status":"running",
+        }
+        payload["extensionJobs"].append(job)
+        config = {
+            "minimum_delay_minutes":2, "evaluation_only":True,
+            "result_limit":1,
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(scraper, "OUTPUT", Path(folder) / "data.json"), \
+                    patch.object(scraper, "collector_config", return_value=config):
+                scraper.finish_alt_extension_job(payload, job, {
+                    "identity":{"exact":False}, "soldItems":[], "activeItems":[],
+                })
+        self.assertEqual(payload["valuations"][0]["marketValue"], 10786.40)
+        fallback = payload["extensionJobs"][-1]
+        self.assertEqual(fallback["provider"], "ebay")
+        self.assertEqual(fallback["role"], "sold")
+
+    def test_alt_daily_limit_is_strictly_under_sixty(self):
+        now = datetime.now().astimezone()
+        payload = {
+            "collector":{"altRequestLog":[now.isoformat()] * 59},
+            "extensionJobs":[],
+        }
+        self.assertEqual(scraper.alt_jobs_in_window(payload), 59)
+        with patch.object(scraper, "collector_config", return_value={
+            "alt_daily_ceiling":59,
+        }), patch.object(scraper, "read_data", return_value={
+            "inventory":[self.alt_card()],
+        }), patch.object(scraper, "write_data"):
+            scraper.queue_extension_group(payload, [self.alt_card()])
+        self.assertEqual(payload["extensionJobs"][-1]["provider"], "ebay")
+
     def test_extension_items_require_ebay_url_price_and_sold_date(self):
         items = scraper.normalize_extension_items([
             {
@@ -350,6 +550,21 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("LH_Sold=1", result["searchUrl"])
         self.assertIn("LH_Complete=1", result["searchUrl"])
         self.assertIn("_sop=13", result["searchUrl"])
+        self.assertIn("Grade=10", result["searchUrl"])
+
+    def test_native_grade_filter_is_applied_to_sold_and_active_urls(self):
+        card = {
+            "id":"card-1", "company":"PSA", "grade":"10",
+            "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        sold = scraper.ebay_search_params("Rayquaza PSA 10", card)
+        active = scraper.ebay_search_params(
+            "Rayquaza PSA 10", card, role="active"
+        )
+        self.assertEqual(sold["Grade"], "10")
+        self.assertEqual(active["Grade"], "10")
+        self.assertEqual(sold["LH_Sold"], 1)
+        self.assertNotIn("LH_Sold", active)
 
     def test_valuation_uses_only_the_most_recent_exact_sale(self):
         card = {
@@ -385,7 +600,8 @@ class SoldResultTests(unittest.TestCase):
         self.assertIn("090/088", query)
         self.assertIn("GENGAR EX", query)
         self.assertIn("1st Edition", query)
-        self.assertIn('-"PSA 9"', query)
+        self.assertIn("PSA 10", query)
+        self.assertNotIn('"PSA 10"', query)
 
     def test_grade_must_be_attached_to_the_grading_company(self):
         card = {
@@ -468,6 +684,23 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["comparables"], [])
         self.assertIn("rejected-sale", payload["rejected_listing_ids"])
 
+    def test_null_rejected_listing_field_is_treated_as_empty(self):
+        result = {
+            "cardId":"card-1", "confidence":"high", "marketValue":500,
+            "lastChecked":"2026-08-02T00:00:00Z",
+            "recentComparables":[{
+                "id":"new-sale", "total":500,
+                "soldAt":"2026-08-01T00:00:00Z",
+            }],
+        }
+        previous = {
+            "market_value":0, "comparables":[], "history":[],
+            "rejected_listing_ids":None,
+        }
+        payload = scraper.automatic_market_payload(result, previous, "owner-1")
+        self.assertEqual(payload["market_value"], 500)
+        self.assertEqual(payload["rejected_listing_ids"], [])
+
     def test_wrong_variant_in_same_set_is_not_an_exact_match(self):
         card = {
             "company":"PSA", "grade":"10", "psa_year":"2016",
@@ -493,9 +726,71 @@ class SoldResultTests(unittest.TestCase):
         query = scraper.ebay_search_terms(card)
         for required in (
             "2014", "JAPANESE", "XY PHANTOM GATE", "GENGAR EX",
-            "090/088", '"PSA 10"', "-raw", "-ungraded",
+            "090/088", '"GENGAR EX"', "PSA 10", "-raw", "-ungraded",
         ):
             self.assertIn(required, query)
+
+    def test_psa_label_shorthand_is_removed_from_search_subject(self):
+        pikachu = {
+            "company":"PSA", "grade":"10", "psa_year":"2019",
+            "psa_subject":"FA/PIKACHU LMTD.COLL.MASTER BTL.SET",
+            "psa_brand":"Pokemon Japanese SM Promo", "psa_card_number":"400",
+            "name":"2019 Pokemon Japanese SM Promo #400 Pikachu",
+        }
+        gengar = {
+            "company":"PSA", "grade":"10", "psa_year":"2014",
+            "psa_subject":"Gengar EX",
+            "psa_brand":"Pokemon Japanese XY Phantom Gate",
+            "psa_card_number":"090/088",
+            "name":"2014 Pokemon Japanese Phantom Gate #090/088 Gengar EX 1st Ed",
+        }
+        pikachu_query = scraper.ebay_search_terms(pikachu)
+        gengar_query = scraper.ebay_search_terms(gengar)
+        self.assertIn(
+            "2019 JAPANESE SM PROMO 400 PIKACHU PSA 10", pikachu_query
+        )
+        for noise in (" FA ", " LMTD ", " COLL ", " MASTER ", " BTL "):
+            self.assertNotIn(noise, f" {pikachu_query} ")
+        self.assertIn(
+            '2014 JAPANESE XY PHANTOM GATE 090/088 "GENGAR EX" '
+            "1st Edition PSA 10",
+            gengar_query,
+        )
+
+    def test_rayquaza_search_is_unquoted_and_real_sale_is_reviewable(self):
+        card = {
+            "id":"rayquaza", "company":"PSA", "grade":"10",
+            "psa_year":"2006", "psa_subject":"Rayquaza Holo",
+            "psa_brand":"Pokemon EX Holon Phantoms", "psa_card_number":"16",
+            "name":"2006 EX Holon Phantoms #16 Rayquaza",
+        }
+        query = scraper.ebay_search_terms(card)
+        self.assertIn("2006 EX HOLON PHANTOMS 16 RAYQUAZA", query)
+        self.assertIn("PSA 10", query)
+        self.assertNotIn('"PSA 10"', query)
+
+        real_sale = {
+            "id":"real", "title":"Pokemon Card - PSA 10 Rayquaza 16/110 - Ex Holon",
+            "total":10786.40, "soldAt":"2026-07-19T00:00:00Z",
+        }
+        wrong_card = {
+            "id":"wrong", "title":"Rayquaza PSA 10 2005 Pokemon EX Deoxys #22",
+            "total":1050, "soldAt":"2026-07-30T00:00:00Z",
+        }
+        status, reasons = scraper.listing_identity_assessment(card, real_sale)
+        self.assertEqual(status, "review")
+        self.assertIn("year_missing", reasons)
+        wrong_status, wrong_reasons = scraper.listing_identity_assessment(
+            card, wrong_card
+        )
+        self.assertEqual(wrong_status, "rejected")
+        self.assertTrue(
+            {"different_year", "different_printed_number"} & set(wrong_reasons)
+        )
+
+        result = scraper.valuation(card, query, [wrong_card, real_sale])
+        self.assertEqual(result["marketValue"], 0)
+        self.assertEqual([item["id"] for item in result["reviewCandidates"]], ["real"])
 
     def test_gengar_requires_year_language_and_full_card_number(self):
         card = {
@@ -771,6 +1066,19 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["high"], 120)
         self.assertEqual(payload["source"], "Composite: Alt + eBay")
         self.assertEqual(payload["algorithm_version"], "multi-source-latest-median-v1")
+
+    def test_alt_result_creates_alt_observation(self):
+        result = {
+            "cardId":"card-1", "marketValue":600, "confidence":"high",
+            "source":"Alt exact-cert collector", "lastChecked":"2026-08-02",
+            "recentComparables":[{
+                "id":"alt-sale-1", "total":600,
+                "url":"https://alt.xyz/itm/example/research",
+            }],
+        }
+        payload = scraper.market_observation_payload(result, "owner-1")
+        self.assertEqual(payload["source"], "alt")
+        self.assertEqual(payload["source_item_id"], "alt-sale-1")
 
     def test_summary_does_not_replace_manual_market_value(self):
         payload = scraper.market_summary_payload(
