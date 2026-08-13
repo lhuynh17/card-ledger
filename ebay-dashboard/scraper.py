@@ -596,9 +596,25 @@ class PocketBaseClient:
         previous_checked = checked_at(
             previous.get("checked_at") or previous.get("updated") or ""
         )
-        if previous and result_checked <= previous_checked:
-            return False
         body = automatic_market_payload(result, previous, self.user_id)
+        observation = ebay_observation_payload(result, self.user_id)
+        observation_appended = False
+        if body["auto_status"] == "automatic" and observation:
+            observation_appended = self.append_market_observation(observation)
+            observations = self.request(
+                "GET", "/api/collections/market_value_observations/records",
+                params={
+                    "perPage": 500,
+                    "sort": "-observed_at",
+                    "filter": (
+                        f'owner = "{self.user_id}" && card_id = "{card_id}" '
+                        '&& match_status = "matched"'
+                    ),
+                },
+            ).json().get("items", [])
+            body.update(market_summary_payload(observations, previous))
+        if previous and result_checked <= previous_checked and not observation_appended:
+            return False
         if items:
             self.request(
                 "PATCH",
@@ -607,6 +623,26 @@ class PocketBaseClient:
             )
         else:
             self.request("POST", "/api/collections/market_values/records", json=body)
+        return True
+
+    def append_market_observation(self, body: dict) -> bool:
+        """Append an observation once, keyed by source and source item id."""
+        source_item_id = str(body.get("source_item_id") or "")
+        response = self.request(
+            "GET", "/api/collections/market_value_observations/records",
+            params={
+                "perPage": 1,
+                "filter": (
+                    f'owner = "{self.user_id}" && source = "ebay" '
+                    f'&& source_item_id = "{source_item_id}"'
+                ),
+            },
+        ).json()
+        if response.get("items"):
+            return False
+        self.request(
+            "POST", "/api/collections/market_value_observations/records", json=body
+        )
         return True
 
 
@@ -663,12 +699,13 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
         and suggested > 0
         and (suggested < previous_value * 0.5 or suggested > previous_value * 1.5)
     )
+    manual = str(previous.get("auto_status") or "") == "manual"
     promote = (
         confidence in ("high", "medium")
         and suggested > 0
         and not dramatic_change
     )
-    market_value = suggested if promote else previous_value
+    market_value = suggested if promote and not manual else previous_value
     history = previous.get("history") if isinstance(previous.get("history"), list) else []
     checked = pocketbase_date(result.get("lastChecked", ""))
     old_sales = previous.get("comparables") if isinstance(previous.get("comparables"), list) else []
@@ -715,7 +752,7 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "confidence": confidence,
             "identity_confidence": result.get("identityConfidence", confidence),
             "volatility": result.get("volatility", "unknown"),
-            "auto_status": "automatic" if promote else "provisional",
+            "auto_status": "manual" if manual else ("automatic" if promote else "provisional"),
             "checked_at": checked,
             "comparable_count": int(result.get("comparableCount", 0)),
             "rejected_count": int(result.get("rejectedCount", 0)),
@@ -727,11 +764,86 @@ def automatic_market_payload(result: dict, previous: dict, owner_id: str) -> dic
             "review_candidates": review_candidates,
             "rejected_listing_ids": list(rejected_ids)[-100:],
             "algorithm_version": VALUATION_ALGORITHM_VERSION,
-            "source": "Local eBay collector" if promote else previous.get("source", ""),
+            "source": previous.get("source", "") if manual else (
+                "Latest eBay observation" if promote else previous.get("source", "")
+            ),
             "notes": previous.get("notes", ""),
             "history": history,
             "error": result.get("error", ""),
         }
+
+
+def ebay_observation_payload(result: dict, owner_id: str) -> Optional[dict]:
+    """Convert the accepted newest exact eBay sale into append-only evidence."""
+    sales = result.get("recentComparables", result.get("comparables", []))
+    if not sales:
+        return None
+    sale = sales[0]
+    value = number(sale.get("total") or sale.get("price") or result.get("marketValue"))
+    if value <= 0:
+        return None
+    source_url = str(sale.get("url") or result.get("searchUrl") or "")
+    observed_at = pocketbase_date(
+        sale.get("soldAt") or result.get("lastChecked") or datetime.now(timezone.utc).isoformat()
+    )
+    source_item_id = str(sale.get("id") or source_url or "")
+    if not source_item_id:
+        source_item_id = f"ebay:{result.get('cardId')}:{observed_at}:{value:.2f}"
+    return {
+        "owner": owner_id,
+        "card_id": str(result["cardId"]),
+        "source": "ebay",
+        "value": value,
+        "currency": "USD",
+        "observed_at": observed_at,
+        "source_url": source_url,
+        "source_item_id": source_item_id,
+        "cert_number": str(result.get("cert") or ""),
+        "match_status": "matched",
+        "metadata": {
+            "title": str(sale.get("title") or ""),
+            "confidence": str(result.get("confidence") or "low"),
+            "algorithm_version": VALUATION_ALGORITHM_VERSION,
+            "kind": "sold_listing",
+        },
+    }
+
+
+def market_summary_payload(observations: list[dict], previous: dict) -> dict:
+    """Build the current summary from the latest accepted row for each source."""
+    latest = {}
+    for observation in sorted(
+        observations, key=lambda item: str(item.get("observed_at") or ""), reverse=True
+    ):
+        source = str(observation.get("source") or "").lower()
+        value = number(observation.get("value"))
+        if source and value > 0 and source not in latest:
+            latest[source] = observation
+    if not latest:
+        return {}
+    source_values = [number(item["value"]) for item in latest.values()]
+    composite = round(statistics.median(source_values), 2)
+    spread = max(source_values) / min(source_values) if min(source_values) else 99
+    confidence = "high" if spread <= 1.15 else ("medium" if spread <= 1.30 else "low")
+    sources = sorted(latest)
+    manual = str(previous.get("auto_status") or "") == "manual"
+    display = lambda source: "eBay" if source == "ebay" else source.title()
+    label = (
+        f"Latest {display(sources[0])} observation"
+        if len(sources) == 1 else "Composite: " + " + ".join(display(item) for item in sources)
+    )
+    payload = {
+        "suggested_value": composite,
+        "checked_at": max(str(item.get("observed_at") or "") for item in latest.values()),
+        "confidence": confidence,
+        "low": min(source_values),
+        "high": max(source_values),
+        "comparable_count": len(source_values),
+        "algorithm_version": "multi-source-latest-median-v1",
+    }
+    if not manual:
+        payload.update({"market_value": composite, "source": label, "auto_status": "automatic"})
+    return payload
 
 
 def amount(text: str) -> float:

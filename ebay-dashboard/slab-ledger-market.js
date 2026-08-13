@@ -70,9 +70,22 @@
     return false;
   }
 
-  function fromRecord(record) {
+  function fromRecord(record, observations = []) {
     const comparables = jsonArray(record.comparables);
-    const history = jsonArray(record.history);
+    const legacyHistory = jsonArray(record.history);
+    const observationHistory = observations.map((item) => ({
+      date:item.observed_at || item.created,
+      value:Number(item.value) || 0,
+      source:String(item.source || "Market").replace(/^./, (letter) => letter.toUpperCase()),
+      url:item.source_url || "",
+      sourceItemId:item.source_item_id || "",
+    }));
+    const history = [...legacyHistory, ...observationHistory]
+      .filter((item, index, all) => all.findIndex((other) =>
+        `${other.date}|${other.value}|${other.sourceItemId || other.listingId || ""}` ===
+        `${item.date}|${item.value}|${item.sourceItemId || item.listingId || ""}`
+      ) === index)
+      .sort((left, right) => String(left.date || "").localeCompare(String(right.date || "")));
     const marketValue = Number(record.market_value) || 0;
     const previousDifferent = history.slice().reverse().find((item) =>
       Number(item?.value) > 0 && Number(item.value) !== marketValue
@@ -82,7 +95,7 @@
       recordId:record.id, cardId:String(record.card_id),
       marketValue,
       lastChecked:record.checked_at || record.updated || "",
-      source:record.source || "eBay Product Research",
+      source:record.source || "Current market summary",
       notes:record.notes || "", comparables,
       pendingBestOffers:jsonArray(record.pending_best_offers),
       activeListings:jsonArray(record.active_listings),
@@ -114,10 +127,19 @@
   async function loadAll() {
     if (!cloudSession?.token) return;
     try {
-      const data = await pbRequest("/api/collections/market_values/records?perPage=500&sort=-checked_at");
+      const [data, observationData] = await Promise.all([
+        pbRequest("/api/collections/market_values/records?perPage=500&sort=-checked_at"),
+        pbRequest("/api/collections/market_value_observations/records?perPage=500&sort=observed_at")
+      ]);
+      const observationsByCard = new Map();
+      for (const observation of observationData?.items || []) {
+        const cardId = String(observation.card_id || "");
+        if (!observationsByCard.has(cardId)) observationsByCard.set(cardId, []);
+        observationsByCard.get(cardId).push(observation);
+      }
       values.clear();
       for (const row of data?.items || []) {
-        const value = fromRecord(row);
+        const value = fromRecord(row, observationsByCard.get(String(row.card_id)) || []);
         if (!values.has(value.cardId)) values.set(value.cardId, value);
       }
       if (typeof inventory !== "undefined" && Array.isArray(inventory)) {
@@ -234,13 +256,13 @@
       ${matchedActive.length ? `<div class="market-subsection"><h4>Lowest active asking prices</h4><div class="market-evidence-list">${evidenceRows(matchedActive, "active")}</div></div>` : ""}
       <div class="market-research-actions"><a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Open current eBay sold search ↗</a></div></section>
       <details class="market-disclosure"><summary>Correct the current market value</summary><div class="market-disclosure-body"><form id="manualCompForm" class="manual-comps">
-      <p class="market-help">Enter one confirmed sale. It becomes the current market value and joins the rolling three-sale history.</p>
+      <p class="market-help">Enter one confirmed sale. Manual values remain protected; automated source observations build the long-term history.</p>
       <div class="market-research-actions">${String(card.company || "PSA").toUpperCase() === "PSA" && card.cert ? `<button class="primary" id="loadPsaSales" type="button">Fill from PSA sales <small>(1 API credit)</small></button>` : ""}
       <a href="${safe(soldUrl)}" target="_blank" rel="noopener noreferrer">Research on eBay ↗</a></div>
       ${Array.from({length:desiredComps}, (_, i) => `<div class="comp-row"><div class="mf"><label>Confirmed sold price</label><input class="comp-price" type="number" min="0" step="0.01" inputmode="decimal" value="${safe(comps[i]?.price || comps[i]?.total || "")}" placeholder="$0.00"></div>
       <div class="mf"><label>Listing link ${i + 1} (optional)</label><input class="comp-url" type="url" value="${safe(comps[i]?.url || "")}" placeholder="Paste the sold-listing link"></div></div>`).join("")}
       <div class="market-preview" id="manualPreview">New market value: —</div>
-      <div class="mf"><label>Source</label><select id="marketSource">${["PSA recent eBay sales","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "eBay Product Research") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
+      <div class="mf"><label>Source</label><select id="marketSource">${["Manual valuation","Alt","PSA recent eBay sales","eBay Product Research","eBay sold listings","130point","PriceCharting","Card show comps","Other"].map((source) => `<option${source === (value?.source || "Manual valuation") ? " selected" : ""}>${source}</option>`).join("")}</select></div>
       <div class="mf"><label>Research date</label><input id="marketDate" type="date" value="${shortDate(value?.lastChecked) || new Date().toISOString().slice(0,10)}"></div>
       <div class="mf full"><label>Notes</label><textarea id="marketNotes" placeholder="Why these listings are trustworthy…">${safe(value?.notes || "")}</textarea></div>
       <div class="market-actions"><button class="primary" type="submit">Save manual market value</button></div>

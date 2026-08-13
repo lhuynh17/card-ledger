@@ -101,7 +101,7 @@
 
     const grouped = buildHistory();
     if (!grouped.length || !grouped.some((item) => item.value > 0)) {
-      chart.innerHTML = `<div class="portfolio-chart-head"><div><strong>Total collection market value over time</strong><span>Built from each card’s saved market-value history</span></div></div>
+      chart.innerHTML = `<div class="portfolio-chart-head"><div><strong>Total collection market value over time</strong><span>Built from each card’s source observations and manual history</span></div></div>
         <div class="portfolio-chart-empty">Update at least one card’s market value to begin your collection history.</div>`;
       return;
     }
@@ -139,7 +139,7 @@
       `<circle class="dot" cx="${point.x}" cy="${point.y}" r="3"><title>${point.day}: ${cash(point.value)}</title></circle>`
     ).join("");
 
-    chart.innerHTML = `<div class="portfolio-chart-head"><div><strong>Total collection market value over time</strong><span>Built from each card’s saved market-value history</span></div><div class="portfolio-chart-value">${cash(grouped[grouped.length - 1].value)}</div></div>
+    chart.innerHTML = `<div class="portfolio-chart-head"><div><strong>Total collection market value over time</strong><span>Built from each card’s source observations and manual history</span></div><div class="portfolio-chart-value">${cash(grouped[grouped.length - 1].value)}</div></div>
       <svg class="portfolio-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Total collection market value over time">
         <defs><linearGradient id="portfolioArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#55c98b"></stop><stop offset="1" stop-color="#55c98b" stop-opacity="0"></stop></linearGradient></defs>
         ${labels}<path class="area" d="${area}"></path><path class="line" d="${line}"></path>${dots}${dateLabels}

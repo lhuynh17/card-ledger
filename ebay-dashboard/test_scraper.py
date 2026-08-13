@@ -744,6 +744,42 @@ class SoldResultTests(unittest.TestCase):
         self.assertEqual(payload["suggested_value"], 167)
         self.assertEqual(payload["auto_status"], "provisional")
 
+    def test_manual_market_value_is_protected_from_automatic_update(self):
+        result = {
+            "cardId":"card-1", "marketValue":500, "confidence":"high",
+            "lastChecked":"2026-08-01T12:00:00+00:00",
+            "recentComparables":[{"id":"sale-1", "total":500}],
+        }
+        payload = scraper.automatic_market_payload(
+            result,
+            {"market_value":450, "source":"Manual valuation", "auto_status":"manual"},
+            "owner-1",
+        )
+        self.assertEqual(payload["market_value"], 450)
+        self.assertEqual(payload["auto_status"], "manual")
+        self.assertEqual(payload["source"], "Manual valuation")
+
+    def test_summary_uses_latest_observation_per_source_and_median(self):
+        observations = [
+            {"source":"ebay", "value":100, "observed_at":"2026-08-01"},
+            {"source":"ebay", "value":90, "observed_at":"2026-07-01"},
+            {"source":"alt", "value":120, "observed_at":"2026-08-02"},
+        ]
+        payload = scraper.market_summary_payload(observations, {})
+        self.assertEqual(payload["market_value"], 110)
+        self.assertEqual(payload["low"], 100)
+        self.assertEqual(payload["high"], 120)
+        self.assertEqual(payload["source"], "Composite: Alt + eBay")
+        self.assertEqual(payload["algorithm_version"], "multi-source-latest-median-v1")
+
+    def test_summary_does_not_replace_manual_market_value(self):
+        payload = scraper.market_summary_payload(
+            [{"source":"alt", "value":600, "observed_at":"2026-08-02"}],
+            {"market_value":550, "auto_status":"manual"},
+        )
+        self.assertNotIn("market_value", payload)
+        self.assertEqual(payload["suggested_value"], 600)
+
 
 if __name__ == "__main__":
     unittest.main()
