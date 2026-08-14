@@ -1,28 +1,49 @@
 #!/usr/bin/env node
-import readline from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
-import { chromium } from "playwright";
 import { config } from "./config.js";
-const context = await chromium.launchPersistentContext(
-  config.browserProfilePath,
-  {
-    channel: config.browserChannel,
-    chromiumSandbox: true,
-    headless: false,
-    viewport: { width: 1440, height: 1000 },
-  },
-);
-const page = context.pages()[0] || (await context.newPage());
-const prompt = readline.createInterface({ input, output });
+import { launchPersistentBrowser, saveStorageState } from "./browser.js";
+
+/**
+ * Interactive login flow.
+ *
+ * Bot detection is usually fiercest on the login page. Fighting that every run
+ * is brittle. Instead:
+ *  1. Open real Chrome with a persistent profile
+ *  2. You log in manually (CAPTCHA / 2FA / email magic link all fine)
+ *  3. Press Enter in the terminal once you're fully logged in
+ *  4. Session is saved in .auth/ for later scrape runs
+ */
+const { context, page } = await launchPersistentBrowser({ headed: true });
+
 try {
-  await page.goto("https://alt.xyz/browse?query=68410100", {
+  console.log("Opening Alt…");
+  await page.goto(config.altBaseUrl, {
     waitUntil: "domcontentloaded",
     timeout: config.navigationTimeoutMs,
   });
-  console.log("Sign in to Alt. Complete MFA if requested.");
-  await prompt.question("When signed in, return here and press Enter: ");
-  console.log(`Alt profile saved in ${config.browserProfilePath}`);
+
+  console.log(`
+============================================================
+  MANUAL LOGIN
+============================================================
+  1. Complete login in the Chrome window that just opened.
+  2. Finish any CAPTCHA / 2FA / email verification.
+  3. Confirm you can see your account (collection / nav).
+  4. Come back here and press Enter to save the session.
+============================================================
+`);
+
+  await waitForEnter();
+  await saveStorageState(context);
+  console.log(`Session saved to ${config.storageStatePath}`);
+  console.log(`Persistent profile kept at ${config.browserProfilePath}`);
+  console.log("You can close the browser. Next: npm run scrape");
 } finally {
-  prompt.close();
   await context.close();
+}
+
+function waitForEnter() {
+  return new Promise((resolve) => {
+    process.stdin.resume();
+    process.stdin.once("data", () => resolve());
+  });
 }

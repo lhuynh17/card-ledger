@@ -6,8 +6,12 @@ const interval = Number.parseInt(
 export const config = {
   outputDir: path.resolve(process.env.OUTPUT_DIR ?? "output"),
   navigationTimeoutMs: 45_000,
+  altBaseUrl: process.env.ALT_BASE_URL ?? "https://alt.xyz",
   browserChannel: process.env.ALT_BROWSER_CHANNEL ?? "chrome",
   browserProfilePath: path.resolve(
     process.env.ALT_BROWSER_PROFILE_PATH ?? ".auth/alt-chrome-profile",
+  ),
+  storageStatePath: path.resolve(
+    process.env.ALT_STORAGE_STATE_PATH ?? ".auth/storage-state.json",
   ),
 };

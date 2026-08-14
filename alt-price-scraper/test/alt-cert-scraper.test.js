@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   extractCertPrice,
+  parseMoney,
   renderedResultText,
 } from "../src/alt-cert-scraper.js";
+test("parses listing price text from data-testid values", () => {
+  assert.equal(parseMoney("$1,250"), 1250);
+  assert.equal(parseMoney("$725.00"), 725);
+  assert.equal(parseMoney("no price"), null);
+});
 test("extracts Alt Value only when cert matches", () => {
   assert.deepEqual(
     extractCertPrice(

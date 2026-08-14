@@ -1,10 +1,18 @@
-import { chromium } from "playwright";
+import fs from "node:fs";
+import { config } from "./config.js";
+
 const MONEY = /\$([\d,]+(?:\.\d{2})?)/;
-const digits = (value) => String(value || "").replace(/\D/g, "");
+const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
+
+export function parseMoney(text) {
+  const match = String(text || "").replace(/\u00a0/g, " ").match(MONEY);
+  return match ? Number(match[1].replaceAll(",", "")) : null;
+}
+
 export function extractCertPrice(text, cert) {
   const normalized = String(text || "").replace(/\u00a0/g, " ");
-  const certDigits = digits(cert);
-  if (!certDigits || !digits(normalized).includes(certDigits)) return null;
+  const certDigits = onlyDigits(cert);
+  if (!certDigits || !onlyDigits(normalized).includes(certDigits)) return null;
   for (const candidate of [
     {
       type: "alt_value",
@@ -27,14 +35,15 @@ export function extractCertPrice(text, cert) {
         valueType: candidate.type,
       };
   }
-  const fallback = normalized.match(MONEY);
+  const fallback = parseMoney(normalized);
   return fallback
     ? {
-        value: Number(fallback[1].replaceAll(",", "")),
+        value: fallback,
         valueType: "displayed_price",
       }
     : null;
 }
+
 export function renderedResultText(values) {
   return (
     [
@@ -55,31 +64,69 @@ export function renderedResultText(values) {
       .sort((a, b) => a.length - b.length)[0] || ""
   );
 }
+
+async function extractItemPrice(page, cert) {
+  const text = await page.locator("body").innerText();
+  if (
+    /access all of the market data.+free account|sign up for free/i.test(text)
+  ) {
+    return { authRequired: true };
+  }
+
+  const certDigits = onlyDigits(cert);
+  if (!certDigits || !onlyDigits(text).includes(certDigits)) return null;
+
+  const testIdPrice = await page
+    .locator('[data-testid="current-bid-price"]')
+    .first()
+    .textContent()
+    .catch(() => null);
+  const fromTestId = parseMoney(testIdPrice);
+  if (fromTestId > 0) {
+    return { value: fromTestId, valueType: "current_bid" };
+  }
+
+  return extractCertPrice(text, cert);
+}
+
 export async function scrapeInventoryFromAlt(
   cards,
   {
-    headed = false,
-    navigationTimeoutMs = 45_000,
+    headed = true,
+    navigationTimeoutMs = config.navigationTimeoutMs,
     delayMs = 500,
-    browserChannel = "chrome",
-    browserProfilePath = "",
+    browserChannel = config.browserChannel,
+    browserProfilePath = config.browserProfilePath,
   } = {},
 ) {
-  const context = await chromium.launchPersistentContext(browserProfilePath, {
-    channel: browserChannel,
-    chromiumSandbox: true,
-    headless: !headed,
-    viewport: { width: 1440, height: 1000 },
+  if (!fs.existsSync(browserProfilePath)) {
+    throw new Error(
+      "No browser profile found. Run `npm run alt:login` first and complete login manually.",
+    );
+  }
+
+  const { launchPersistentBrowser, sessionLooksLoggedOut } = await import(
+    "./browser.js"
+  );
+  const { context, page } = await launchPersistentBrowser({
+    headed,
+    browserChannel,
+    browserProfilePath,
   });
-  const page = context.pages()[0] || (await context.newPage());
   const observations = [];
   const results = [];
   try {
+    if (await sessionLooksLoggedOut(page)) {
+      throw new Error(
+        "Session appears expired or logged out. Run `npm run alt:login` again.",
+      );
+    }
+
     for (const card of cards) {
       const cert = String(card.cert || "").trim();
       if (!cert) continue;
       const company = String(card.company || "PSA").trim();
-      const searchUrl = `https://alt.xyz/browse?query=${encodeURIComponent(cert)}`;
+      const searchUrl = `${config.altBaseUrl}/browse?query=${encodeURIComponent(cert)}`;
       try {
         await page.goto(searchUrl, {
           waitUntil: "domcontentloaded",
@@ -121,16 +168,12 @@ export async function scrapeInventoryFromAlt(
           await page
             .locator("body")
             .waitFor({ state: "visible", timeout: navigationTimeoutMs });
-          const text = await page.locator("body").innerText();
-          if (
-            /access all of the market data.+free account|sign up for free/i.test(
-              text,
-            )
-          ) {
+          await page.waitForTimeout(1500 + Math.floor(Math.random() * 1500));
+          const price = await extractItemPrice(page, cert);
+          if (price?.authRequired) {
             authRequired = true;
             continue;
           }
-          const price = extractCertPrice(text, cert);
           if (price?.value > 0) matches.push({ ...price, itemUrl });
         }
         if (matches.length === 1) {

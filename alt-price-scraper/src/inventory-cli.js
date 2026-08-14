@@ -4,7 +4,7 @@ import { altHookFromEnvironment } from "./alt-hook-client.js";
 import { scrapeInventoryFromAlt } from "./alt-cert-scraper.js";
 import { saveSnapshot } from "./storage.js";
 const args = new Set(process.argv.slice(2));
-const headed = args.has("--headed");
+const headed = !args.has("--headless");
 const scheduled = args.has("--schedule");
 let running = false;
 async function run() {
