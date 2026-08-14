@@ -1,0 +1,22 @@
+{
+  "name": "alt-price-scraper",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled Playwright collector for Alt.xyz inventory values",
+  "scripts": {
+    "alt:login": "node --env-file=.env src/alt-login.js",
+    "db:check": "node --env-file=.env src/check-access.js",
+    "db:setup": "node --env-file=.env src/setup-schema.js",
+    "scrape": "node --env-file=.env src/inventory-cli.js",
+    "scrape:headed": "node --env-file=.env src/inventory-cli.js --headed",
+    "schedule": "node --env-file=.env src/inventory-cli.js --schedule",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.54.0"
+  }
+}
