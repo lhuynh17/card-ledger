@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { config } from "./config.js";
+import { config, randomScrapeDelayMs } from "./config.js";
 
 const MONEY = /\$([\d,]+(?:\.\d{2})?)/;
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
@@ -343,7 +343,8 @@ export async function scrapeInventoryFromAlt(
   {
     headed = true,
     navigationTimeoutMs = config.navigationTimeoutMs,
-    delayMs = config.scrapeDelayMs,
+    delayMinMs = config.scrapeDelayMinMs,
+    delayMaxMs = config.scrapeDelayMaxMs,
     browserChannel = config.browserChannel,
     browserProfilePath = config.browserProfilePath,
   } = {},
@@ -512,8 +513,11 @@ export async function scrapeInventoryFromAlt(
         });
         console.error(`${logPrefix} Error for ${cert}: ${message}`);
       }
-      if (delayMs > 0 && index < total && !page.isClosed()) {
-        console.log(`${logPrefix} Waiting ${delayMs}ms before next cert…`);
+      if (delayMaxMs > 0 && index < total && !page.isClosed()) {
+        const delayMs = randomScrapeDelayMs(delayMinMs, delayMaxMs);
+        console.log(
+          `${logPrefix} Waiting ${delayMs}ms before next cert (${delayMinMs}-${delayMaxMs}ms)…`,
+        );
         try {
           await page.waitForTimeout(delayMs);
         } catch (error) {

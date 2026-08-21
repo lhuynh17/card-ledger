@@ -6,6 +6,7 @@ import {
   parseMoney,
   sourceItemIdFromAltUrl,
 } from "../src/alt-cert-scraper.js";
+import { randomScrapeDelayMs } from "../src/config.js";
 
 test("parses listing price text from data-testid values", () => {
   assert.equal(parseMoney("$1,250"), 1250);
@@ -57,4 +58,14 @@ test("extracts Alt item id from research URLs", () => {
     "068d4726-594b-4b61-a305-638cfda914cf",
   );
   assert.equal(sourceItemIdFromAltUrl("https://alt.xyz/browse"), "");
+});
+
+test("random scrape delay stays within the configured range", () => {
+  assert.equal(randomScrapeDelayMs(1200, 1200), 1200);
+  for (let i = 0; i < 20; i += 1) {
+    const delay = randomScrapeDelayMs(1000, 3000);
+    assert.ok(delay >= 1000 && delay <= 3000);
+  }
+  const swapped = randomScrapeDelayMs(3000, 1000);
+  assert.ok(swapped >= 1000 && swapped <= 3000);
 });
