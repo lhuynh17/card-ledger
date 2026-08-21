@@ -56,6 +56,9 @@ export function normalizeBrowseResultLabel(value) {
     .trim();
 }
 
+const SEARCH_INPUT =
+  '#universal-search-autocomplete, input[name="universal-search"], input[placeholder*="cert" i]';
+
 async function readBrowseResultLabels(page) {
   return page.locator(BROWSE_RESULT_BUTTON).evaluateAll((buttons) =>
     buttons.map((button) =>
@@ -76,34 +79,187 @@ async function waitForBrowseResultButtons(page, timeoutMs = 8_000) {
   return readBrowseResultLabels(page);
 }
 
+async function waitForSearchShell(page, navigationTimeoutMs) {
+  const searchInput = page.locator(SEARCH_INPUT).first();
+  await searchInput.waitFor({
+    state: "visible",
+    timeout: navigationTimeoutMs,
+  });
+  return searchInput;
+}
+
+/**
+ * Open Alt browse for a cert and wait until the SPA search box actually shows
+ * it. Fresh browser starts often finish navigation before React applies the
+ * query, so we verify the input and type+submit as a fallback.
+ */
+async function openBrowseSearch(page, cert, searchUrl, navigationTimeoutMs, logPrefix) {
+  await page.goto(searchUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: navigationTimeoutMs,
+  });
+  const searchInput = await waitForSearchShell(page, navigationTimeoutMs);
+  const certDigits = onlyDigits(cert);
+  const deadline = Date.now() + navigationTimeoutMs;
+  while (Date.now() < deadline) {
+    const url = page.url();
+    const value = onlyDigits(await searchInput.inputValue().catch(() => ""));
+    const onBrowse = /\/browse/i.test(url);
+    if (onBrowse && value === certDigits) {
+      console.log(`${logPrefix} Browse ready: ${url}`);
+      return;
+    }
+    await page.waitForTimeout(300);
+  }
+
+  console.warn(
+    `${logPrefix} Search box not ready with cert ${cert}; typing it manually (at ${page.url()})`,
+  );
+  await searchInput.click({ timeout: navigationTimeoutMs });
+  await searchInput.fill("");
+  await searchInput.fill(cert);
+  await searchInput.press("Enter");
+  await page
+    .waitForURL(
+      (url) =>
+        /\/browse/i.test(url.pathname) &&
+        onlyDigits(url.searchParams.get("query") || "") === certDigits,
+      { timeout: navigationTimeoutMs },
+    )
+    .catch(() => {});
+  await waitForSearchShell(page, navigationTimeoutMs);
+  console.log(`${logPrefix} Browse after manual search: ${page.url()}`);
+}
+
+async function pageMentionsCert(page, cert) {
+  const certDigits = onlyDigits(cert);
+  if (!certDigits) return false;
+  return page.evaluate((digits) => {
+    const bodyText = (document.body?.innerText || "").replace(/\D/g, "");
+    if (bodyText.includes(digits)) return true;
+    const bodyHtml = (document.body?.innerHTML || "").replace(/\D/g, "");
+    if (bodyHtml.includes(digits)) return true;
+    return [...document.querySelectorAll("script")].some((script) =>
+      new RegExp(
+        `(?:Certification Number|certificationNumber|certNumber)[^0-9]{0,80}${digits}`,
+        "i",
+      ).test(script.textContent || ""),
+    );
+  }, certDigits);
+}
+
+async function waitForDetailReady(page, cert, timeoutMs) {
+  const certDigits = onlyDigits(cert);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const url = page.url();
+    if (/\/browse/i.test(url)) {
+      await page.waitForTimeout(400);
+      continue;
+    }
+    const state = await page.evaluate((digits) => {
+      const text = document.body?.innerText || "";
+      return {
+        hasCert: text.replace(/\D/g, "").includes(digits),
+        hasPriceUi: Boolean(
+          document.querySelector('[data-testid="current-bid-price"]'),
+        ),
+        hasSold: /sold on (auctions|fixed price)/i.test(text),
+        hasAltValue: /alt\s+value|alt\s+estimate/i.test(text),
+        hasMoney: /\$[\d,]+/.test(text),
+        title: document.title || "",
+      };
+    }, certDigits);
+    if (
+      state.hasCert &&
+      (state.hasPriceUi || state.hasSold || state.hasAltValue || state.hasMoney)
+    ) {
+      return state;
+    }
+    if (state.hasPriceUi || state.hasSold || state.hasAltValue) {
+      // Price chrome is up; cert may live in HTML/scripts only.
+      if (await pageMentionsCert(page, cert)) return state;
+    }
+    await page.waitForTimeout(400);
+  }
+  return null;
+}
+
 async function openBrowseResultAtIndex(
+  context,
   page,
   searchUrl,
+  cert,
   resultIndex,
   navigationTimeoutMs,
+  logPrefix,
 ) {
-  if (!page.url().includes("/browse")) {
-    await page.goto(searchUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: navigationTimeoutMs,
-    });
-    await page
-      .locator("body")
-      .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+  if (!/\/browse/i.test(page.url())) {
+    await openBrowseSearch(
+      page,
+      cert,
+      searchUrl,
+      navigationTimeoutMs,
+      logPrefix,
+    );
+    await waitForBrowseResultButtons(page, navigationTimeoutMs);
   }
   const buttons = page.locator(BROWSE_RESULT_BUTTON);
   await buttons
     .nth(resultIndex)
     .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+
+  // User-observed path is same-tab navigation. Briefly allow a popup too.
+  const popupPromise = context
+    .waitForEvent("page", { timeout: 2_000 })
+    .catch(() => null);
+  const sameTabPromise = page
+    .waitForURL((url) => !/\/browse/i.test(url.pathname), {
+      timeout: navigationTimeoutMs,
+    })
+    .catch(() => null);
+
   await buttons.nth(resultIndex).click({ timeout: navigationTimeoutMs });
-  await page.waitForTimeout(1500 + Math.floor(Math.random() * 1500));
-  await page
-    .locator("body")
-    .waitFor({ state: "visible", timeout: navigationTimeoutMs });
-  return page.url().split("?")[0];
+
+  const popup = await popupPromise;
+  let detailPage = page;
+  if (popup) {
+    detailPage = popup;
+    await detailPage.waitForLoadState("domcontentloaded", {
+      timeout: navigationTimeoutMs,
+    });
+    console.log(`${logPrefix} Opened detail tab: ${detailPage.url()}`);
+  } else {
+    await sameTabPromise;
+    console.log(`${logPrefix} Detail URL after click: ${page.url()}`);
+  }
+
+  const ready = await waitForDetailReady(
+    detailPage,
+    cert,
+    navigationTimeoutMs,
+  );
+  if (!ready) {
+    console.warn(
+      `${logPrefix} Detail page not ready after click (${detailPage.url()})`,
+    );
+  } else {
+    console.log(
+      `${logPrefix} Detail ready (${detailPage.url()}) title="${ready.title}"` +
+        ` cert=${ready.hasCert} bid=${ready.hasPriceUi} sold=${ready.hasSold} altValue=${ready.hasAltValue}`,
+    );
+  }
+
+  return {
+    detailPage,
+    sourceUrl: detailPage.url().split("?")[0],
+    openedNewTab: detailPage !== page,
+  };
 }
 
-async function extractItemPrice(page, cert) {
+async function extractItemPrice(page, cert, navigationTimeoutMs = 45_000) {
+  await waitForDetailReady(page, cert, Math.min(navigationTimeoutMs, 15_000));
+
   const text = await page.locator("body").innerText();
   if (
     /access all of the market data.+free account|sign up for free/i.test(text)
@@ -111,8 +267,13 @@ async function extractItemPrice(page, cert) {
     return { authRequired: true };
   }
 
-  const certDigits = onlyDigits(cert);
-  if (!certDigits || !onlyDigits(text).includes(certDigits)) return null;
+  if (!(await pageMentionsCert(page, cert))) {
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 240);
+    console.warn(
+      `Cert ${cert} not found on detail page ${page.url()}; refusing price. Snippet: ${snippet}`,
+    );
+    return null;
+  }
 
   const livePrice = page.locator('[data-testid="current-bid-price"]').first();
   if (await livePrice.isVisible().catch(() => false)) {
@@ -151,7 +312,24 @@ async function extractItemPrice(page, cert) {
     }
   }
 
-  return extractCertPrice(text, cert);
+  const fromText = extractCertPrice(text, cert);
+  if (fromText) return fromText;
+
+  // Research pages often show Alt Value without the cert in the same sentence.
+  const altValue = text.match(
+    /(?:ALT\s+VALUE|ALT\s+ESTIMATE)[^$]{0,80}\$([\d,]+(?:\.\d{2})?)/i,
+  );
+  if (altValue) {
+    return {
+      value: Number(altValue[1].replaceAll(",", "")),
+      valueType: "alt_value",
+    };
+  }
+
+  console.warn(
+    `Cert ${cert} present on ${page.url()} but no recognized price UI/text`,
+  );
+  return null;
 }
 
 export async function scrapeInventoryFromAlt(
@@ -188,6 +366,13 @@ export async function scrapeInventoryFromAlt(
       );
     }
 
+    // Warm the SPA shell so the first cert search is not racing initial boot.
+    console.log("Waiting for Alt browse shell…");
+    await page.goto(`${config.altBaseUrl}/browse`, {
+      waitUntil: "domcontentloaded",
+      timeout: navigationTimeoutMs,
+    });
+    await waitForSearchShell(page, navigationTimeoutMs);
     console.log(`Scraping ${total} cert(s) from Alt…`);
     for (const card of cards) {
       const cert = String(card.cert || "").trim();
@@ -198,18 +383,19 @@ export async function scrapeInventoryFromAlt(
       index += 1;
       const company = String(card.company || "PSA").trim();
       const searchUrl = `${config.altBaseUrl}/browse?query=${encodeURIComponent(cert)}`;
-      console.log(`[${index}/${total}] Searching ${company} ${cert}…`);
+      const logPrefix = `[${index}/${total}]`;
+      console.log(`${logPrefix} Searching ${company} ${cert}…`);
       try {
-        await page.goto(searchUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: navigationTimeoutMs,
-        });
-        await page
-          .locator("body")
-          .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+        await openBrowseSearch(
+          page,
+          cert,
+          searchUrl,
+          navigationTimeoutMs,
+          logPrefix,
+        );
         const resultLabels = await waitForBrowseResultButtons(page);
         console.log(
-          `[${index}/${total}] Found ${resultLabels.length} browse result candidate(s) for ${cert}` +
+          `${logPrefix} Found ${resultLabels.length} browse result candidate(s) for ${cert}` +
             (resultLabels.length ? `: ${resultLabels.join(" | ")}` : ""),
         );
         const matches = [];
@@ -221,36 +407,56 @@ export async function scrapeInventoryFromAlt(
         ) {
           const label = resultLabels[resultIndex];
           console.log(
-            `[${index}/${total}] Opening candidate ${resultIndex + 1}/${resultLabels.length}: ${label}`,
+            `${logPrefix} Opening candidate ${resultIndex + 1}/${resultLabels.length}: ${label}`,
           );
-          const sourceUrl = await openBrowseResultAtIndex(
+          const opened = await openBrowseResultAtIndex(
+            context,
             page,
             searchUrl,
+            cert,
             resultIndex,
             navigationTimeoutMs,
+            logPrefix,
           );
-          const price = await extractItemPrice(page, cert);
+          let price = null;
+          try {
+            price = await extractItemPrice(
+              opened.detailPage,
+              cert,
+              navigationTimeoutMs,
+            );
+          } finally {
+            if (opened.openedNewTab && !opened.detailPage.isClosed()) {
+              await opened.detailPage.close().catch(() => {});
+            }
+          }
           if (price?.authRequired) {
             authRequired = true;
             console.warn(
-              `[${index}/${total}] Auth wall on candidate for ${cert}; skipping`,
+              `${logPrefix} Auth wall on candidate for ${cert}; skipping`,
             );
             continue;
           }
           if (price?.value > 0) {
-            matches.push({ ...price, itemUrl: sourceUrl, label });
+            matches.push({
+              ...price,
+              itemUrl: opened.sourceUrl,
+              label,
+            });
             console.log(
-              `[${index}/${total}] Candidate ${price.valueType}=$${price.value} for ${cert}`,
+              `${logPrefix} Candidate ${price.valueType}=$${price.value} for ${cert}`,
             );
           } else {
             console.warn(
-              `[${index}/${total}] No cert-matched price on candidate for ${cert}`,
+              `${logPrefix} No cert-matched price on candidate for ${cert} (${opened.sourceUrl})`,
             );
           }
         }
         if (matches.length === 1) {
           const match = matches[0];
-          const sourcePath = String(match.itemUrl || "").split("/").filter(Boolean);
+          const sourcePath = String(match.itemUrl || "")
+            .split("/")
+            .filter(Boolean);
           observations.push({
             card_id: card.id,
             cert_number: cert,
@@ -269,7 +475,7 @@ export async function scrapeInventoryFromAlt(
           });
           results.push({ cardId: card.id, cert, status: "matched", ...match });
           console.log(
-            `[${index}/${total}] Matched ${cert}: $${match.value} (${match.valueType})` +
+            `${logPrefix} Matched ${cert}: $${match.value} (${match.valueType})` +
               (match.soldOn ? ` sold ${match.soldOn}` : ""),
           );
         } else {
@@ -286,7 +492,7 @@ export async function scrapeInventoryFromAlt(
             resultCount: resultLabels.length,
           });
           console.warn(
-            `[${index}/${total}] ${status} for ${cert}` +
+            `${logPrefix} ${status} for ${cert}` +
               (matches.length ? ` (${matches.length} priced candidates)` : "") +
               (resultLabels.length
                 ? ` from ${resultLabels.length} browse result(s)`
@@ -301,17 +507,15 @@ export async function scrapeInventoryFromAlt(
           status: "error",
           error: message,
         });
-        console.error(`[${index}/${total}] Error for ${cert}: ${message}`);
+        console.error(`${logPrefix} Error for ${cert}: ${message}`);
       }
       if (delayMs > 0 && index < total && !page.isClosed()) {
-        console.log(
-          `[${index}/${total}] Waiting ${delayMs}ms before next cert…`,
-        );
+        console.log(`${logPrefix} Waiting ${delayMs}ms before next cert…`);
         try {
           await page.waitForTimeout(delayMs);
         } catch (error) {
           console.warn(
-            `[${index}/${total}] Delay interrupted: ${String(error.message || error)}`,
+            `${logPrefix} Delay interrupted: ${String(error.message || error)}`,
           );
           break;
         }
