@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { Page } from "playwright";
 import { config } from "./config.js";
 import { launchPersistentBrowser } from "./browser.js";
 
@@ -17,13 +18,17 @@ const INVENTORY: Array<{ id: string; url: string; note?: string }> = [
   },
 ];
 
+type ListingStatus = "live" | "sold";
+
 type PriceRow = {
   id: string;
   url: string;
   note?: string;
   title?: string;
+  status?: ListingStatus;
   priceText?: string;
   bidCount?: string;
+  soldOn?: string;
   scrapedAt: string;
   error?: string;
 };
@@ -75,44 +80,25 @@ async function main() {
       // Small human-like pause between navigations
       await delay(1500 + Math.floor(Math.random() * 1500));
 
-      // Wait for auction/listing price (Alt uses data-testid on MUI spans)
-      const priceLocator = page.locator('[data-testid="current-bid-price"]');
-      await priceLocator.waitFor({ state: "visible", timeout: 30_000 });
-
-      const title =
-        (
-          await page
-            .locator("h1")
-            .first()
-            .textContent()
-            .catch(() => null)
-        )?.trim() ?? undefined;
-
-      const priceText =
-        (await priceLocator.textContent().catch(() => null))?.trim() ??
-        undefined;
-
-      const bidCount =
-        (
-          await page
-            .locator('[data-testid="bid-count"]')
-            .textContent()
-            .catch(() => null)
-        )?.trim() ?? undefined;
+      const listing = await readListingDetails(page);
 
       rows.push({
         id: item.id,
         url: item.url,
         note: item.note,
-        title,
-        priceText,
-        bidCount,
+        ...listing,
         scrapedAt,
       });
 
-      console.log(
-        `  → ${title ?? "(no title)"} | ${priceText ?? "(no price found)"} | bids: ${bidCount ?? "?"}`,
-      );
+      if (listing.status === "sold") {
+        console.log(
+          `  → ${listing.title ?? "(no title)"} | SOLD ${listing.priceText ?? "(no price found)"} | ${listing.soldOn ?? "date unknown"}`,
+        );
+      } else {
+        console.log(
+          `  → ${listing.title ?? "(no title)"} | ${listing.priceText ?? "(no price found)"} | bids: ${listing.bidCount ?? "?"}`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       rows.push({
@@ -135,6 +121,59 @@ async function main() {
   console.log(`\nWrote ${rows.length} row(s) to ${outPath}`);
 
   await context.close();
+}
+
+async function readListingDetails(page: Page): Promise<{
+  title?: string;
+  status: ListingStatus;
+  priceText?: string;
+  bidCount?: string;
+  soldOn?: string;
+}> {
+  const livePrice = page.locator('[data-testid="current-bid-price"]');
+  const soldLabel = page.getByText(/sold on (auctions|fixed price)/i).first();
+
+  await livePrice.or(soldLabel).waitFor({ state: "visible", timeout: 30_000 });
+
+  const title =
+    (
+      await page
+        .locator("h1")
+        .first()
+        .textContent()
+        .catch(() => null)
+    )?.trim() ?? undefined;
+
+  if (await livePrice.isVisible()) {
+    const priceText =
+      (await livePrice.textContent().catch(() => null))?.trim() ?? undefined;
+    const bidCount =
+      (
+        await page
+          .locator('[data-testid="bid-count"]')
+          .textContent()
+          .catch(() => null)
+      )?.trim() ?? undefined;
+    return { title, status: "live", priceText, bidCount };
+  }
+
+  // Sold listings drop current-bid-price. The hammer price is the vegaH5
+  // sibling above "Sold on Auctions" / "Sold on Fixed Price".
+  const soldPrice = soldLabel.locator(
+    'xpath=../preceding-sibling::span[contains(@class, "MuiTypography-vegaH5")]',
+  );
+  const priceText =
+    (await soldPrice.textContent().catch(() => null))?.trim() ?? undefined;
+  const soldOn =
+    (
+      await soldLabel
+        .locator("xpath=following-sibling::span")
+        .first()
+        .textContent()
+        .catch(() => null)
+    )?.trim() ?? undefined;
+
+  return { title, status: "sold", priceText, soldOn };
 }
 
 function delay(ms: number): Promise<void> {

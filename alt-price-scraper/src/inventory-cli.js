@@ -17,6 +17,7 @@ async function run() {
     const scraped = await scrapeInventoryFromAlt(inventory.items || [], {
       headed,
       navigationTimeoutMs: config.navigationTimeoutMs,
+      delayMs: config.scrapeDelayMs,
       browserChannel: config.browserChannel,
       browserProfilePath: config.browserProfilePath,
     });

@@ -44,6 +44,9 @@ try {
 function waitForEnter() {
   return new Promise((resolve) => {
     process.stdin.resume();
-    process.stdin.once("data", () => resolve());
+    process.stdin.once("data", () => {
+      process.stdin.pause();
+      resolve();
+    });
   });
 }

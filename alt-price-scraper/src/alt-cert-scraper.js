@@ -5,7 +5,9 @@ const MONEY = /\$([\d,]+(?:\.\d{2})?)/;
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
 
 export function parseMoney(text) {
-  const match = String(text || "").replace(/\u00a0/g, " ").match(MONEY);
+  const match = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .match(MONEY);
   return match ? Number(match[1].replaceAll(",", "")) : null;
 }
 
@@ -76,14 +78,41 @@ async function extractItemPrice(page, cert) {
   const certDigits = onlyDigits(cert);
   if (!certDigits || !onlyDigits(text).includes(certDigits)) return null;
 
-  const testIdPrice = await page
-    .locator('[data-testid="current-bid-price"]')
-    .first()
-    .textContent()
-    .catch(() => null);
-  const fromTestId = parseMoney(testIdPrice);
-  if (fromTestId > 0) {
-    return { value: fromTestId, valueType: "current_bid" };
+  const livePrice = page.locator('[data-testid="current-bid-price"]').first();
+  if (await livePrice.isVisible().catch(() => false)) {
+    const fromLive = parseMoney(
+      await livePrice.textContent().catch(() => null),
+    );
+    if (fromLive > 0) {
+      return { value: fromLive, valueType: "current_bid" };
+    }
+  }
+
+  // Sold listings drop current-bid-price. The hammer price is the vegaH5
+  // sibling above "Sold on Auctions" / "Sold on Fixed Price".
+  const soldLabel = page.getByText(/sold on (auctions|fixed price)/i).first();
+  if (await soldLabel.isVisible().catch(() => false)) {
+    const soldPrice = soldLabel.locator(
+      'xpath=../preceding-sibling::span[contains(@class, "MuiTypography-vegaH5")]',
+    );
+    const fromSold = parseMoney(
+      await soldPrice.textContent().catch(() => null),
+    );
+    if (fromSold > 0) {
+      const soldOn =
+        (
+          await soldLabel
+            .locator("xpath=following-sibling::span")
+            .first()
+            .textContent()
+            .catch(() => null)
+        )?.trim() || undefined;
+      return {
+        value: fromSold,
+        valueType: "last_sale",
+        ...(soldOn ? { soldOn } : {}),
+      };
+    }
   }
 
   return extractCertPrice(text, cert);
@@ -94,7 +123,7 @@ export async function scrapeInventoryFromAlt(
   {
     headed = true,
     navigationTimeoutMs = config.navigationTimeoutMs,
-    delayMs = 500,
+    delayMs = config.scrapeDelayMs,
     browserChannel = config.browserChannel,
     browserProfilePath = config.browserProfilePath,
   } = {},
@@ -105,9 +134,8 @@ export async function scrapeInventoryFromAlt(
     );
   }
 
-  const { launchPersistentBrowser, sessionLooksLoggedOut } = await import(
-    "./browser.js"
-  );
+  const { launchPersistentBrowser, sessionLooksLoggedOut } =
+    await import("./browser.js");
   const { context, page } = await launchPersistentBrowser({
     headed,
     browserChannel,
@@ -115,6 +143,8 @@ export async function scrapeInventoryFromAlt(
   });
   const observations = [];
   const results = [];
+  const total = cards.filter((card) => String(card.cert || "").trim()).length;
+  let index = 0;
   try {
     if (await sessionLooksLoggedOut(page)) {
       throw new Error(
@@ -122,11 +152,17 @@ export async function scrapeInventoryFromAlt(
       );
     }
 
+    console.log(`Scraping ${total} cert(s) from Alt…`);
     for (const card of cards) {
       const cert = String(card.cert || "").trim();
-      if (!cert) continue;
+      if (!cert) {
+        console.warn(`Skipping card ${card.id || "?"}: missing cert`);
+        continue;
+      }
+      index += 1;
       const company = String(card.company || "PSA").trim();
       const searchUrl = `${config.altBaseUrl}/browse?query=${encodeURIComponent(cert)}`;
+      console.log(`[${index}/${total}] Searching ${company} ${cert}…`);
       try {
         await page.goto(searchUrl, {
           waitUntil: "domcontentloaded",
@@ -158,6 +194,9 @@ export async function scrapeInventoryFromAlt(
               itemUrls.push(page.url().split("?")[0]);
           }
         }
+        console.log(
+          `[${index}/${total}] Found ${itemUrls.length} item candidate(s) for ${cert}`,
+        );
         const matches = [];
         let authRequired = false;
         for (const itemUrl of itemUrls) {
@@ -172,9 +211,17 @@ export async function scrapeInventoryFromAlt(
           const price = await extractItemPrice(page, cert);
           if (price?.authRequired) {
             authRequired = true;
+            console.warn(
+              `[${index}/${total}] Auth wall on item for ${cert}; skipping candidate`,
+            );
             continue;
           }
-          if (price?.value > 0) matches.push({ ...price, itemUrl });
+          if (price?.value > 0) {
+            matches.push({ ...price, itemUrl });
+            console.log(
+              `[${index}/${total}] Candidate ${price.valueType}=$${price.value} for ${cert}`,
+            );
+          }
         }
         if (matches.length === 1) {
           const match = matches[0];
@@ -190,32 +237,62 @@ export async function scrapeInventoryFromAlt(
               value_type: match.valueType,
               query_url: searchUrl,
               grader: company,
+              ...(match.soldOn ? { sold_on: match.soldOn } : {}),
             },
           });
           results.push({ cardId: card.id, cert, status: "matched", ...match });
-        } else
+          console.log(
+            `[${index}/${total}] Matched ${cert}: $${match.value} (${match.valueType})` +
+              (match.soldOn ? ` sold ${match.soldOn}` : ""),
+          );
+        } else {
+          const status = authRequired
+            ? "auth_required"
+            : matches.length
+              ? "ambiguous"
+              : "unmatched";
           results.push({
             cardId: card.id,
             cert,
-            status: authRequired
-              ? "auth_required"
-              : matches.length
-                ? "ambiguous"
-                : "unmatched",
+            status,
             candidateCount: matches.length,
           });
+          console.warn(
+            `[${index}/${total}] ${status} for ${cert}` +
+              (matches.length ? ` (${matches.length} priced candidates)` : ""),
+          );
+        }
       } catch (error) {
+        const message = String(error.message || error);
         results.push({
           cardId: card.id,
           cert,
           status: "error",
-          error: String(error.message || error),
+          error: message,
         });
+        console.error(`[${index}/${total}] Error for ${cert}: ${message}`);
       }
-      if (delayMs > 0) await page.waitForTimeout(delayMs);
+      if (delayMs > 0) {
+        console.log(
+          `[${index}/${total}] Waiting ${delayMs}ms before next cert…`,
+        );
+        await page.waitForTimeout(delayMs);
+      }
     }
   } finally {
     await context.close();
   }
+  const counts = results.reduce((acc, result) => {
+    acc[result.status] = (acc[result.status] || 0) + 1;
+    return acc;
+  }, {});
+  console.log(
+    `Scrape finished: ${observations.length} observation(s) from ${results.length} cert(s)` +
+      (Object.keys(counts).length
+        ? ` (${Object.entries(counts)
+            .map(([status, count]) => `${status}=${count}`)
+            .join(", ")})`
+        : ""),
+  );
   return { observations, results };
 }
