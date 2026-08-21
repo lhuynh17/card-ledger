@@ -4,6 +4,10 @@ import { config } from "./config.js";
 const MONEY = /\$([\d,]+(?:\.\d{2})?)/;
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
 
+/** Browse result titles use this MUI class; filter/chrome buttons do not. */
+const BROWSE_RESULT_BUTTON =
+  "main button:has(.MuiTypography-vegaButton1), [role='main'] button:has(.MuiTypography-vegaButton1)";
+
 export function parseMoney(text) {
   const match = String(text || "")
     .replace(/\u00a0/g, " ")
@@ -46,25 +50,57 @@ export function extractCertPrice(text, cert) {
     : null;
 }
 
-export function renderedResultText(values) {
-  return (
-    [
-      ...new Set(
-        values.map((value) =>
-          String(value || "")
-            .replace(/\s+/g, " ")
-            .trim(),
-        ),
-      ),
-    ]
-      .filter(
-        (value) =>
-          /^(?:19|20)\d{2}\s/.test(value) &&
-          value.length >= 20 &&
-          value.length <= 300,
-      )
-      .sort((a, b) => a.length - b.length)[0] || ""
+export function normalizeBrowseResultLabel(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function readBrowseResultLabels(page) {
+  return page.locator(BROWSE_RESULT_BUTTON).evaluateAll((buttons) =>
+    buttons.map((button) =>
+      (button.innerText || button.textContent || "").replace(/\s+/g, " ").trim(),
+    ),
   );
+}
+
+async function waitForBrowseResultButtons(page, timeoutMs = 8_000) {
+  try {
+    await page
+      .locator(BROWSE_RESULT_BUTTON)
+      .first()
+      .waitFor({ state: "visible", timeout: timeoutMs });
+  } catch {
+    return [];
+  }
+  return readBrowseResultLabels(page);
+}
+
+async function openBrowseResultAtIndex(
+  page,
+  searchUrl,
+  resultIndex,
+  navigationTimeoutMs,
+) {
+  if (!page.url().includes("/browse")) {
+    await page.goto(searchUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: navigationTimeoutMs,
+    });
+    await page
+      .locator("body")
+      .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+  }
+  const buttons = page.locator(BROWSE_RESULT_BUTTON);
+  await buttons
+    .nth(resultIndex)
+    .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+  await buttons.nth(resultIndex).click({ timeout: navigationTimeoutMs });
+  await page.waitForTimeout(1500 + Math.floor(Math.random() * 1500));
+  await page
+    .locator("body")
+    .waitFor({ state: "visible", timeout: navigationTimeoutMs });
+  return page.url().split("?")[0];
 }
 
 async function extractItemPrice(page, cert) {
@@ -171,60 +207,50 @@ export async function scrapeInventoryFromAlt(
         await page
           .locator("body")
           .waitFor({ state: "visible", timeout: navigationTimeoutMs });
-        await page.waitForTimeout(1500);
-        const itemUrls = [
-          ...new Set(
-            await page
-              .locator('a[href*="/itm/"]')
-              .evaluateAll((links) =>
-                links.map((link) => link.href.split("?")[0]),
-              ),
-          ),
-        ].slice(0, 10);
-        if (!itemUrls.length) {
-          const text = renderedResultText(
-            await page
-              .locator("main div, main article, main li, [role=main] div")
-              .allTextContents(),
-          );
-          if (text) {
-            await page.getByText(text, { exact: true }).first().click();
-            await page.waitForTimeout(1500);
-            if (/\/itm\//.test(page.url()))
-              itemUrls.push(page.url().split("?")[0]);
-          }
-        }
+        const resultLabels = await waitForBrowseResultButtons(page);
         console.log(
-          `[${index}/${total}] Found ${itemUrls.length} item candidate(s) for ${cert}`,
+          `[${index}/${total}] Found ${resultLabels.length} browse result candidate(s) for ${cert}` +
+            (resultLabels.length ? `: ${resultLabels.join(" | ")}` : ""),
         );
         const matches = [];
         let authRequired = false;
-        for (const itemUrl of itemUrls) {
-          await page.goto(itemUrl, {
-            waitUntil: "domcontentloaded",
-            timeout: navigationTimeoutMs,
-          });
-          await page
-            .locator("body")
-            .waitFor({ state: "visible", timeout: navigationTimeoutMs });
-          await page.waitForTimeout(1500 + Math.floor(Math.random() * 1500));
+        for (
+          let resultIndex = 0;
+          resultIndex < resultLabels.length;
+          resultIndex += 1
+        ) {
+          const label = resultLabels[resultIndex];
+          console.log(
+            `[${index}/${total}] Opening candidate ${resultIndex + 1}/${resultLabels.length}: ${label}`,
+          );
+          const sourceUrl = await openBrowseResultAtIndex(
+            page,
+            searchUrl,
+            resultIndex,
+            navigationTimeoutMs,
+          );
           const price = await extractItemPrice(page, cert);
           if (price?.authRequired) {
             authRequired = true;
             console.warn(
-              `[${index}/${total}] Auth wall on item for ${cert}; skipping candidate`,
+              `[${index}/${total}] Auth wall on candidate for ${cert}; skipping`,
             );
             continue;
           }
           if (price?.value > 0) {
-            matches.push({ ...price, itemUrl });
+            matches.push({ ...price, itemUrl: sourceUrl, label });
             console.log(
               `[${index}/${total}] Candidate ${price.valueType}=$${price.value} for ${cert}`,
+            );
+          } else {
+            console.warn(
+              `[${index}/${total}] No cert-matched price on candidate for ${cert}`,
             );
           }
         }
         if (matches.length === 1) {
           const match = matches[0];
+          const sourcePath = String(match.itemUrl || "").split("/").filter(Boolean);
           observations.push({
             card_id: card.id,
             cert_number: cert,
@@ -232,11 +258,12 @@ export async function scrapeInventoryFromAlt(
             currency: "USD",
             observed_at: new Date().toISOString(),
             source_url: match.itemUrl,
-            source_item_id: match.itemUrl.split("/itm/")[1] || "",
+            source_item_id: sourcePath.at(-1) || "",
             metadata: {
               value_type: match.valueType,
               query_url: searchUrl,
               grader: company,
+              result_label: match.label,
               ...(match.soldOn ? { sold_on: match.soldOn } : {}),
             },
           });
@@ -256,10 +283,14 @@ export async function scrapeInventoryFromAlt(
             cert,
             status,
             candidateCount: matches.length,
+            resultCount: resultLabels.length,
           });
           console.warn(
             `[${index}/${total}] ${status} for ${cert}` +
-              (matches.length ? ` (${matches.length} priced candidates)` : ""),
+              (matches.length ? ` (${matches.length} priced candidates)` : "") +
+              (resultLabels.length
+                ? ` from ${resultLabels.length} browse result(s)`
+                : ""),
           );
         }
       } catch (error) {
@@ -272,11 +303,18 @@ export async function scrapeInventoryFromAlt(
         });
         console.error(`[${index}/${total}] Error for ${cert}: ${message}`);
       }
-      if (delayMs > 0) {
+      if (delayMs > 0 && index < total && !page.isClosed()) {
         console.log(
           `[${index}/${total}] Waiting ${delayMs}ms before next cert…`,
         );
-        await page.waitForTimeout(delayMs);
+        try {
+          await page.waitForTimeout(delayMs);
+        } catch (error) {
+          console.warn(
+            `[${index}/${total}] Delay interrupted: ${String(error.message || error)}`,
+          );
+          break;
+        }
       }
     }
   } finally {
