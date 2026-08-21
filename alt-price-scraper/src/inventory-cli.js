@@ -22,8 +22,12 @@ async function run() {
       browserProfilePath: config.browserProfilePath,
     });
     let saved = 0;
-    if (scraped.observations.length)
-      saved = (await hook.appendObservations(scraped.observations)).saved || 0;
+    let skipped = 0;
+    if (scraped.observations.length) {
+      const posted = await hook.appendObservations(scraped.observations);
+      saved = posted.saved || 0;
+      skipped = posted.skipped || 0;
+    }
     const snapshot = {
       source: "alt.xyz",
       sourceUrl: "https://alt.xyz/browse",
@@ -31,11 +35,14 @@ async function run() {
       inventoryCount: inventory.count ?? inventory.items?.length ?? 0,
       listingCount: scraped.observations.length,
       savedCount: saved,
+      skippedCount: skipped,
       results: scraped.results,
     };
     const paths = await saveSnapshot(snapshot, config.outputDir);
     console.log(
-      `[${startedAt}] Checked ${snapshot.inventoryCount} items; saved ${saved} observations to ${paths.latestPath}`,
+      `[${startedAt}] Checked ${snapshot.inventoryCount} items; saved ${saved}` +
+        (skipped ? `, skipped ${skipped} duplicate(s)` : "") +
+        ` observations to ${paths.latestPath}`,
     );
   } catch (error) {
     console.error(

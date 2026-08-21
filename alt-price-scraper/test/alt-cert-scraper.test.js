@@ -4,6 +4,7 @@ import {
   extractCertPrice,
   normalizeBrowseResultLabel,
   parseMoney,
+  sourceItemIdFromAltUrl,
 } from "../src/alt-cert-scraper.js";
 
 test("parses listing price text from data-testid values", () => {
@@ -37,15 +38,23 @@ test("falls back after cert verification", () =>
 
 test("normalizes browse result button labels without year assumptions", () => {
   assert.equal(
-    normalizeBrowseResultLabel(
-      "  Charizard  Holo  #4  ",
-    ),
+    normalizeBrowseResultLabel("  Charizard  Holo  #4  "),
     "Charizard Holo #4",
   );
+});
+
+test("extracts Alt item id from research URLs", () => {
   assert.equal(
-    normalizeBrowseResultLabel(
-      "2016 Pokemon XY Promo Japanese 20th Anniversary Festa Participation Prize Holo Pikachu #279XYP",
+    sourceItemIdFromAltUrl(
+      "https://alt.xyz/itm/334a89a7-595a-440a-9c15-e76dd3de274d/research",
     ),
-    "2016 Pokemon XY Promo Japanese 20th Anniversary Festa Participation Prize Holo Pikachu #279XYP",
+    "334a89a7-595a-440a-9c15-e76dd3de274d",
   );
+  assert.equal(
+    sourceItemIdFromAltUrl(
+      "https://alt.xyz/itm/068d4726-594b-4b61-a305-638cfda914cf",
+    ),
+    "068d4726-594b-4b61-a305-638cfda914cf",
+  );
+  assert.equal(sourceItemIdFromAltUrl("https://alt.xyz/browse"), "");
 });

@@ -56,6 +56,12 @@ export function normalizeBrowseResultLabel(value) {
     .trim();
 }
 
+/** Prefer /itm/{id} over a trailing path like /research. */
+export function sourceItemIdFromAltUrl(url) {
+  const match = String(url || "").match(/\/itm\/([^/?#]+)/i);
+  return match ? match[1] : "";
+}
+
 const SEARCH_INPUT =
   '#universal-search-autocomplete, input[name="universal-search"], input[placeholder*="cert" i]';
 
@@ -454,9 +460,6 @@ export async function scrapeInventoryFromAlt(
         }
         if (matches.length === 1) {
           const match = matches[0];
-          const sourcePath = String(match.itemUrl || "")
-            .split("/")
-            .filter(Boolean);
           observations.push({
             card_id: card.id,
             cert_number: cert,
@@ -464,7 +467,7 @@ export async function scrapeInventoryFromAlt(
             currency: "USD",
             observed_at: new Date().toISOString(),
             source_url: match.itemUrl,
-            source_item_id: sourcePath.at(-1) || "",
+            source_item_id: sourceItemIdFromAltUrl(match.itemUrl),
             metadata: {
               value_type: match.valueType,
               query_url: searchUrl,

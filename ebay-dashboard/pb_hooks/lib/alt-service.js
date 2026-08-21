@@ -63,6 +63,7 @@ function observationsHandler(e) {
   }
 
   let saved = 0;
+  let skipped = 0;
   const touchedCards = {};
   for (const item of observations) {
     const cardId = cleanText(item.card_id, 100);
@@ -90,6 +91,7 @@ function observationsHandler(e) {
           "owner = {:owner} && source = 'alt' && source_item_id = {:sourceItemId}",
           { owner: config.owner, sourceItemId: sourceItemId }
         );
+        skipped += 1;
         continue;
       } catch (_) {}
     }
@@ -110,7 +112,11 @@ function observationsHandler(e) {
     saved += 1;
   }
   Object.keys(touchedCards).forEach((cardId) => refreshMarketValue(config.owner, cardId));
-  return e.json(201, { saved: saved, summaries_updated: Object.keys(touchedCards).length });
+  return e.json(201, {
+    saved: saved,
+    skipped: skipped,
+    summaries_updated: Object.keys(touchedCards).length,
+  });
 }
 
 module.exports = { authorize, bearerToken, inventoryHandler, observationsHandler };
