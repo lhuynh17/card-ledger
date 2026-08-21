@@ -89,46 +89,45 @@ async function waitForSearchShell(page, navigationTimeoutMs) {
 }
 
 /**
- * Open Alt browse for a cert and wait until the SPA search box actually shows
- * it. Fresh browser starts often finish navigation before React applies the
- * query, so we verify the input and type+submit as a fallback.
+ * Open Alt browse for a cert via the search box.
+ *
+ * Cold starts often strip `?query=` and bounce `/browse?query=…` back to
+ * `/browse`. Driving the universal search input is more reliable than the URL.
  */
 async function openBrowseSearch(page, cert, searchUrl, navigationTimeoutMs, logPrefix) {
-  await page.goto(searchUrl, {
+  const certDigits = onlyDigits(cert);
+  await page.goto(`${config.altBaseUrl}/browse`, {
     waitUntil: "domcontentloaded",
     timeout: navigationTimeoutMs,
   });
   const searchInput = await waitForSearchShell(page, navigationTimeoutMs);
-  const certDigits = onlyDigits(cert);
+
+  const alreadyReady =
+    onlyDigits(await searchInput.inputValue().catch(() => "")) === certDigits;
+  if (!alreadyReady) {
+    console.log(`${logPrefix} Entering cert ${cert} into search…`);
+    await searchInput.click({ timeout: navigationTimeoutMs });
+    await searchInput.fill("");
+    await searchInput.fill(cert);
+    await searchInput.press("Enter");
+  }
+
   const deadline = Date.now() + navigationTimeoutMs;
   while (Date.now() < deadline) {
-    const url = page.url();
     const value = onlyDigits(await searchInput.inputValue().catch(() => ""));
-    const onBrowse = /\/browse/i.test(url);
-    if (onBrowse && value === certDigits) {
-      console.log(`${logPrefix} Browse ready: ${url}`);
+    const query = onlyDigits(
+      new URL(page.url()).searchParams.get("query") || "",
+    );
+    if (value === certDigits || query === certDigits) {
+      console.log(`${logPrefix} Browse ready: ${page.url()}`);
       return;
     }
     await page.waitForTimeout(300);
   }
 
   console.warn(
-    `${logPrefix} Search box not ready with cert ${cert}; typing it manually (at ${page.url()})`,
+    `${logPrefix} Search still not settled for ${cert} (at ${page.url()}); continuing`,
   );
-  await searchInput.click({ timeout: navigationTimeoutMs });
-  await searchInput.fill("");
-  await searchInput.fill(cert);
-  await searchInput.press("Enter");
-  await page
-    .waitForURL(
-      (url) =>
-        /\/browse/i.test(url.pathname) &&
-        onlyDigits(url.searchParams.get("query") || "") === certDigits,
-      { timeout: navigationTimeoutMs },
-    )
-    .catch(() => {});
-  await waitForSearchShell(page, navigationTimeoutMs);
-  console.log(`${logPrefix} Browse after manual search: ${page.url()}`);
 }
 
 async function pageMentionsCert(page, cert) {
@@ -159,14 +158,16 @@ async function waitForDetailReady(page, cert, timeoutMs) {
     }
     const state = await page.evaluate((digits) => {
       const text = document.body?.innerText || "";
+      const altValueNode = document.querySelector('[data-testid="alt-value"]');
       return {
         hasCert: text.replace(/\D/g, "").includes(digits),
         hasPriceUi: Boolean(
           document.querySelector('[data-testid="current-bid-price"]'),
         ),
         hasSold: /sold on (auctions|fixed price)/i.test(text),
-        hasAltValue: /alt\s+value|alt\s+estimate/i.test(text),
-        hasMoney: /\$[\d,]+/.test(text),
+        // Alt renders the leading "A" as an SVG, so visible text is "LT Value".
+        hasAltValue: Boolean(altValueNode) || /(?:^|\s)(?:alt\s+)?lt\s+value/i.test(text),
+        hasMoney: /\$[\d,]+/.test(text) || Boolean(altValueNode),
         title: document.title || "",
       };
     }, certDigits);
@@ -275,6 +276,16 @@ async function extractItemPrice(page, cert, navigationTimeoutMs = 45_000) {
     return null;
   }
 
+  // Research pages expose Alt Value via test id. The heading text is often
+  // "LT Value" because the leading "A" is an SVG logo, not a text node.
+  const altValue = page.locator('[data-testid="alt-value"]').first();
+  if (await altValue.isVisible().catch(() => false)) {
+    const fromAlt = parseMoney(await altValue.textContent().catch(() => null));
+    if (fromAlt > 0) {
+      return { value: fromAlt, valueType: "alt_value" };
+    }
+  }
+
   const livePrice = page.locator('[data-testid="current-bid-price"]').first();
   if (await livePrice.isVisible().catch(() => false)) {
     const fromLive = parseMoney(
@@ -314,17 +325,6 @@ async function extractItemPrice(page, cert, navigationTimeoutMs = 45_000) {
 
   const fromText = extractCertPrice(text, cert);
   if (fromText) return fromText;
-
-  // Research pages often show Alt Value without the cert in the same sentence.
-  const altValue = text.match(
-    /(?:ALT\s+VALUE|ALT\s+ESTIMATE)[^$]{0,80}\$([\d,]+(?:\.\d{2})?)/i,
-  );
-  if (altValue) {
-    return {
-      value: Number(altValue[1].replaceAll(",", "")),
-      valueType: "alt_value",
-    };
-  }
 
   console.warn(
     `Cert ${cert} present on ${page.url()} but no recognized price UI/text`,
