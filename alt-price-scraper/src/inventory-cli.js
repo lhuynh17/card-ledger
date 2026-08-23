@@ -23,11 +23,15 @@ async function run() {
       browserProfilePath: config.browserProfilePath,
     });
     let saved = 0;
+    let updated = 0;
     let skipped = 0;
-    if (scraped.observations.length) {
-      const posted = await hook.appendObservations(scraped.observations);
-      saved = posted.saved || 0;
-      skipped = posted.skipped || 0;
+    const batchSize = 100;
+    for (let offset = 0; offset < scraped.observations.length; offset += batchSize) {
+      const batch = scraped.observations.slice(offset, offset + batchSize);
+      const posted = await hook.appendObservations(batch);
+      saved += posted.saved || 0;
+      updated += posted.updated || 0;
+      skipped += posted.skipped || 0;
     }
     const snapshot = {
       source: "alt.xyz",
@@ -36,14 +40,16 @@ async function run() {
       inventoryCount: inventory.count ?? inventory.items?.length ?? 0,
       listingCount: scraped.observations.length,
       savedCount: saved,
+      updatedCount: updated,
       skippedCount: skipped,
       results: scraped.results,
     };
     const paths = await saveSnapshot(snapshot, config.outputDir);
     console.log(
       `[${startedAt}] Checked ${snapshot.inventoryCount} items; saved ${saved}` +
-        (skipped ? `, skipped ${skipped} duplicate(s)` : "") +
-        ` observations to ${paths.latestPath}`,
+        (updated ? `, updated ${updated}` : "") +
+        (skipped ? `, skipped ${skipped} unchanged` : "") +
+        ` observation(s) to ${paths.latestPath}`,
     );
   } catch (error) {
     console.error(

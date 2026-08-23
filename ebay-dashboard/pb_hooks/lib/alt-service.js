@@ -63,6 +63,7 @@ function observationsHandler(e) {
   }
 
   let saved = 0;
+  let updated = 0;
   let skipped = 0;
   const touchedCards = {};
   for (const item of observations) {
@@ -83,15 +84,45 @@ function observationsHandler(e) {
       throw new BadRequestError("An observation did not match the configured owner's inventory.");
     }
 
+    const requestedStatus = cleanText(item.match_status || "matched", 40).toLowerCase();
+    const matchStatus = ["matched", "unmatched", "ambiguous"].indexOf(requestedStatus) >= 0
+      ? requestedStatus
+      : "matched";
     const sourceItemId = cleanText(item.source_item_id, 500);
+    const observedAt = cleanText(item.observed_at || new Date().toISOString(), 50);
+    const sourceUrl = cleanText(item.source_url, 2000);
+    const currency = cleanText(item.currency || "USD", 10);
+    const metadata = item.metadata || {};
+
     if (sourceItemId) {
       try {
-        $app.findFirstRecordByFilter(
+        const existing = $app.findFirstRecordByFilter(
           "market_value_observations",
           "owner = {:owner} && source = 'alt' && source_item_id = {:sourceItemId}",
           { owner: config.owner, sourceItemId: sourceItemId }
         );
-        skipped += 1;
+        const previousStatus = String(existing.getString("match_status") || "");
+        const previousValue = Number(existing.get("value"));
+        const previousObserved = String(existing.getString("observed_at") || "");
+        const previousUrl = String(existing.getString("source_url") || "");
+        const changed =
+          previousStatus !== matchStatus
+          || previousValue !== value
+          || previousObserved !== observedAt
+          || previousUrl !== sourceUrl;
+        if (!changed) {
+          skipped += 1;
+          continue;
+        }
+        existing.set("value", value);
+        existing.set("currency", currency);
+        existing.set("observed_at", observedAt);
+        existing.set("source_url", sourceUrl);
+        existing.set("match_status", matchStatus);
+        existing.set("metadata", metadata);
+        $app.save(existing);
+        touchedCards[card.id] = true;
+        updated += 1;
         continue;
       } catch (_) {}
     }
@@ -100,13 +131,13 @@ function observationsHandler(e) {
     record.set("card_id", card.id);
     record.set("source", "alt");
     record.set("value", value);
-    record.set("currency", cleanText(item.currency || "USD", 10));
-    record.set("observed_at", cleanText(item.observed_at || new Date().toISOString(), 50));
-    record.set("source_url", cleanText(item.source_url, 2000));
+    record.set("currency", currency);
+    record.set("observed_at", observedAt);
+    record.set("source_url", sourceUrl);
     record.set("source_item_id", sourceItemId);
     record.set("cert_number", cert);
-    record.set("match_status", "matched");
-    record.set("metadata", item.metadata || {});
+    record.set("match_status", matchStatus);
+    record.set("metadata", metadata);
     $app.save(record);
     touchedCards[card.id] = true;
     saved += 1;
@@ -114,6 +145,7 @@ function observationsHandler(e) {
   Object.keys(touchedCards).forEach((cardId) => refreshMarketValue(config.owner, cardId));
   return e.json(201, {
     saved: saved,
+    updated: updated,
     skipped: skipped,
     summaries_updated: Object.keys(touchedCards).length,
   });

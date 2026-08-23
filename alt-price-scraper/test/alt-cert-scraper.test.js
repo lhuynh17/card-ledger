@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   extractCertPrice,
+  isUnresolvedTransactionStatus,
+  marketplaceFromTransaction,
   normalizeBrowseResultLabel,
   parseMoney,
   sourceItemIdFromAltUrl,
+  sourceItemIdFromTransactionUrl,
+  transactionObservedAt,
 } from "../src/alt-cert-scraper.js";
 import { randomScrapeDelayMs } from "../src/config.js";
 
@@ -68,4 +72,59 @@ test("random scrape delay stays within the configured range", () => {
   }
   const swapped = randomScrapeDelayMs(3000, 1000);
   assert.ok(swapped >= 1000 && swapped <= 3000);
+});
+
+test("builds durable ids from Recent Transactions hrefs", () => {
+  assert.equal(
+    sourceItemIdFromTransactionUrl(
+      "/item/dbf1ee48-9dda-4210-983f-c8c3c36396fd",
+    ),
+    "alt:item:dbf1ee48-9dda-4210-983f-c8c3c36396fd",
+  );
+  assert.equal(
+    sourceItemIdFromTransactionUrl(
+      "https://www.ebay.com/itm/227481771683?mkcid=1&customid=abc",
+    ),
+    "ebay:itm:227481771683",
+  );
+  assert.equal(
+    sourceItemIdFromTransactionUrl(
+      "https://fanaticscollect.pxf.io/alt?u=https://www.fanaticscollect.com/weekly/e273c82a-86ba-11f1-9115-02ba9858bad3&subId1=research_transaction",
+    ),
+    "fanatics:weekly:e273c82a-86ba-11f1-9115-02ba9858bad3",
+  );
+  assert.equal(
+    sourceItemIdFromTransactionUrl(
+      "https://goldin.co/item/2006-pokemon-ex-holon-phantoms-holo-16-rayquaza-psa-gem-mt-10c6xtm",
+    ),
+    "goldin:item:2006-pokemon-ex-holon-phantoms-holo-16-rayquaza-psa-gem-mt-10c6xtm",
+  );
+});
+
+test("maps marketplace from transaction url and logo label", () => {
+  assert.equal(
+    marketplaceFromTransaction(
+      "https://www.ebay.com/itm/1",
+      "eBay",
+    ),
+    "ebay",
+  );
+  assert.equal(
+    marketplaceFromTransaction(
+      "https://fanaticscollect.pxf.io/alt?u=https://www.fanaticscollect.com/weekly/e273c82a-86ba-11f1-9115-02ba9858bad3",
+      "PWCC Weekly Auctions",
+    ),
+    "fanatics",
+  );
+});
+
+test("treats Pending Unpaid Relisted as unresolved", () => {
+  assert.equal(isUnresolvedTransactionStatus("Pending"), true);
+  assert.equal(isUnresolvedTransactionStatus("Unpaid"), true);
+  assert.equal(isUnresolvedTransactionStatus("Relisted"), true);
+  assert.equal(isUnresolvedTransactionStatus(""), false);
+});
+
+test("parses transaction sale dates to ISO timestamps", () => {
+  assert.match(transactionObservedAt("Aug 20, 2026"), /^2026-08-2/);
 });

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { config, randomScrapeDelayMs } from "./config.js";
 
 const MONEY = /\$([\d,]+(?:\.\d{2})?)/;
+const UNRESOLVED_STATUSES = new Set(["pending", "unpaid", "relisted"]);
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
 
 /** Browse result titles use this MUI class; filter/chrome buttons do not. */
@@ -60,6 +61,82 @@ export function normalizeBrowseResultLabel(value) {
 export function sourceItemIdFromAltUrl(url) {
   const match = String(url || "").match(/\/itm\/([^/?#]+)/i);
   return match ? match[1] : "";
+}
+
+export function isUnresolvedTransactionStatus(status) {
+  return UNRESOLVED_STATUSES.has(String(status || "").trim().toLowerCase());
+}
+
+export function transactionObservedAt(dateText) {
+  const parsed = new Date(String(dateText || "").trim());
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString();
+  return parsed.toISOString();
+}
+
+function unwrapAffiliateDestination(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""), "https://alt.xyz");
+    const nested = url.searchParams.get("u");
+    if (nested && /^https?:\/\//i.test(nested)) return nested;
+  } catch {
+    // fall through
+  }
+  return String(rawUrl || "");
+}
+
+/**
+ * Durable venue listing id for Recent Transactions rows.
+ * Collector channel remains source=alt; this id is the sale/listing identity.
+ */
+export function sourceItemIdFromTransactionUrl(rawUrl) {
+  const absolute = unwrapAffiliateDestination(rawUrl);
+  let url;
+  try {
+    url = new URL(absolute, "https://alt.xyz");
+  } catch {
+    return "";
+  }
+  const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+  const path = url.pathname;
+
+  const ebay = path.match(/\/itm\/(\d+)\b/i);
+  if (ebay && /(^|\.)ebay\.com$/i.test(host)) {
+    return `ebay:itm:${ebay[1]}`;
+  }
+
+  const fanatics = path.match(/\/weekly\/([0-9a-f-]{36})\b/i);
+  if (
+    fanatics &&
+    /(fanaticscollect\.com|pwccmarketplace\.com)$/i.test(host)
+  ) {
+    return `fanatics:weekly:${fanatics[1]}`;
+  }
+
+  const goldin = path.match(/\/item\/([^/?#]+)/i);
+  if (goldin && /(^|\.)goldin\.(co|com)$/i.test(host)) {
+    return `goldin:item:${goldin[1]}`;
+  }
+
+  const altItem = path.match(/\/item\/([0-9a-f-]{36})\b/i);
+  if (altItem && /(^|\.)alt\.xyz$/i.test(host)) {
+    return `alt:item:${altItem[1]}`;
+  }
+
+  return "";
+}
+
+export function marketplaceFromTransaction(url, label) {
+  const id = sourceItemIdFromTransactionUrl(url);
+  if (id.startsWith("ebay:")) return "ebay";
+  if (id.startsWith("fanatics:")) return "fanatics";
+  if (id.startsWith("goldin:")) return "goldin";
+  if (id.startsWith("alt:")) return "alt";
+  const fromLabel = String(label || "").trim();
+  if (/ebay/i.test(fromLabel)) return "ebay";
+  if (/fanatics|pwcc/i.test(fromLabel)) return "fanatics";
+  if (/goldin/i.test(fromLabel)) return "goldin";
+  if (/^alt$/i.test(fromLabel)) return "alt";
+  return fromLabel ? fromLabel.toLowerCase() : "unknown";
 }
 
 const SEARCH_INPUT =
@@ -153,6 +230,19 @@ async function pageMentionsCert(page, cert) {
   }, certDigits);
 }
 
+async function ensureResearchPage(page, navigationTimeoutMs) {
+  const current = page.url();
+  const match = current.match(/^(https?:\/\/[^/?#]+\/itm\/[^/?#]+)/i);
+  if (!match) return current;
+  if (/\/research(?:\/|$|\?|#)/i.test(current)) return current;
+  const researchUrl = `${match[1]}/research`;
+  await page.goto(researchUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: navigationTimeoutMs,
+  });
+  return page.url();
+}
+
 async function waitForDetailReady(page, cert, timeoutMs) {
   const certDigits = onlyDigits(cert);
   const deadline = Date.now() + timeoutMs;
@@ -164,27 +254,45 @@ async function waitForDetailReady(page, cert, timeoutMs) {
     }
     const state = await page.evaluate((digits) => {
       const text = document.body?.innerText || "";
-      const altValueNode = document.querySelector('[data-testid="alt-value"]');
+      const hasRecentHeading = [...document.querySelectorAll("h2, h3, h4")].some(
+        (node) =>
+          /^\s*recent transactions\s*$/i.test(
+            (node.textContent || "").replace(/\s+/g, " ").trim(),
+          ),
+      );
       return {
         hasCert: text.replace(/\D/g, "").includes(digits),
+        hasRecentHeading,
+        hasNoTransactions: /\bno (?:recent )?transactions\b/i.test(text),
         hasPriceUi: Boolean(
           document.querySelector('[data-testid="current-bid-price"]'),
         ),
         hasSold: /sold on (auctions|fixed price)/i.test(text),
-        // Alt renders the leading "A" as an SVG, so visible text is "LT Value".
-        hasAltValue: Boolean(altValueNode) || /(?:^|\s)(?:alt\s+)?lt\s+value/i.test(text),
-        hasMoney: /\$[\d,]+/.test(text) || Boolean(altValueNode),
+        hasAltValue:
+          Boolean(document.querySelector('[data-testid="alt-value"]')) ||
+          /(?:^|\s)(?:alt\s+)?lt\s+value/i.test(text),
+        hasMoney: /\$[\d,]+/.test(text),
         title: document.title || "",
       };
     }, certDigits);
     if (
       state.hasCert &&
-      (state.hasPriceUi || state.hasSold || state.hasAltValue || state.hasMoney)
+      (state.hasRecentHeading ||
+        state.hasNoTransactions ||
+        state.hasPriceUi ||
+        state.hasSold ||
+        state.hasAltValue ||
+        state.hasMoney)
     ) {
       return state;
     }
-    if (state.hasPriceUi || state.hasSold || state.hasAltValue) {
-      // Price chrome is up; cert may live in HTML/scripts only.
+    if (
+      state.hasRecentHeading ||
+      state.hasNoTransactions ||
+      state.hasPriceUi ||
+      state.hasSold ||
+      state.hasAltValue
+    ) {
       if (await pageMentionsCert(page, cert)) return state;
     }
     await page.waitForTimeout(400);
@@ -241,6 +349,12 @@ async function openBrowseResultAtIndex(
     console.log(`${logPrefix} Detail URL after click: ${page.url()}`);
   }
 
+  const researchUrl = await ensureResearchPage(
+    detailPage,
+    navigationTimeoutMs,
+  );
+  console.log(`${logPrefix} Research URL: ${researchUrl}`);
+
   const ready = await waitForDetailReady(
     detailPage,
     cert,
@@ -253,7 +367,8 @@ async function openBrowseResultAtIndex(
   } else {
     console.log(
       `${logPrefix} Detail ready (${detailPage.url()}) title="${ready.title}"` +
-        ` cert=${ready.hasCert} bid=${ready.hasPriceUi} sold=${ready.hasSold} altValue=${ready.hasAltValue}`,
+        ` cert=${ready.hasCert} recent=${ready.hasRecentHeading}` +
+        ` none=${ready.hasNoTransactions}`,
     );
   }
 
@@ -264,78 +379,123 @@ async function openBrowseResultAtIndex(
   };
 }
 
-async function extractItemPrice(page, cert, navigationTimeoutMs = 45_000) {
+/**
+ * Visible Recent Transactions preview only (no View All drawer).
+ */
+async function extractRecentTransactions(page, cert, navigationTimeoutMs = 45_000) {
+  await ensureResearchPage(page, navigationTimeoutMs);
   await waitForDetailReady(page, cert, Math.min(navigationTimeoutMs, 15_000));
 
   const text = await page.locator("body").innerText();
   if (
     /access all of the market data.+free account|sign up for free/i.test(text)
   ) {
-    return { authRequired: true };
+    return { authRequired: true, present: false, rows: [] };
   }
 
   if (!(await pageMentionsCert(page, cert))) {
     const snippet = text.replace(/\s+/g, " ").trim().slice(0, 240);
     console.warn(
-      `Cert ${cert} not found on detail page ${page.url()}; refusing price. Snippet: ${snippet}`,
+      `Cert ${cert} not found on detail page ${page.url()}; refusing transactions. Snippet: ${snippet}`,
     );
-    return null;
+    return { present: false, rows: [], certMissing: true };
   }
 
-  // Research pages expose Alt Value via test id. The heading text is often
-  // "LT Value" because the leading "A" is an SVG logo, not a text node.
-  const altValue = page.locator('[data-testid="alt-value"]').first();
-  if (await altValue.isVisible().catch(() => false)) {
-    const fromAlt = parseMoney(await altValue.textContent().catch(() => null));
-    if (fromAlt > 0) {
-      return { value: fromAlt, valueType: "alt_value" };
+  const extracted = await page.evaluate(() => {
+    const normalize = (value) =>
+      String(value || "")
+        .replace(/\u00a0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const heading = [...document.querySelectorAll("h2, h3, h4")].find((node) =>
+      /^recent transactions$/i.test(normalize(node.textContent)),
+    );
+    if (!heading) {
+      const body = normalize(document.body?.innerText || "");
+      if (/\bno (?:recent )?transactions\b/i.test(body)) {
+        return { present: true, rows: [] };
+      }
+      return { present: false, rows: [] };
     }
-  }
 
-  const livePrice = page.locator('[data-testid="current-bid-price"]').first();
-  if (await livePrice.isVisible().catch(() => false)) {
-    const fromLive = parseMoney(
-      await livePrice.textContent().catch(() => null),
-    );
-    if (fromLive > 0) {
-      return { value: fromLive, valueType: "current_bid" };
+    let section = heading.parentElement;
+    for (let depth = 0; depth < 6 && section; depth += 1) {
+      if (section.querySelector("a[href]")) break;
+      section = section.parentElement;
     }
-  }
+    if (!section) return { present: true, rows: [] };
 
-  // Sold listings drop current-bid-price. The hammer price is the vegaH5
-  // sibling above "Sold on Auctions" / "Sold on Fixed Price".
-  const soldLabel = page.getByText(/sold on (auctions|fixed price)/i).first();
-  if (await soldLabel.isVisible().catch(() => false)) {
-    const soldPrice = soldLabel.locator(
-      'xpath=../preceding-sibling::span[contains(@class, "MuiTypography-vegaH5")]',
-    );
-    const fromSold = parseMoney(
-      await soldPrice.textContent().catch(() => null),
-    );
-    if (fromSold > 0) {
-      const soldOn =
-        (
-          await soldLabel
-            .locator("xpath=following-sibling::span")
-            .first()
-            .textContent()
-            .catch(() => null)
-        )?.trim() || undefined;
-      return {
-        value: fromSold,
-        valueType: "last_sale",
-        ...(soldOn ? { soldOn } : {}),
-      };
+    const rows = [];
+    const seen = new Set();
+    for (const anchor of section.querySelectorAll("a[href]")) {
+      const href = anchor.href || anchor.getAttribute("href") || "";
+      if (!href || seen.has(href)) continue;
+      const rowText = normalize(anchor.innerText || anchor.textContent || "");
+      if (!rowText) continue;
+      const priceMatch = rowText.match(/\$([\d,]+(?:\.\d{2})?)/);
+      const dateMatch = rowText.match(
+        /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}\b/i,
+      );
+      if (!priceMatch || !dateMatch) continue;
+      const saleTypeMatch = rowText.match(
+        /\b(Auction|Best offer|Buy now)\b/i,
+      );
+      const statusMatch = rowText.match(/\b(Pending|Unpaid|Relisted)\b/i);
+      const img = anchor.querySelector("img[alt]");
+      seen.add(href);
+      rows.push({
+        href,
+        marketplaceLabel: img?.getAttribute("alt") || "",
+        saleType: saleTypeMatch?.[1] || "",
+        dateText: dateMatch[0],
+        price: Number(priceMatch[1].replaceAll(",", "")),
+        status: statusMatch?.[1] || "",
+      });
     }
+    return { present: true, rows };
+  });
+
+  return extracted;
+}
+
+function absoluteSourceUrl(href) {
+  try {
+    return new URL(String(href || ""), config.altBaseUrl).toString().split("#")[0];
+  } catch {
+    return String(href || "").split("#")[0];
   }
+}
 
-  const fromText = extractCertPrice(text, cert);
-  if (fromText) return fromText;
-
-  console.warn(
-    `Cert ${cert} present on ${page.url()} but no recognized price UI/text`,
+function observationFromTransaction(card, cert, company, searchUrl, itemUrl, row) {
+  const sourceUrl = absoluteSourceUrl(row.href);
+  const sourceItemId = sourceItemIdFromTransactionUrl(sourceUrl);
+  const marketplace = marketplaceFromTransaction(
+    sourceUrl,
+    row.marketplaceLabel,
   );
-  return null;
+  const unresolved = isUnresolvedTransactionStatus(row.status);
+  return {
+    card_id: card.id,
+    cert_number: cert,
+    value: row.price,
+    currency: "USD",
+    observed_at: transactionObservedAt(row.dateText),
+    source_url: sourceUrl,
+    source_item_id: sourceItemId,
+    match_status: unresolved ? "unmatched" : "matched",
+    metadata: {
+      value_type: "recent_transaction",
+      query_url: searchUrl,
+      research_url: itemUrl,
+      grader: company,
+      marketplace,
+      marketplace_label: row.marketplaceLabel || undefined,
+      sale_type: row.saleType || undefined,
+      sold_on: row.dateText,
+      transaction_status: row.status || "",
+      counts_toward_valuation: !unresolved,
+    },
+  };
 }
 
 export async function scrapeInventoryFromAlt(
@@ -380,7 +540,7 @@ export async function scrapeInventoryFromAlt(
       timeout: navigationTimeoutMs,
     });
     await waitForSearchShell(page, navigationTimeoutMs);
-    console.log(`Scraping ${total} cert(s) from Alt…`);
+    console.log(`Scraping ${total} cert(s) from Alt Recent Transactions…`);
     for (const card of cards) {
       const cert = String(card.cert || "").trim();
       if (!cert) {
@@ -425,9 +585,9 @@ export async function scrapeInventoryFromAlt(
             navigationTimeoutMs,
             logPrefix,
           );
-          let price = null;
+          let extracted = null;
           try {
-            price = await extractItemPrice(
+            extracted = await extractRecentTransactions(
               opened.detailPage,
               cert,
               navigationTimeoutMs,
@@ -437,50 +597,63 @@ export async function scrapeInventoryFromAlt(
               await opened.detailPage.close().catch(() => {});
             }
           }
-          if (price?.authRequired) {
+          if (extracted?.authRequired) {
             authRequired = true;
             console.warn(
               `${logPrefix} Auth wall on candidate for ${cert}; skipping`,
             );
             continue;
           }
-          if (price?.value > 0) {
-            matches.push({
-              ...price,
-              itemUrl: opened.sourceUrl,
-              label,
-            });
-            console.log(
-              `${logPrefix} Candidate ${price.valueType}=$${price.value} for ${cert}`,
-            );
-          } else {
+          if (extracted?.certMissing) {
             console.warn(
-              `${logPrefix} No cert-matched price on candidate for ${cert} (${opened.sourceUrl})`,
+              `${logPrefix} Cert not on candidate for ${cert} (${opened.sourceUrl})`,
             );
+            continue;
           }
+          matches.push({
+            itemUrl: opened.sourceUrl,
+            label,
+            present: Boolean(extracted?.present),
+            rows: Array.isArray(extracted?.rows) ? extracted.rows : [],
+          });
+          console.log(
+            `${logPrefix} Candidate recent transactions: present=${Boolean(extracted?.present)} rows=${extracted?.rows?.length || 0}`,
+          );
         }
         if (matches.length === 1) {
           const match = matches[0];
-          observations.push({
-            card_id: card.id,
-            cert_number: cert,
-            value: match.value,
-            currency: "USD",
-            observed_at: new Date().toISOString(),
-            source_url: match.itemUrl,
-            source_item_id: sourceItemIdFromAltUrl(match.itemUrl),
-            metadata: {
-              value_type: match.valueType,
-              query_url: searchUrl,
-              grader: company,
-              result_label: match.label,
-              ...(match.soldOn ? { sold_on: match.soldOn } : {}),
-            },
+          const usableRows = match.rows.filter((row) => row.price > 0);
+          for (const row of usableRows) {
+            const observation = observationFromTransaction(
+              card,
+              cert,
+              company,
+              searchUrl,
+              match.itemUrl,
+              row,
+            );
+            if (!observation.source_item_id) {
+              console.warn(
+                `${logPrefix} Skipping row without durable id (${row.href})`,
+              );
+              continue;
+            }
+            observations.push(observation);
+          }
+          const status = !match.present
+            ? "no_transactions_section"
+            : usableRows.length
+              ? "matched"
+              : "no_transactions";
+          results.push({
+            cardId: card.id,
+            cert,
+            status,
+            transactionCount: usableRows.length,
+            itemUrl: match.itemUrl,
           });
-          results.push({ cardId: card.id, cert, status: "matched", ...match });
           console.log(
-            `${logPrefix} Matched ${cert}: $${match.value} (${match.valueType})` +
-              (match.soldOn ? ` sold ${match.soldOn}` : ""),
+            `${logPrefix} ${status} for ${cert}: ${usableRows.length} visible transaction(s)`,
           );
         } else {
           const status = authRequired
@@ -497,7 +670,7 @@ export async function scrapeInventoryFromAlt(
           });
           console.warn(
             `${logPrefix} ${status} for ${cert}` +
-              (matches.length ? ` (${matches.length} priced candidates)` : "") +
+              (matches.length ? ` (${matches.length} cert-matched candidates)` : "") +
               (resultLabels.length
                 ? ` from ${resultLabels.length} browse result(s)`
                 : ""),
